@@ -1,4 +1,10 @@
-// Public TS facade for stan-wasm-rs. Phase 0: re-export wasm-bindgen output as-is.
-// Subsequent phases will add `StanWasm` class, parallel sampling, etc.
+// Public TS facade for stan-wasm-rs.
+//
+// Re-exports the wasm-bindgen-generated bindings under a stable name so
+// downstream callers can `import { StanModel } from "stan-wasm-rs"` without
+// poking into `pkg/`.
 
-export { default as init, greet, version } from "./pkg/stan_wasm_api";
+import init from "./pkg/stan_wasm_api.js";
+export { StanModel, version } from "./pkg/stan_wasm_api.js";
+export default init;
+

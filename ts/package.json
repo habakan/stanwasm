@@ -6,7 +6,12 @@
   "main": "index.ts",
   "files": ["index.ts", "pkg/"],
   "scripts": {
-    "build:wasm": "../scripts/build-wasm.sh"
+    "build:wasm": "../scripts/build-wasm.sh",
+    "test": "node --import tsx/esm tests/smoke.ts",
+    "bench": "node --import tsx/esm tests/bench.ts"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
 }
