@@ -9,3 +9,8 @@ stan-ast.workspace = true
 stan-autodiff.workspace = true
 stan-parser.workspace = true
 thiserror.workspace = true
+serde_json = { workspace = true, optional = true }
+
+[features]
+default = ["json"]
+json = ["dep:serde_json"]

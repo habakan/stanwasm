@@ -811,6 +811,7 @@ dependencies = [
 name = "stan-runtime"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "stan-ast",
  "stan-autodiff",
  "stan-parser",
@@ -821,14 +822,17 @@ dependencies = [
 name = "stan-wasm-api"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "getrandom",
  "nuts-rs",
  "rand",
  "stan-ast",
  "stan-codegen",
  "stan-parser",
+ "stan-runtime",
  "thiserror",
  "wasm-bindgen",
+ "wasmparser 0.220.1",
 ]
 
 [[package]]

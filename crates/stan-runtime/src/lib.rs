@@ -11,6 +11,7 @@
 
 #![forbid(unsafe_code)]
 
+mod compiled;
 mod constraints;
 mod distributions;
 mod env;
@@ -19,6 +20,13 @@ mod model;
 mod ops;
 mod value;
 
+#[cfg(feature = "json")]
+mod data_json;
+
+pub use compiled::Compiled;
 pub use env::Env;
 pub use model::{Model, ModelError};
 pub use value::Val;
+
+#[cfg(feature = "json")]
+pub use data_json::data_from_json;

@@ -2,12 +2,21 @@
 
 use crate::constraints::{constrain, param_dims};
 use crate::env::Env;
-use crate::eval::eval_stmt;
+use crate::eval::{eval_expr, eval_stmt};
 use crate::ops::v_add;
 use crate::value::Val;
 use stan_ast::StanProgram;
 use stan_autodiff::Tape;
 use thiserror::Error;
+
+fn eval_int(expr: &stan_ast::Expr, env: &Env) -> usize {
+    let mut t = Tape::new();
+    let v = eval_expr(&mut t, expr, env);
+    match v {
+        Val::Num(x) => x as usize,
+        _ => 0,
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum ModelError {
@@ -38,6 +47,43 @@ impl Model {
 
     pub fn n_params(&self) -> usize {
         self.n_params
+    }
+
+    /// Constrained parameter names matching `constrained_params` order.
+    /// Scalar → `name`; vector(N) → `name[1]`..`name[N]`; matrix → `name[i,j]`.
+    /// Includes both `parameters` and `transformed parameters`.
+    pub fn param_names(&self) -> Vec<String> {
+        use stan_ast::StanType;
+        let mut out = Vec::new();
+        let env = &self.data_env;
+        let push_for = |out: &mut Vec<String>, name: &str, typ: &StanType| match typ {
+            StanType::Matrix(r_e, c_e) => {
+                let rows = eval_int(r_e, env);
+                let cols = eval_int(c_e, env);
+                for i in 1..=rows {
+                    for j in 1..=cols {
+                        out.push(format!("{name}[{i},{j}]"));
+                    }
+                }
+            }
+            other => {
+                let k = crate::constraints::param_dims(other, env);
+                if k <= 1 {
+                    out.push(name.to_string());
+                } else {
+                    for i in 1..=k {
+                        out.push(format!("{name}[{i}]"));
+                    }
+                }
+            }
+        };
+        for d in &self.prog.parameters {
+            push_for(&mut out, &d.name, &d.typ);
+        }
+        for d in &self.prog.transformed_params {
+            push_for(&mut out, &d.name, &d.typ);
+        }
+        out
     }
 
     /// Compute log_prob and gradient at the given unconstrained parameters.

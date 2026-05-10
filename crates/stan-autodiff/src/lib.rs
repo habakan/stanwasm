@@ -105,6 +105,66 @@ impl Tape {
         self.cse_gen = self.cse_gen.wrapping_add(1);
     }
 
+    /// Reset every gradient to zero. Used between consecutive `backward()`
+    /// calls on the same recorded tape (the replay path used at sampling time).
+    pub fn reset_grads(&mut self) {
+        for g in self.grad.iter_mut() {
+            *g = 0.0;
+        }
+    }
+
+    /// Replay the recorded forward pass with new leaf values. The first
+    /// `params.len()` leaf nodes get the supplied values; any further leaves
+    /// (typically constants captured during the original trace) are left
+    /// unchanged. All non-leaf nodes are recomputed in topological order
+    /// from the recorded op/arg arrays.
+    ///
+    /// Caller must ensure the recorded computation graph is parameter-shape-
+    /// independent — i.e. the model has no parameter-dependent control flow.
+    /// Stan models with `if (param > 0)` style branching do not satisfy this
+    /// (and aren't supported by the AOT codegen path either).
+    pub fn forward_replay(&mut self, params: &[f64]) {
+        for (i, p) in params.iter().enumerate() {
+            self.val[i] = *p;
+        }
+        for k in params.len()..self.val.len() {
+            let op = self.op[k];
+            let a1 = self.arg1[k] as usize;
+            let a2i = self.arg2i[k] as usize;
+            let a2f = self.arg2f[k];
+            self.val[k] = match op {
+                Op::Leaf => self.val[k],
+                Op::Add => self.val[a1] + self.val[a2i],
+                Op::Sub => self.val[a1] - self.val[a2i],
+                Op::Mul => self.val[a1] * self.val[a2i],
+                Op::Div => self.val[a1] / self.val[a2i],
+                Op::Neg => -self.val[a1],
+                Op::Exp => self.val[a1].exp(),
+                Op::Log => self.val[a1].ln(),
+                Op::Sin => self.val[a1].sin(),
+                Op::Cos => self.val[a1].cos(),
+                Op::Sqrt => self.val[a1].sqrt(),
+                Op::Pow => self.val[a1].powf(a2f),
+                Op::Abs => self.val[a1].abs(),
+                Op::Lgamma => lgamma(self.val[a1]),
+                Op::AddC => self.val[a1] + a2f,
+                Op::SubC => self.val[a1] - a2f,
+                Op::RsubC => a2f - self.val[a1],
+                Op::MulC => self.val[a1] * a2f,
+                Op::DivC => self.val[a1] / a2f,
+                Op::RdivC => a2f / self.val[a1],
+                Op::Phi => phi_cdf(self.val[a1]),
+                Op::Erf => erf(self.val[a1]),
+                Op::Erfc => 1.0 - erf(self.val[a1]),
+                Op::Tan => self.val[a1].tan(),
+                Op::Asin => self.val[a1].asin(),
+                Op::Acos => self.val[a1].acos(),
+                Op::Atan => self.val[a1].atan(),
+                Op::Digamma => digamma(self.val[a1]),
+            };
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.val.len()
     }

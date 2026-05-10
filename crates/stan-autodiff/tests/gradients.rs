@@ -111,6 +111,45 @@ fn cse_invalidates_on_reset() {
 }
 
 #[test]
+fn forward_replay_matches_fresh_trace() {
+    // Build a trace with known params, then replay with different params and
+    // verify the result matches what a fresh trace would produce.
+    use stan_autodiff::Tape;
+    let mut tape = Tape::new();
+    let x = tape.new_var(2.0);
+    let y = tape.new_var(3.0);
+    let xy = tape.mul(x, y);
+    let exp_xy = tape.exp(xy);
+    let plus = tape.add_c(exp_xy, 1.0);
+    let root = tape.log(plus);
+
+    // Replay with new values
+    tape.forward_replay(&[1.5, 2.0]);
+    tape.reset_grads();
+    tape.backward(root);
+    let lp_replay = tape.value(root);
+    let g_replay: Vec<f64> = (0..2).map(|i| tape.grad_at(i)).collect();
+
+    // Fresh trace for comparison
+    let (lp_fresh, g_fresh) = log_prob_grad(&[1.5, 2.0], |t, xs| {
+        let xy = t.mul(xs[0], xs[1]);
+        let exp_xy = t.exp(xy);
+        let plus = t.add_c(exp_xy, 1.0);
+        t.log(plus)
+    });
+
+    assert!((lp_replay - lp_fresh).abs() < 1e-12, "{lp_replay} vs {lp_fresh}");
+    for i in 0..2 {
+        assert!(
+            (g_replay[i] - g_fresh[i]).abs() < 1e-12,
+            "grad[{i}]: {} vs {}",
+            g_replay[i],
+            g_fresh[i]
+        );
+    }
+}
+
+#[test]
 fn special_functions_known_points() {
     use stan_autodiff::{digamma, lgamma, phi_cdf};
     // lgamma(1) = 0, lgamma(2) = 0
