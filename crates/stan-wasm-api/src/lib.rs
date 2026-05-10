@@ -211,10 +211,160 @@ fn jserr<E: std::fmt::Display>(e: E) -> JsError {
     JsError::new(&e.to_string())
 }
 
-// Hello-world placeholders kept for build-system smoke tests; they appear in
-// the wasm binary only because they are #[wasm_bindgen]-annotated. Cheap to
-// keep until Phase 7 cleanup.
 #[wasm_bindgen]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+// ---- AOT bridge --------------------------------------------------------------
+//
+// `sample_via_aot` runs the same NUTS sampling driver as `sample`, but
+// substitutes the in-process tape replay (`Compiled::log_prob_grad`) with a
+// call out to a host-provided AOT-compiled model wasm. The AOT module shares
+// `stan-wasm-rs`'s linear memory (imported, not its own), so handing it a
+// (params_ptr, grads_ptr) is zero-copy.
+//
+// The host is responsible for instantiating the AOT wasm and binding it via
+// `setAotExports` before calling `sampleViaAot`. See `js/aot_bridge.js`.
+
+#[wasm_bindgen(module = "/js/aot_bridge.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = aot_logp)]
+    fn aot_logp(params_ptr: u32, grads_ptr: u32, n_params: u32) -> f64;
+
+    #[wasm_bindgen(js_name = set_aot_exports)]
+    fn js_set_aot_exports(exports: JsValue);
+
+    #[wasm_bindgen(js_name = clear_aot_exports)]
+    fn js_clear_aot_exports();
+}
+
+/// Bind a freshly-instantiated AOT model wasm's exports so subsequent
+/// `sampleViaAot` calls dispatch through it. Pass `instance.exports`.
+#[wasm_bindgen(js_name = setAotExports)]
+pub fn set_aot_exports(exports: JsValue) {
+    js_set_aot_exports(exports);
+}
+
+/// Release the bound AOT exports. The next `sampleViaAot` call will throw.
+#[wasm_bindgen(js_name = clearAotExports)]
+pub fn clear_aot_exports() {
+    js_clear_aot_exports();
+}
+
+/// Returns the linear memory backing this wasm module. Pass to
+/// `WebAssembly.instantiate` as the `stan.memory` import when bringing up an
+/// AOT model so the two modules share buffers (zero-copy bridge).
+#[wasm_bindgen(js_name = sharedMemory)]
+pub fn shared_memory() -> JsValue {
+    wasm_bindgen::memory()
+}
+
+struct AotLogp {
+    n_params: usize,
+    /// Persistent scratch buffer for params (params_ptr) inside our memory.
+    params_buf: Vec<f64>,
+    /// Persistent scratch buffer for grads (grads_ptr) inside our memory.
+    grads_buf: Vec<f64>,
+}
+
+impl HasDims for AotLogp {
+    fn dim_sizes(&self) -> HashMap<String, u64> {
+        let n = self.n_params as u64;
+        [
+            ("unconstrained_parameter".to_string(), n),
+            ("dim".to_string(), n),
+        ]
+        .into_iter()
+        .collect()
+    }
+}
+
+impl CpuLogpFunc for AotLogp {
+    type LogpError = SamplerError;
+    type FlowParameters = ();
+    type ExpandedVector = Vec<f64>;
+
+    fn dim(&self) -> usize {
+        self.n_params
+    }
+
+    fn logp(
+        &mut self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, SamplerError> {
+        // Copy position into the persistent params buffer; capture pointers.
+        self.params_buf.copy_from_slice(position);
+        let params_ptr = self.params_buf.as_ptr() as u32;
+        let grads_ptr = self.grads_buf.as_mut_ptr() as u32;
+        let lp = aot_logp(params_ptr, grads_ptr, self.n_params as u32);
+        gradient.copy_from_slice(&self.grads_buf);
+        if lp.is_finite() {
+            Ok(lp)
+        } else {
+            Err(SamplerError::NonFinite)
+        }
+    }
+
+    fn expand_vector<R>(
+        &mut self,
+        _rng: &mut R,
+        array: &[f64],
+    ) -> Result<Vec<f64>, CpuMathError>
+    where
+        R: rand::Rng + ?Sized,
+    {
+        Ok(array.to_vec())
+    }
+}
+
+#[wasm_bindgen]
+impl StanModel {
+    /// Same as `sample`, but evaluates `log_prob_grad` through a
+    /// pre-instantiated AOT-compiled model wasm bound via `setAotExports`.
+    /// V8 JITs the unrolled forward+backward pass in the AOT module, which
+    /// can be substantially faster than the in-process tape replay used by
+    /// `sample`. Both produce identical samples for a given seed.
+    #[wasm_bindgen(js_name = sampleViaAot)]
+    pub fn sample_via_aot(
+        &mut self,
+        init: &[f64],
+        num_warmup: u32,
+        num_draws: u32,
+        seed: u64,
+    ) -> Result<Vec<f64>, JsError> {
+        let n = self.model.n_params();
+        if init.len() != n {
+            return Err(JsError::new(&format!(
+                "init length {} != n_params {n}",
+                init.len()
+            )));
+        }
+        let total = (num_warmup + num_draws) as u64;
+
+        let math = CpuMath::new(AotLogp {
+            n_params: n,
+            params_buf: vec![0.0; n],
+            grads_buf: vec![0.0; n],
+        });
+
+        let settings = DiagNutsSettings {
+            num_tune: num_warmup as u64,
+            num_draws: num_draws as u64,
+            ..Default::default()
+        };
+
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let iter = sample_sequentially(math, settings, init, total, 0, &mut rng)
+            .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
+
+        let mut out = vec![0.0_f64; n * total as usize];
+        for (i, draw) in iter.enumerate() {
+            let (pos, _progress) =
+                draw.map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
+            out[i * n..(i + 1) * n].copy_from_slice(pos.as_ref());
+        }
+        Ok(out)
+    }
 }

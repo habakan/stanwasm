@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use stan_codegen::compile as aot_compile;
 use stan_runtime::{data_from_json, Compiled, Model};
 use stan_wasm_api::StanModel;
-use wasmi::{Caller, Engine, Extern, Func, Linker, Module as WasmModule, Store};
+use wasmi::{Caller, Engine, Func, Linker, Memory, MemoryType, Module as WasmModule, Store};
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -237,33 +237,35 @@ fn bench_aot_via_wasmi(wasm: &[u8], n_params: usize, params: &[f64]) -> anyhow::
     let engine = Engine::default();
     let module = WasmModule::new(&engine, wasm)?;
     let mut store = Store::new(&engine, HostState);
+    let memory =
+        Memory::new(&mut store, MemoryType::new(1, None).map_err(|e| anyhow::anyhow!("{e}"))?)
+            .map_err(|e| anyhow::anyhow!("memory: {e}"))?;
     let mut linker: Linker<HostState> = Linker::new(&engine);
     install_math(&mut linker, &mut store);
+    linker
+        .define("stan", "memory", memory)
+        .map_err(|e| anyhow::anyhow!("define memory: {e}"))?;
     let instance = linker
         .instantiate(&mut store, &module)
         .map_err(|e| anyhow::anyhow!("instantiate: {e}"))?
         .start(&mut store)
         .map_err(|e| anyhow::anyhow!("start: {e}"))?;
-    let memory = instance.get_export(&store, "memory").and_then(Extern::into_memory).unwrap();
-    let params_ptr = instance
-        .get_typed_func::<(), i32>(&store, "params_ptr")?
-        .call(&mut store, ())? as usize;
-    let lpg = instance.get_typed_func::<(), f64>(&store, "log_prob_grad")?;
 
+    let lpg = instance.get_typed_func::<(i32, i32, i32), f64>(&store, "log_prob_grad")?;
+    let params_ptr: i32 = 0;
+    let grads_ptr: i32 = (n_params * 8) as i32;
     let bytes: Vec<u8> = params.iter().flat_map(|p| p.to_le_bytes()).collect();
     memory
-        .write(&mut store, params_ptr, &bytes)
+        .write(&mut store, params_ptr as usize, &bytes)
         .map_err(|e| anyhow::anyhow!("memory write: {e}"))?;
 
-    // warmup
     for _ in 0..(N_LPG_ITERS / 10) {
-        lpg.call(&mut store, ())?;
+        lpg.call(&mut store, (params_ptr, grads_ptr, n_params as i32))?;
     }
     let t0 = Instant::now();
     for _ in 0..N_LPG_ITERS {
-        lpg.call(&mut store, ())?;
+        lpg.call(&mut store, (params_ptr, grads_ptr, n_params as i32))?;
     }
     let elapsed: Duration = t0.elapsed();
-    let _ = n_params;
     Ok(elapsed.as_secs_f64() * 1e6 / N_LPG_ITERS as f64)
 }

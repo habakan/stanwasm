@@ -5,7 +5,7 @@
 
 use stan_codegen::compile;
 use stan_runtime::{Env, Model};
-use wasmi::{Caller, Engine, Extern, Func, Linker, Module, Store};
+use wasmi::{Caller, Engine, Func, Linker, Memory, MemoryType, Module, Store};
 
 fn lgamma(x: f64) -> f64 {
     stan_autodiff::lgamma(x)
@@ -46,41 +46,40 @@ fn run_aot_log_prob_grad(wasm: &[u8], n_params: usize, params: &[f64]) -> (f64, 
     let engine = Engine::default();
     let module = Module::new(&engine, wasm).expect("module parses");
     let mut store = Store::new(&engine, HostState);
+
+    // Host-allocated memory shared with the AOT module.
+    let memory = Memory::new(&mut store, MemoryType::new(1, None).unwrap()).unwrap();
+
     let mut linker: Linker<HostState> = Linker::new(&engine);
     install_math(&mut linker, &mut store);
+    linker.define("stan", "memory", memory).unwrap();
+
     let instance = linker
         .instantiate(&mut store, &module)
         .expect("instantiate")
         .start(&mut store)
         .expect("start");
 
-    // Look up exports
-    let memory = instance
-        .get_export(&store, "memory")
-        .and_then(Extern::into_memory)
-        .expect("memory export");
-    let params_ptr = instance
-        .get_typed_func::<(), i32>(&store, "params_ptr")
-        .unwrap()
-        .call(&mut store, ())
-        .unwrap() as usize;
-    let grad_ptr = instance
-        .get_typed_func::<(), i32>(&store, "grad_ptr")
-        .unwrap()
-        .call(&mut store, ())
-        .unwrap() as usize;
-    let lpg = instance.get_typed_func::<(), f64>(&store, "log_prob_grad").unwrap();
+    let lpg = instance
+        .get_typed_func::<(i32, i32, i32), f64>(&store, "log_prob_grad")
+        .unwrap();
 
-    // Write params
+    // Layout: params at offset 0, grads at offset n_params*8.
+    let params_ptr: i32 = 0;
+    let grads_ptr: i32 = (n_params * 8) as i32;
     let bytes: Vec<u8> = params.iter().flat_map(|p| p.to_le_bytes()).collect();
-    memory.write(&mut store, params_ptr, &bytes).unwrap();
+    memory
+        .write(&mut store, params_ptr as usize, &bytes)
+        .unwrap();
 
-    // Run
-    let lp = lpg.call(&mut store, ()).unwrap();
+    let lp = lpg
+        .call(&mut store, (params_ptr, grads_ptr, n_params as i32))
+        .unwrap();
 
-    // Read grads
     let mut grad_bytes = vec![0u8; n_params * 8];
-    memory.read(&store, grad_ptr, &mut grad_bytes).unwrap();
+    memory
+        .read(&store, grads_ptr as usize, &mut grad_bytes)
+        .unwrap();
     let grads: Vec<f64> = grad_bytes
         .chunks(8)
         .map(|c| f64::from_le_bytes(c.try_into().unwrap()))

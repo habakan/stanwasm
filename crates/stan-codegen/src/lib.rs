@@ -5,15 +5,19 @@
 //! emits wasm binary directly via `wasm-encoder`, removing the browser-side
 //! `wabt` dependency.
 //!
-//! Generated module ABI (matches MoonBit):
-//!   memory          (export)             — linear memory for params + grads
-//!   params_ptr()    -> i32   = 0         — base address of param input
-//!   grad_ptr()      -> i32   = n_params*8 — base address of gradient output
-//!   log_prob_grad() -> f64               — runs forward + backward, returns lp
+//! Generated module ABI (zero-copy variant: memory is imported, not exported,
+//! so the AOT module shares the host's linear memory for parameter and
+//! gradient buffers — no inter-wasm memcpy):
+//!
+//!   (import "stan" "memory" (memory 1))           — shared linear memory
+//!   log_prob_grad(params_ptr: i32, grads_ptr: i32, n_params: i32) -> f64
+//!     reads params_ptr..params_ptr+n_params*8 and writes
+//!     grads_ptr..grads_ptr+n_params*8 in shared memory; returns log_prob.
 //!
 //! Required imports (host-provided):
+//!   ("stan","memory")  — shared memory
 //!   ("Math","exp"|"log"|"sin"|"cos"|"pow"|"lgamma"|"digamma"|"phi")
-//!   Only the imports actually needed by the recorded tape are emitted.
+//!   Only the math imports actually needed by the recorded tape are emitted.
 
 #![forbid(unsafe_code)]
 
@@ -22,7 +26,7 @@ use stan_runtime::Model;
 use thiserror::Error;
 use wasm_encoder::{
     CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection,
-    ImportSection, Instruction, MemorySection, MemoryType, Module, TypeSection, ValType,
+    ImportSection, Instruction, MemoryType, Module, TypeSection, ValType,
 };
 
 #[derive(Debug, Error)]
@@ -66,92 +70,77 @@ fn emit(tape: &Tape, n_params: usize, root: u32) -> Vec<u8> {
     let needs = scan_imports(tape);
 
     // ---- type section ------------------------------------------------------
-    // type 0: () -> i32           (params_ptr, grad_ptr)
-    // type 1: () -> f64           (log_prob_grad)
-    // type 2: (f64) -> f64        (unary math: exp/log/sin/cos/lgamma/digamma/phi)
-    // type 3: (f64,f64) -> f64    (pow)
+    // type 0: (i32, i32, i32) -> f64    (log_prob_grad: params_ptr, grads_ptr, n_params)
+    // type 1: (f64) -> f64              (unary math: exp/log/sin/cos/lgamma/digamma/phi)
+    // type 2: (f64, f64) -> f64         (pow)
     let mut types = TypeSection::new();
-    types.ty().function([], [ValType::I32]);
-    types.ty().function([], [ValType::F64]);
+    types
+        .ty()
+        .function([ValType::I32, ValType::I32, ValType::I32], [ValType::F64]);
     types.ty().function([ValType::F64], [ValType::F64]);
     types.ty().function([ValType::F64, ValType::F64], [ValType::F64]);
 
     // ---- import section ----------------------------------------------------
     let mut imports = ImportSection::new();
-    let mut math_idx = MathImportIndex::default();
+    // Memory is imported from "stan" — shared with the host wasm.
+    imports.import(
+        "stan",
+        "memory",
+        EntityType::Memory(MemoryType {
+            minimum: 1,
+            maximum: None,
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        }),
+    );
 
+    let mut math_idx = MathImportIndex::default();
     if needs.exp {
-        math_idx.exp = Some(import_unary(&mut imports, "exp"));
+        math_idx.exp = Some(math_idx_add_unary(&mut math_idx, &mut imports, "exp"));
     }
     if needs.log {
-        math_idx.log = Some(import_unary(&mut imports, "log"));
+        math_idx.log = Some(math_idx_add_unary(&mut math_idx, &mut imports, "log"));
     }
     if needs.sin {
-        math_idx.sin = Some(import_unary(&mut imports, "sin"));
+        math_idx.sin = Some(math_idx_add_unary(&mut math_idx, &mut imports, "sin"));
     }
     if needs.cos {
-        math_idx.cos = Some(import_unary(&mut imports, "cos"));
+        math_idx.cos = Some(math_idx_add_unary(&mut math_idx, &mut imports, "cos"));
     }
     if needs.lgamma {
-        math_idx.lgamma = Some(import_unary(&mut imports, "lgamma"));
+        math_idx.lgamma = Some(math_idx_add_unary(&mut math_idx, &mut imports, "lgamma"));
     }
     if needs.digamma {
-        math_idx.digamma = Some(import_unary(&mut imports, "digamma"));
+        math_idx.digamma = Some(math_idx_add_unary(&mut math_idx, &mut imports, "digamma"));
     }
     if needs.phi {
-        math_idx.phi = Some(import_unary(&mut imports, "phi"));
+        math_idx.phi = Some(math_idx_add_unary(&mut math_idx, &mut imports, "phi"));
     }
     if needs.pow {
-        math_idx.pow = Some(import_binary(&mut imports));
+        math_idx.pow = Some(math_idx_add_binary(&mut math_idx, &mut imports, "pow"));
     }
 
-    let n_imports = imports.len();
+    // Function index space: imported funcs first, then defined funcs. The
+    // memory import does NOT take a function-index slot (it's a separate
+    // import kind), so n_func_imports counts only the math imports.
+    let n_func_imports = math_idx.count();
 
     // ---- function section --------------------------------------------------
     let mut functions = FunctionSection::new();
-    functions.function(0); // params_ptr
-    functions.function(0); // grad_ptr
-    functions.function(1); // log_prob_grad
+    functions.function(0); // log_prob_grad: type 0
 
-    let params_ptr_idx = n_imports;
-    let grad_ptr_idx = n_imports + 1;
-    let log_prob_grad_idx = n_imports + 2;
-
-    // ---- memory section ----------------------------------------------------
-    let mut memories = MemorySection::new();
-    memories.memory(MemoryType {
-        minimum: 1,
-        maximum: None,
-        memory64: false,
-        shared: false,
-        page_size_log2: None,
-    });
+    let log_prob_grad_idx = n_func_imports;
 
     // ---- export section ----------------------------------------------------
     let mut exports = ExportSection::new();
-    exports.export("memory", ExportKind::Memory, 0);
-    exports.export("params_ptr", ExportKind::Func, params_ptr_idx);
-    exports.export("grad_ptr", ExportKind::Func, grad_ptr_idx);
     exports.export("log_prob_grad", ExportKind::Func, log_prob_grad_idx);
 
     // ---- code section ------------------------------------------------------
     let mut codes = CodeSection::new();
 
-    // params_ptr() = 0
-    let mut params_ptr_fn = Function::new([]);
-    params_ptr_fn.instruction(&Instruction::I32Const(0));
-    params_ptr_fn.instruction(&Instruction::End);
-    codes.function(&params_ptr_fn);
-
-    // grad_ptr() = n_params * 8
-    let grad_base = (n_params as i32) * 8;
-    let mut grad_ptr_fn = Function::new([]);
-    grad_ptr_fn.instruction(&Instruction::I32Const(grad_base));
-    grad_ptr_fn.instruction(&Instruction::End);
-    codes.function(&grad_ptr_fn);
-
-    // log_prob_grad(): the main pass
-    let lpg = build_log_prob_grad(tape, n_params, root, n, &math_idx, grad_base);
+    let _ = n_params;
+    let lpg = build_log_prob_grad(tape, root, n, &math_idx);
     codes.function(&lpg);
 
     // ---- assemble ----------------------------------------------------------
@@ -159,7 +148,6 @@ fn emit(tape: &Tape, n_params: usize, root: u32) -> Vec<u8> {
     module.section(&types);
     module.section(&imports);
     module.section(&functions);
-    module.section(&memories);
     module.section(&exports);
     module.section(&codes);
     module.finish()
@@ -187,6 +175,29 @@ struct MathImportIndex {
     lgamma: Option<u32>,
     digamma: Option<u32>,
     phi: Option<u32>,
+    /// Running counter of function imports added so far. Memory imports
+    /// occupy a different index space and do NOT advance this.
+    next: u32,
+}
+
+impl MathImportIndex {
+    fn count(&self) -> u32 {
+        self.next
+    }
+
+    fn add_unary(&mut self, imports: &mut ImportSection, name: &str) -> u32 {
+        let idx = self.next;
+        imports.import("Math", name, EntityType::Function(1));
+        self.next += 1;
+        idx
+    }
+
+    fn add_binary(&mut self, imports: &mut ImportSection, name: &str) -> u32 {
+        let idx = self.next;
+        imports.import("Math", name, EntityType::Function(2));
+        self.next += 1;
+        idx
+    }
 }
 
 fn scan_imports(tape: &Tape) -> ImportNeeds {
@@ -221,79 +232,111 @@ fn scan_imports(tape: &Tape) -> ImportNeeds {
     needs
 }
 
-fn import_unary(imports: &mut ImportSection, name: &str) -> u32 {
-    let idx = imports.len();
-    imports.import("Math", name, EntityType::Function(2));
-    idx
+fn math_idx_add_unary(m: &mut MathImportIndex, imports: &mut ImportSection, name: &str) -> u32 {
+    m.add_unary(imports, name)
 }
 
-fn import_binary(imports: &mut ImportSection) -> u32 {
-    let idx = imports.len();
-    imports.import("Math", "pow", EntityType::Function(3));
-    idx
+fn math_idx_add_binary(m: &mut MathImportIndex, imports: &mut ImportSection, name: &str) -> u32 {
+    m.add_binary(imports, name)
 }
 
-fn build_log_prob_grad(
-    tape: &Tape,
-    n_params: usize,
-    root: u32,
-    n: u32,
-    m: &MathImportIndex,
-    grad_base: i32,
-) -> Function {
-    // Locals: 2*n f64 (primals 0..n-1, adjoints n..2n-1)
-    let total_locals = (2 * n) as u32;
+fn build_log_prob_grad(tape: &Tape, root: u32, n: u32, m: &MathImportIndex) -> Function {
+    // Function has 3 i32 params (params_ptr, grads_ptr, n_params).
+    // Locals: 2*n f64 (primals at 3..3+n, adjoints at 3+n..3+2n).
+    // Param slots occupy local indices 0..3.
+    const PARAMS_PTR: u32 = 0;
+    const GRADS_PTR: u32 = 1;
+    // n_params (param 2) is unused — the recorded tape already encodes it.
+    const PRIMAL_BASE: u32 = 3;
+    let adjoint_base = PRIMAL_BASE + n;
+    let total_locals = 2 * n;
     let mut f = Function::new([(total_locals, ValType::F64)]);
 
     // ---- forward pass ------------------------------------------------------
     for k in 0..n {
-        emit_forward(&mut f, tape, k, n_params as u32, m);
-        f.instruction(&Instruction::LocalSet(k));
+        emit_forward(&mut f, tape, k, m);
+        f.instruction(&Instruction::LocalSet(PRIMAL_BASE + k));
     }
 
     // ---- initialize root adjoint = 1.0 ------------------------------------
     f.instruction(&Instruction::F64Const(1.0));
-    f.instruction(&Instruction::LocalSet(root + n));
+    f.instruction(&Instruction::LocalSet(adjoint_base + root));
 
     // ---- backward pass (reverse order) ------------------------------------
     for k_rev in (0..n).rev() {
-        emit_backward(&mut f, tape, k_rev, n, m);
+        emit_backward(&mut f, tape, k_rev, PRIMAL_BASE, adjoint_base, m);
     }
 
-    // ---- store gradients to memory ----------------------------------------
-    for pi in 0..(n_params as u32) {
-        let addr = grad_base + (pi as i32) * 8;
-        f.instruction(&Instruction::I32Const(addr));
-        f.instruction(&Instruction::LocalGet(pi + n));
+    // ---- store gradients to memory at grads_ptr + i*8 --------------------
+    // We don't know n_params here; we use the leaf-prefix convention (the
+    // first leaves in the tape are the params). Gradients for those leaves
+    // live at adjoint_base..adjoint_base+n_params. We loop over the first
+    // n_params primal slots, but n_params is a runtime parameter, so we
+    // unroll based on the leaf-count we observed during tracing.
+    let n_params_observed = leaf_count(tape);
+    for pi in 0..n_params_observed {
+        // grads_ptr + pi * 8
+        f.instruction(&Instruction::LocalGet(GRADS_PTR));
+        f.instruction(&Instruction::I32Const((pi * 8) as i32));
+        f.instruction(&Instruction::I32Add);
+        f.instruction(&Instruction::LocalGet(adjoint_base + pi as u32));
         f.instruction(&Instruction::F64Store(wasm_encoder::MemArg {
             offset: 0,
             align: 3,
             memory_index: 0,
         }));
     }
+    let _ = PARAMS_PTR; // referenced by emit_forward
 
     // ---- return log_prob ---------------------------------------------------
-    f.instruction(&Instruction::LocalGet(root));
+    f.instruction(&Instruction::LocalGet(PRIMAL_BASE + root));
     f.instruction(&Instruction::End);
     f
 }
 
-fn emit_forward(
-    f: &mut Function,
-    tape: &Tape,
-    k: u32,
-    n_params: u32,
-    m: &MathImportIndex,
-) {
+fn leaf_count(tape: &Tape) -> u32 {
+    let mut n = 0u32;
+    for k in 0..tape.len() {
+        if tape.op_at(k as u32) == Op::Leaf {
+            n += 1;
+        } else {
+            break;
+        }
+    }
+    n
+}
+
+fn is_param_leaf(tape: &Tape, k: u32) -> bool {
+    if tape.op_at(k) != Op::Leaf {
+        return false;
+    }
+    // Leaves before the first non-leaf op are parameters; later leaves (rare
+    // — only created if Val::to_tape forces a constant) are not.
+    for j in 0..k {
+        if tape.op_at(j) != Op::Leaf {
+            return false;
+        }
+    }
+    true
+}
+
+fn emit_forward(f: &mut Function, tape: &Tape, k: u32, m: &MathImportIndex) {
     let op = tape.op_at(k);
     let a1 = tape.arg1_at(k);
     let a2i = tape.arg2i_at(k);
     let a2f = tape.arg2f_at(k);
+    // Local indices: params_ptr=0, grads_ptr=1, n_params(unused)=2,
+    // primals = 3..3+n, adjoints = 3+n..3+2n
+    const PARAMS_PTR: u32 = 0;
+    let pb = 3u32; // primal_base
+    let p_a1 = pb + a1;
+    let p_a2 = pb + a2i;
     match op {
         Op::Leaf => {
-            if k < n_params {
-                // memory[k*8] (i.e. params_ptr + k*8)
+            if is_param_leaf(tape, k) {
+                f.instruction(&Instruction::LocalGet(PARAMS_PTR));
                 f.instruction(&Instruction::I32Const((k * 8) as i32));
+                f.instruction(&Instruction::I32Add);
                 f.instruction(&Instruction::F64Load(wasm_encoder::MemArg {
                     offset: 0,
                     align: 3,
@@ -304,176 +347,184 @@ fn emit_forward(
             }
         }
         Op::Add => {
-            f.instruction(&Instruction::LocalGet(a1));
-            f.instruction(&Instruction::LocalGet(a2i));
+            f.instruction(&Instruction::LocalGet(p_a1));
+            f.instruction(&Instruction::LocalGet(p_a2));
             f.instruction(&Instruction::F64Add);
         }
         Op::Sub => {
-            f.instruction(&Instruction::LocalGet(a1));
-            f.instruction(&Instruction::LocalGet(a2i));
+            f.instruction(&Instruction::LocalGet(p_a1));
+            f.instruction(&Instruction::LocalGet(p_a2));
             f.instruction(&Instruction::F64Sub);
         }
         Op::Mul => {
-            f.instruction(&Instruction::LocalGet(a1));
-            f.instruction(&Instruction::LocalGet(a2i));
+            f.instruction(&Instruction::LocalGet(p_a1));
+            f.instruction(&Instruction::LocalGet(p_a2));
             f.instruction(&Instruction::F64Mul);
         }
         Op::Div => {
-            f.instruction(&Instruction::LocalGet(a1));
-            f.instruction(&Instruction::LocalGet(a2i));
+            f.instruction(&Instruction::LocalGet(p_a1));
+            f.instruction(&Instruction::LocalGet(p_a2));
             f.instruction(&Instruction::F64Div);
         }
         Op::Neg => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Neg);
         }
         Op::Exp => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::Call(m.exp.expect("exp import missing")));
         }
         Op::Log => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::Call(m.log.expect("log import missing")));
         }
         Op::Sin => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::Call(m.sin.expect("sin import missing")));
         }
         Op::Cos => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::Call(m.cos.expect("cos import missing")));
         }
         Op::Sqrt => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Sqrt);
         }
         Op::Pow => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Const(a2f));
             f.instruction(&Instruction::Call(m.pow.expect("pow import missing")));
         }
         Op::Abs => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Abs);
         }
         Op::Lgamma => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::Call(m.lgamma.expect("lgamma import missing")));
         }
         Op::AddC => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Const(a2f));
             f.instruction(&Instruction::F64Add);
         }
         Op::SubC => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Const(a2f));
             f.instruction(&Instruction::F64Sub);
         }
         Op::RsubC => {
             f.instruction(&Instruction::F64Const(a2f));
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Sub);
         }
         Op::MulC => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Const(a2f));
             f.instruction(&Instruction::F64Mul);
         }
         Op::DivC => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Const(a2f));
             f.instruction(&Instruction::F64Div);
         }
         Op::RdivC => {
             f.instruction(&Instruction::F64Const(a2f));
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::F64Div);
         }
         Op::Phi => {
-            f.instruction(&Instruction::LocalGet(a1));
+            f.instruction(&Instruction::LocalGet(p_a1));
             f.instruction(&Instruction::Call(m.phi.expect("phi import missing")));
         }
-        // Erf/Erfc/Tan/Asin/Acos/Atan/Digamma not currently emitted by the
-        // runtime, so skip for now. Encountering one would push nothing onto
-        // the stack and produce malformed wasm, so guard with unimplemented.
         Op::Erf | Op::Erfc | Op::Tan | Op::Asin | Op::Acos | Op::Atan | Op::Digamma => {
             unimplemented!("codegen for op {op:?}");
         }
     }
 }
 
-fn emit_backward(f: &mut Function, tape: &Tape, k: u32, n: u32, m: &MathImportIndex) {
+fn emit_backward(
+    f: &mut Function,
+    tape: &Tape,
+    k: u32,
+    primal_base: u32,
+    adjoint_base: u32,
+    m: &MathImportIndex,
+) {
     let op = tape.op_at(k);
     let a1 = tape.arg1_at(k);
     let a2i = tape.arg2i_at(k);
     let a2f = tape.arg2f_at(k);
-    let dk = k + n; // adjoint local index for node k
+    let dk = adjoint_base + k;
+    let da1 = adjoint_base + a1;
+    let da2 = adjoint_base + a2i;
+    let pa1 = primal_base + a1;
+    let pa2 = primal_base + a2i;
+    let pk = primal_base + k;
 
     match op {
         Op::Leaf => {} // adjoint already accumulated by callers
         Op::Add => {
-            adj_incr(f, a1 + n, dk);
-            adj_incr(f, a2i + n, dk);
+            adj_incr(f, da1, dk);
+            adj_incr(f, da2, dk);
         }
         Op::Sub => {
-            adj_incr(f, a1 + n, dk);
-            adj_decr(f, a2i + n, dk);
+            adj_incr(f, da1, dk);
+            adj_decr(f, da2, dk);
         }
         Op::Mul => {
-            adj_incr_mul(f, a1 + n, dk, a2i);
-            adj_incr_mul(f, a2i + n, dk, a1);
+            adj_incr_mul(f, da1, dk, pa2);
+            adj_incr_mul(f, da2, dk, pa1);
         }
         Op::Div => {
-            adj_incr_div(f, a1 + n, dk, a2i);
-            adj_decr_mul_div2(f, a2i + n, dk, a1, a2i);
+            adj_incr_div(f, da1, dk, pa2);
+            adj_decr_mul_div2(f, da2, dk, pa1, pa2);
         }
         Op::Neg => {
-            adj_decr(f, a1 + n, dk);
+            adj_decr(f, da1, dk);
         }
         Op::Exp => {
             // d/dx exp(x) = exp(x) = primal[k]
-            adj_incr_mul(f, a1 + n, dk, k);
+            adj_incr_mul(f, da1, dk, pk);
         }
         Op::Log => {
-            adj_incr_div(f, a1 + n, dk, a1);
+            adj_incr_div(f, da1, dk, pa1);
         }
         Op::Sin => {
-            adj_incr_fn1(f, a1 + n, dk, a1, m.cos.unwrap());
+            adj_incr_fn1(f, da1, dk, pa1, m.cos.unwrap());
         }
         Op::Cos => {
-            adj_decr_fn1(f, a1 + n, dk, a1, m.sin.unwrap());
+            adj_decr_fn1(f, da1, dk, pa1, m.sin.unwrap());
         }
         Op::Sqrt => {
-            // d/dx sqrt(x) = 1 / (2 * sqrt(x)) = 1 / (2 * primal[k])
-            adj_incr_div2(f, a1 + n, dk, k);
+            adj_incr_div2(f, da1, dk, pk);
         }
         Op::Pow => {
-            adj_incr_pow(f, a1 + n, dk, a1, a2f, m.pow.unwrap());
+            adj_incr_pow(f, da1, dk, pa1, a2f, m.pow.unwrap());
         }
         Op::Abs => {
-            adj_incr_sign(f, a1 + n, dk, a1);
+            adj_incr_sign(f, da1, dk, pa1);
         }
         Op::Lgamma => {
-            adj_incr_fn1(f, a1 + n, dk, a1, m.digamma.unwrap());
+            adj_incr_fn1(f, da1, dk, pa1, m.digamma.unwrap());
         }
         Op::AddC | Op::SubC => {
-            adj_incr(f, a1 + n, dk);
+            adj_incr(f, da1, dk);
         }
         Op::RsubC => {
-            adj_decr(f, a1 + n, dk);
+            adj_decr(f, da1, dk);
         }
         Op::MulC => {
-            adj_incr_mulc(f, a1 + n, dk, a2f);
+            adj_incr_mulc(f, da1, dk, a2f);
         }
         Op::DivC => {
-            adj_incr_divc(f, a1 + n, dk, a2f);
+            adj_incr_divc(f, da1, dk, a2f);
         }
         Op::RdivC => {
-            adj_decr_rdivc(f, a1 + n, dk, a2f, a1);
+            adj_decr_rdivc(f, da1, dk, a2f, pa1);
         }
         Op::Phi => {
-            adj_incr_phi(f, a1 + n, dk, a1, m.exp.unwrap());
+            adj_incr_phi(f, da1, dk, pa1, m.exp.unwrap());
         }
         Op::Erf | Op::Erfc | Op::Tan | Op::Asin | Op::Acos | Op::Atan | Op::Digamma => {
             unimplemented!("backward for op {op:?}");

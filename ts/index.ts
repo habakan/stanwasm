@@ -5,6 +5,12 @@
 // poking into `pkg/`.
 
 import init from "./pkg/stan_wasm_api.js";
-export { StanModel, version } from "./pkg/stan_wasm_api.js";
+export {
+  StanModel,
+  version,
+  setAotExports,
+  clearAotExports,
+  sharedMemory,
+} from "./pkg/stan_wasm_api.js";
 export default init;
 
