@@ -10,3 +10,7 @@ stan-autodiff.workspace = true
 stan-runtime.workspace = true
 wasm-encoder.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+wasmparser = "0.220"
+wasmi = "0.32"
