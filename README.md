@@ -6,7 +6,18 @@ Stan inference engine for WebAssembly, written in Rust. Successor to [stan-wasm]
 
 Phases 0–5 complete. Sampling validated end-to-end: linear regression posterior recovers the true slope to ±0.3 in 1000 draws.
 
-Distributions covered: `normal`, `std_normal`, `exponential`, `half_normal`, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta`, `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2`. Constraint transforms: `lower`, `upper`, `lower_upper` on scalars and vectors. Multivariate distributions and `simplex` / `ordered` / `cholesky_factor_*` constraints are not yet ported.
+Distributions covered:
+- Continuous: `normal`, `std_normal`, `exponential`, `half_normal`, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta`
+- Discrete: `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2`
+- Multivariate: `multi_normal_cholesky`, `lkj_corr_cholesky`, `dirichlet`
+
+Constraint transforms:
+- Scalar: `lower`, `upper`, `lower_upper`
+- Vector: same with element-wise broadcast
+- Vector shape: `simplex`, `ordered`, `positive_ordered`
+- Matrix: `cholesky_factor_corr`
+
+Not yet ported: `multi_normal` (full covariance), `multinomial`, `categorical`, `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`, generated-quantities block, user-defined functions.
 
 See `docs/MIGRATION.md` for the per-phase plan and `docs/BENCHMARKS.md` for performance numbers.
 
