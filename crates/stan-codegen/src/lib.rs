@@ -16,6 +16,6 @@ pub enum CodegenError {
 }
 
 /// Returns the bytes of a model-specific wasm module. Phase 4.
-pub fn compile(_program: &stan_ast::Program) -> Result<Vec<u8>, CodegenError> {
+pub fn compile(_program: &stan_ast::StanProgram) -> Result<Vec<u8>, CodegenError> {
     Err(CodegenError::NotImplemented)
 }
