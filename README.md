@@ -19,7 +19,7 @@ Constraint transforms:
 
 Not yet ported: `multi_normal` (full covariance), `multinomial`, `categorical`, `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`, generated-quantities block, user-defined functions.
 
-See `docs/MIGRATION.md` for the per-phase plan and `docs/BENCHMARKS.md` for performance numbers.
+See `docs/MIGRATION.md` for the per-phase plan, `docs/BENCHMARKS.md` for performance numbers, and `docs/MOONBIT_VS_RUST.md` for a tech-note summarizing what we learned from running both implementations side by side.
 
 ## Architecture
 
