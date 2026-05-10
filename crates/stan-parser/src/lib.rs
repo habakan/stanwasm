@@ -1,17 +1,14 @@
 //! Stan lexer + parser. Hand-written recursive descent.
-//! Phase 1 will replace this stub with the full implementation.
+//!
+//! Public entry: `parse(src) -> StanProgram`.
+//! Re-exports `Token` and `tokenize` for diagnostics and golden-value tests.
 
 #![forbid(unsafe_code)]
 
-use stan_ast::Program;
-use thiserror::Error;
+pub mod lexer;
+pub mod parser;
+pub mod token;
 
-#[derive(Debug, Error)]
-pub enum ParseError {
-    #[error("not yet implemented")]
-    NotImplemented,
-}
-
-pub fn parse(_src: &str) -> Result<Program, ParseError> {
-    Err(ParseError::NotImplemented)
-}
+pub use lexer::tokenize;
+pub use parser::{parse, ParseError, Parser};
+pub use token::Token;
