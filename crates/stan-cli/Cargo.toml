@@ -1,0 +1,15 @@
+[package]
+name = "stan-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "stan-cli"
+path = "src/main.rs"
+
+[dependencies]
+stan-parser.workspace = true
+stan-runtime.workspace = true
+stan-codegen.workspace = true
+anyhow.workspace = true

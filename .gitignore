@@ -1,0 +1,18 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# wasm-bindgen output
+/pkg
+/ts/pkg
+
+# node
+node_modules
+dist
+.vite
+
+# editor
+.idea
+.vscode
+*.swp
+.DS_Store

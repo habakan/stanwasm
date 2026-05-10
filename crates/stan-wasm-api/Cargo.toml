@@ -1,0 +1,23 @@
+[package]
+name = "stan-wasm-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+stan-ast.workspace = true
+stan-parser.workspace = true
+stan-codegen.workspace = true
+# stan-runtime is intentionally NOT a dep here: the AST evaluator stays
+# native-only. Pull in only what wasm needs (parser, codegen).
+
+wasm-bindgen.workspace = true
+nuts-rs = { workspace = true }
+rand = { workspace = true }
+thiserror.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }

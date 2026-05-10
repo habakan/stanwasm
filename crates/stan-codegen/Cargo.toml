@@ -1,0 +1,12 @@
+[package]
+name = "stan-codegen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+stan-ast.workspace = true
+stan-autodiff.workspace = true
+stan-runtime.workspace = true
+wasm-encoder.workspace = true
+thiserror.workspace = true

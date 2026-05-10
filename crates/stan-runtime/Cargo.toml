@@ -1,0 +1,10 @@
+[package]
+name = "stan-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+stan-ast.workspace = true
+stan-autodiff.workspace = true
+thiserror.workspace = true

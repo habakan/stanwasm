@@ -1,0 +1,12 @@
+{
+  "name": "stan-wasm-rs",
+  "version": "0.1.0",
+  "description": "Stan inference engine for WebAssembly (Rust port).",
+  "type": "module",
+  "main": "index.ts",
+  "files": ["index.ts", "pkg/"],
+  "scripts": {
+    "build:wasm": "../scripts/build-wasm.sh"
+  },
+  "license": "Apache-2.0"
+}

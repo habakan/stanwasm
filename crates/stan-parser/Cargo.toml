@@ -1,0 +1,9 @@
+[package]
+name = "stan-parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+stan-ast.workspace = true
+thiserror.workspace = true
