@@ -742,6 +742,7 @@ version = "0.1.0"
 dependencies = [
  "stan-ast",
  "stan-autodiff",
+ "stan-parser",
  "thiserror",
 ]
 
