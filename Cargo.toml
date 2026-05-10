@@ -22,6 +22,7 @@ stan-parser = { path = "crates/stan-parser" }
 stan-autodiff = { path = "crates/stan-autodiff" }
 stan-runtime = { path = "crates/stan-runtime" }
 stan-codegen = { path = "crates/stan-codegen" }
+stan-wasm-api = { path = "crates/stan-wasm-api" }
 
 nuts-rs = { version = "0.18.1", default-features = false }
 wasm-bindgen = "0.2"

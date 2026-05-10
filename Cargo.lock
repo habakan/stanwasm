@@ -781,9 +781,12 @@ name = "stan-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "stan-autodiff",
  "stan-codegen",
  "stan-parser",
  "stan-runtime",
+ "stan-wasm-api",
+ "wasmi",
 ]
 
 [[package]]

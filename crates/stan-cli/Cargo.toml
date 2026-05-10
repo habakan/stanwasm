@@ -10,6 +10,9 @@ path = "src/main.rs"
 
 [dependencies]
 stan-parser.workspace = true
-stan-runtime.workspace = true
+stan-autodiff.workspace = true
+stan-runtime = { workspace = true, features = ["json"] }
 stan-codegen.workspace = true
+stan-wasm-api.workspace = true
 anyhow.workspace = true
+wasmi = "0.32"
