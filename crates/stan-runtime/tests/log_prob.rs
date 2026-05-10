@@ -153,6 +153,56 @@ fn poisson_regression_logp_finite() {
     assert!(grads.iter().all(|g| g.is_finite()));
 }
 
+const MULTIVARIATE_LKJ: &str = r#"
+data {
+  int<lower=1> K;
+  vector[K] y;
+}
+parameters {
+  vector[K] mu;
+  cholesky_factor_corr[K] L;
+}
+model {
+  mu ~ normal(0, 5);
+  L  ~ lkj_corr_cholesky(2.0);
+  y  ~ multi_normal_cholesky(mu, L);
+}
+"#;
+
+#[test]
+fn multivariate_lkj_sampling_reasonable() {
+    let mut data = Env::new();
+    data.set_scalar("K", 2.0);
+    data.set_vector("y", &[1.0, 2.0]);
+    let model = Model::parse_and_load(MULTIVARIATE_LKJ, data).unwrap();
+    // params: mu (K=2) + cholesky_factor_corr[K] raw (K*(K-1)/2 = 1) = 3
+    assert_eq!(model.n_params(), 3);
+
+    // Smoke: lp + grads finite at small init
+    let init = vec![0.1; 3];
+    let (lp, grads) = model.log_prob_grad(&init);
+    assert!(lp.is_finite(), "lp = {lp}");
+    assert!(grads.iter().all(|g| g.is_finite()), "grads = {grads:?}");
+
+    // Numerical gradient check
+    let h = 1e-5;
+    for i in 0..3 {
+        let mut p_plus = init.clone();
+        let mut p_minus = init.clone();
+        p_plus[i] += h;
+        p_minus[i] -= h;
+        let (lp_plus, _) = model.log_prob_grad(&p_plus);
+        let (lp_minus, _) = model.log_prob_grad(&p_minus);
+        let fd = (lp_plus - lp_minus) / (2.0 * h);
+        assert!(
+            (fd - grads[i]).abs() < 1e-4,
+            "param[{i}]: autodiff={}, finite-diff={}",
+            grads[i],
+            fd
+        );
+    }
+}
+
 #[test]
 fn finite_difference_check_linear_regression() {
     // Numerical gradient check vs analytical autodiff.

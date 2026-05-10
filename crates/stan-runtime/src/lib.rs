@@ -16,6 +16,7 @@ mod constraints;
 mod distributions;
 mod env;
 mod eval;
+mod matrix;
 mod model;
 mod ops;
 mod value;

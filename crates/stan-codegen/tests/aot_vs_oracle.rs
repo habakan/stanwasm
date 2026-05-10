@@ -179,6 +179,42 @@ fn poisson_regression_aot_matches_oracle() {
     }
 }
 
+const MULTIVARIATE_LKJ: &str = r#"
+data {
+  int<lower=1> K;
+  vector[K] y;
+}
+parameters {
+  vector[K] mu;
+  cholesky_factor_corr[K] L;
+}
+model {
+  mu ~ normal(0, 5);
+  L  ~ lkj_corr_cholesky(2.0);
+  y  ~ multi_normal_cholesky(mu, L);
+}
+"#;
+
+#[test]
+fn multivariate_lkj_aot_matches_oracle() {
+    let mut data = Env::new();
+    data.set_scalar("K", 2.0);
+    data.set_vector("y", &[1.0, 2.0]);
+    let model = Model::parse_and_load(MULTIVARIATE_LKJ, data).unwrap();
+
+    let dummy = vec![0.1; model.n_params()];
+    let compiled = compile(&model, &dummy).unwrap();
+
+    let test_params = vec![0.5, 1.5, 0.3];
+    let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params);
+    let (aot_lp, aot_grads) = run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
+
+    assert!(close(oracle_lp, aot_lp, 1e-12), "lp: oracle={oracle_lp}, aot={aot_lp}");
+    for (i, (o, a)) in oracle_grads.iter().zip(aot_grads.iter()).enumerate() {
+        assert!(close(*o, *a, 1e-12), "grad[{i}]: oracle={o}, aot={a}");
+    }
+}
+
 #[test]
 fn module_validates_with_wasmparser() {
     let mut data = Env::new();

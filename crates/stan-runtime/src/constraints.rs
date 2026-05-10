@@ -6,7 +6,7 @@
 
 use crate::env::Env;
 use crate::eval::eval_plain;
-use crate::ops::{v_add, v_exp, v_inv_logit, v_log, v_mul, v_sub};
+use crate::ops::{v_add, v_exp, v_inv_logit, v_log, v_mul, v_sqrt, v_sub, v_tanh};
 use crate::value::Val;
 use stan_ast::{Constraint, StanType};
 use stan_autodiff::Tape;
@@ -110,6 +110,49 @@ pub fn constrain(
                 cs.push(c);
             }
             (Val::Vec(cs), jac)
+        }
+        // cholesky_factor_corr[K]:
+        //   K*(K-1)/2 unconstrained → K×K lower-triangular L (Cholesky of corr matrix).
+        //   Spherical parameterization: row i, col j < i:
+        //     z = tanh(raw[idx])
+        //     L[i][j] = z * sqrt(rem)
+        //     log_jac += 0.5*log(rem) + log(1 - z²)
+        //     rem *= (1 - z²)
+        //   L[i][i] = sqrt(rem). Row 0: L[0][0] = 1.
+        StanType::CholeskyFactorCorr(k_e) => {
+            let kk = eval_plain(t, k_e, env);
+            let kk = match kk {
+                Val::Num(v) => v as usize,
+                _ => 0,
+            };
+            let mut mat: Vec<Val> = Vec::with_capacity(kk);
+            let mut log_jac = Val::Num(0.0);
+            let mut idx = 0;
+            for i in 0..kk {
+                let mut row: Vec<Val> = vec![Val::Num(0.0); kk];
+                if i == 0 {
+                    row[0] = Val::Num(1.0);
+                } else {
+                    let mut rem = Val::Num(1.0);
+                    for j in 0..i {
+                        let z = v_tanh(t, &raw[idx]);
+                        idx += 1;
+                        let z2 = v_mul(t, &z, &z);
+                        let log_rem = v_log(t, &rem);
+                        let half_log_rem = v_mul(t, &Val::Num(0.5), &log_rem);
+                        let one_minus_z2 = v_sub(t, &Val::Num(1.0), &z2);
+                        let log_1mz2 = v_log(t, &one_minus_z2);
+                        let term = v_add(t, &half_log_rem, &log_1mz2);
+                        log_jac = v_add(t, &log_jac, &term);
+                        let sqrt_rem = v_sqrt(t, &rem);
+                        row[j] = v_mul(t, &z, &sqrt_rem);
+                        rem = v_mul(t, &rem, &one_minus_z2);
+                    }
+                    row[i] = v_sqrt(t, &rem);
+                }
+                mat.push(Val::Vec(row));
+            }
+            (Val::Vec(mat), log_jac)
         }
         // Phase 3 fallback: pass-through. Higher-order constraints port later.
         _ => (Val::Vec(raw.to_vec()), Val::Num(0.0)),

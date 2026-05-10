@@ -9,6 +9,7 @@
 //! cannot prove that two nested `v_add(t, ...)` calls don't alias the tape
 //! borrow. Equivalent to MoonBit's evaluation order, just more verbose.
 
+use crate::matrix::{mat_mdiv_ltri_low, vec_dot_self};
 use crate::ops::{
     v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub,
 };
@@ -162,6 +163,71 @@ pub fn neg_binomial_2_lpmf(t: &mut Tape, y: &Val, mu: &Val, phi: &Val) -> Val {
     v_add(t, &combo_plus_phi, &y_term)
 }
 
+/// `multi_normal_cholesky_lpdf(y | μ, L)` — y, μ are vectors, L is the
+/// Cholesky factor of the covariance (lower-triangular K×K).
+/// log p = -K/2 · log(2π) − Σ log Lᵢᵢ − 0.5 · ||L⁻¹(y − μ)||²
+pub fn multi_normal_cholesky_lpdf(
+    t: &mut Tape,
+    y: &[Val],
+    mu: &[Val],
+    l_rows: &[Val],
+) -> Val {
+    let kk = y.len();
+    let mut diff = Vec::with_capacity(kk);
+    for i in 0..kk {
+        diff.push(v_sub(t, &y[i], &mu[i]));
+    }
+    let r = mat_mdiv_ltri_low(t, l_rows, &diff);
+    let mut sum_log_diag = Val::Num(0.0);
+    for (i, row_v) in l_rows.iter().enumerate() {
+        if let Val::Vec(row) = row_v {
+            if i < row.len() {
+                let lr = v_log(t, &row[i]);
+                sum_log_diag = v_add(t, &sum_log_diag, &lr);
+            }
+        }
+    }
+    let ds = vec_dot_self(t, &r);
+    // -K/2 * log(2π) - sum_log_diag - 0.5 * ds
+    let prefix = Val::Num(-(kk as f64) * LOG_SQRT_2PI);
+    let half_ds = v_mul(t, &Val::Num(0.5), &ds);
+    let prefix_minus_diag = v_sub(t, &prefix, &sum_log_diag);
+    v_sub(t, &prefix_minus_diag, &half_ds)
+}
+
+/// `lkj_corr_cholesky_lpdf(L | η)` — L is the Cholesky factor of a K×K
+/// correlation matrix.
+/// log p = (2η − 2) · Σ_{k=0..K-1} (K − 1 − k) · log Lₖₖ
+pub fn lkj_corr_cholesky_lpdf(t: &mut Tape, l_rows: &[Val], eta: &Val) -> Val {
+    let kk = l_rows.len();
+    let two_eta = v_mul(t, &Val::Num(2.0), eta);
+    let two_eta_minus_2 = v_sub(t, &two_eta, &Val::Num(2.0));
+    let mut weighted_sum = Val::Num(0.0);
+    for (k, row_v) in l_rows.iter().enumerate() {
+        let wt = (kk - 1 - k) as f64;
+        if wt > 0.0 {
+            if let Val::Vec(row) = row_v {
+                if k < row.len() {
+                    let lr = v_log(t, &row[k]);
+                    let term = v_mul(t, &Val::Num(wt), &lr);
+                    weighted_sum = v_add(t, &weighted_sum, &term);
+                }
+            }
+        }
+    }
+    v_mul(t, &two_eta_minus_2, &weighted_sum)
+}
+
+/// Distributions whose first argument is a *whole* vector / matrix (not a
+/// scalar element). For these, sampling a `Val::Vec` does NOT broadcast the
+/// scalar lpdf over elements — the entire structure is the observation.
+fn is_multivariate(name: &str) -> bool {
+    matches!(
+        name,
+        "multi_normal_cholesky" | "lkj_corr_cholesky" | "dirichlet" | "multinomial"
+    )
+}
+
 /// Dispatch: dist_name → lpdf/lpmf computation. Returns None if the
 /// distribution is not yet supported in the Rust port.
 pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Option<Val> {
@@ -179,16 +245,29 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Option<Val>
         "bernoulli_logit" => Some(bernoulli_logit_lpmf(t, x, &args[0])),
         "poisson" => Some(poisson_lpmf(t, x, &args[0])),
         "neg_binomial_2" => Some(neg_binomial_2_lpmf(t, x, &args[0], &args[1])),
+        "multi_normal_cholesky" => match (x, &args[0], &args[1]) {
+            (Val::Vec(y), Val::Vec(mu), Val::Vec(l_rows)) => {
+                Some(multi_normal_cholesky_lpdf(t, y, mu, l_rows))
+            }
+            _ => Some(Val::Num(0.0)),
+        },
+        "lkj_corr_cholesky" => match x {
+            Val::Vec(l_rows) => Some(lkj_corr_cholesky_lpdf(t, l_rows, &args[0])),
+            _ => Some(Val::Num(0.0)),
+        },
         _ => None,
     }
 }
 
-/// Sample statement (`y ~ dist(...)`) on a vector observation. Sums the
-/// scalar lpdf over each element. When a distribution argument is itself a
-/// `Val::Vec`, that argument is broadcast element-wise — matching Stan's
-/// `y ~ normal(theta, sigma)` semantics where both `theta` and `sigma` may
-/// be vectors of the same length as `y`.
+/// Sample statement (`y ~ dist(...)`) on a vector observation. Behaviour:
+/// - For multivariate distributions, the whole vector / matrix is the
+///   observation and we delegate to `eval_dist` once with `x = Val::Vec(xs)`.
+/// - For scalar distributions, sums the scalar lpdf over each element with
+///   element-wise argument broadcast.
 pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Option<Val> {
+    if is_multivariate(name) {
+        return eval_dist(t, name, &Val::Vec(xs.to_vec()), args);
+    }
     let mut acc = Val::Num(0.0);
     let mut elem_args: Vec<Val> = Vec::with_capacity(args.len());
     for (i, x) in xs.iter().enumerate() {

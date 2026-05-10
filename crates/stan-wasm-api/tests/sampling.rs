@@ -84,6 +84,40 @@ fn linear_regression_sample_recovers_slope() {
     assert!(mean_alpha.is_finite() && mean_alpha.abs() < 2.0);
 }
 
+const MULTIVARIATE_LKJ: &str = r#"
+data {
+  int<lower=1> K;
+  vector[K] y;
+}
+parameters {
+  vector[K] mu;
+  cholesky_factor_corr[K] L;
+}
+model {
+  mu ~ normal(0, 5);
+  L  ~ lkj_corr_cholesky(2.0);
+  y  ~ multi_normal_cholesky(mu, L);
+}
+"#;
+
+const MULTIVARIATE_DATA: &str = r#"{
+  "K": 2,
+  "y": [1.0, 2.0]
+}"#;
+
+#[test]
+fn multivariate_lkj_compiles_and_samples() {
+    let mut model = StanModel::new(MULTIVARIATE_LKJ, MULTIVARIATE_DATA).unwrap();
+    assert_eq!(model.n_params(), 3);
+
+    let init = vec![0.1; 3];
+    let n_warmup = 200;
+    let n_draws = 400;
+    let samples = model.sample(&init, n_warmup, n_draws, 42).unwrap();
+    assert_eq!(samples.len(), 3 * (n_warmup + n_draws) as usize);
+    assert!(samples.iter().all(|s| s.is_finite()));
+}
+
 #[test]
 fn compile_to_wasm_returns_valid_module() {
     let model = StanModel::new(LINEAR_REGRESSION, DATA).unwrap();
