@@ -111,6 +111,59 @@ pub fn constrain(
             }
             (Val::Vec(cs), jac)
         }
+        // simplex[K]: K-1 unconstrained → K-dim simplex (∑ θᵢ = 1, θᵢ > 0)
+        // Uses Stan's stick-breaking transform with the (K-1-i) shift so the
+        // unconstrained zero vector maps to the uniform simplex (1/K, ..., 1/K).
+        StanType::Simplex(_) => {
+            let k = raw.len() + 1;
+            let mut theta = vec![Val::Num(0.0); k];
+            let mut log_jac = Val::Num(0.0);
+            let mut stick = Val::Num(1.0);
+            for i in 0..(k - 1) {
+                let shift = ((k - 1 - i) as f64).ln();
+                let adj = v_sub(t, &raw[i], &Val::Num(shift));
+                let z = v_inv_logit(t, &adj);
+                theta[i] = v_mul(t, &stick, &z);
+                let one_z = v_sub(t, &Val::Num(1.0), &z);
+                let log_stick = v_log(t, &stick);
+                let log_z = v_log(t, &z);
+                let log_oz = v_log(t, &one_z);
+                let term1 = v_add(t, &log_z, &log_oz);
+                let term2 = v_add(t, &log_stick, &term1);
+                log_jac = v_add(t, &log_jac, &term2);
+                stick = v_mul(t, &stick, &one_z);
+            }
+            theta[k - 1] = stick;
+            (Val::Vec(theta), log_jac)
+        }
+        // ordered[K]: K unconstrained → K reals with μ₀ < μ₁ < … < μ_{K-1}
+        // μ₀ = raw[0]; μᵢ = μ_{i-1} + exp(raw[i]); log_jac = ∑_{i≥1} raw[i]
+        StanType::Ordered(_) => {
+            let k = raw.len();
+            let mut mu = vec![Val::Num(0.0); k];
+            let mut log_jac = Val::Num(0.0);
+            mu[0] = raw[0].clone();
+            for i in 1..k {
+                let e = v_exp(t, &raw[i]);
+                mu[i] = v_add(t, &mu[i - 1], &e);
+                log_jac = v_add(t, &log_jac, &raw[i]);
+            }
+            (Val::Vec(mu), log_jac)
+        }
+        // positive_ordered[K]: y₀ = exp(raw[0]); yᵢ = y_{i-1} + exp(raw[i])
+        StanType::PositiveOrdered(_) => {
+            let k = raw.len();
+            let mut cs = vec![Val::Num(0.0); k];
+            let mut log_jac = Val::Num(0.0);
+            let mut prev = Val::Num(0.0);
+            for i in 0..k {
+                let e = v_exp(t, &raw[i]);
+                prev = v_add(t, &prev, &e);
+                cs[i] = prev.clone();
+                log_jac = v_add(t, &log_jac, &raw[i]);
+            }
+            (Val::Vec(cs), log_jac)
+        }
         // cholesky_factor_corr[K]:
         //   K*(K-1)/2 unconstrained → K×K lower-triangular L (Cholesky of corr matrix).
         //   Spherical parameterization: row i, col j < i:

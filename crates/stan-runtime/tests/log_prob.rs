@@ -203,6 +203,98 @@ fn multivariate_lkj_sampling_reasonable() {
     }
 }
 
+const SIMPLEX_DIRICHLET: &str = r#"
+data {
+  int<lower=2> K;
+  array[K] int<lower=0> y;
+  vector[K] alpha;
+}
+parameters {
+  simplex[K] theta;
+}
+model {
+  for (k in 1:K) {
+    target += (alpha[k] - 1) * log(theta[k]);
+  }
+  for (k in 1:K) {
+    target += y[k] * log(theta[k]);
+  }
+}
+"#;
+
+#[test]
+fn simplex_dirichlet_finite_diff() {
+    let mut data = Env::new();
+    data.set_scalar("K", 3.0);
+    data.set_vector("y", &[3.0, 5.0, 2.0]);
+    data.set_vector("alpha", &[2.0, 1.0, 3.0]);
+    let model = Model::parse_and_load(SIMPLEX_DIRICHLET, data).unwrap();
+    // simplex[K=3] uses K-1 = 2 unconstrained params
+    assert_eq!(model.n_params(), 2);
+
+    let init = vec![0.2, -0.3];
+    let (lp, grads) = model.log_prob_grad(&init);
+    assert!(lp.is_finite(), "lp = {lp}");
+
+    let h = 1e-5;
+    for i in 0..2 {
+        let mut p_plus = init.clone();
+        let mut p_minus = init.clone();
+        p_plus[i] += h;
+        p_minus[i] -= h;
+        let (lp_plus, _) = model.log_prob_grad(&p_plus);
+        let (lp_minus, _) = model.log_prob_grad(&p_minus);
+        let fd = (lp_plus - lp_minus) / (2.0 * h);
+        assert!(
+            (fd - grads[i]).abs() < 1e-4,
+            "param[{i}]: autodiff={}, finite-diff={}",
+            grads[i],
+            fd
+        );
+    }
+}
+
+const ORDERED_MEANS: &str = r#"
+data { int<lower=1> K; vector[K] y; }
+parameters { ordered[K] mu; real<lower=0> sigma; }
+model {
+  mu ~ normal(0, 10);
+  sigma ~ exponential(1);
+  for (i in 1:K) y[i] ~ normal(mu[i], sigma);
+}
+"#;
+
+#[test]
+fn ordered_means_finite_diff() {
+    let mut data = Env::new();
+    data.set_scalar("K", 3.0);
+    data.set_vector("y", &[1.0, 2.5, 4.0]);
+    let model = Model::parse_and_load(ORDERED_MEANS, data).unwrap();
+    // ordered[K=3] uses K=3 raw params + sigma = 4
+    assert_eq!(model.n_params(), 4);
+
+    let init = vec![0.1, -0.2, 0.3, 0.0];
+    let (lp, grads) = model.log_prob_grad(&init);
+    assert!(lp.is_finite(), "lp = {lp}");
+
+    let h = 1e-5;
+    for i in 0..4 {
+        let mut p_plus = init.clone();
+        let mut p_minus = init.clone();
+        p_plus[i] += h;
+        p_minus[i] -= h;
+        let (lp_plus, _) = model.log_prob_grad(&p_plus);
+        let (lp_minus, _) = model.log_prob_grad(&p_minus);
+        let fd = (lp_plus - lp_minus) / (2.0 * h);
+        assert!(
+            (fd - grads[i]).abs() < 1e-4,
+            "param[{i}]: autodiff={}, finite-diff={}",
+            grads[i],
+            fd
+        );
+    }
+}
+
 #[test]
 fn finite_difference_check_linear_regression() {
     // Numerical gradient check vs analytical autodiff.

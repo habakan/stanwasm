@@ -195,6 +195,26 @@ pub fn multi_normal_cholesky_lpdf(
     v_sub(t, &prefix_minus_diag, &half_ds)
 }
 
+/// `dirichlet_lpdf(θ | α)` — both vectors of length K.
+/// log p = lgamma(∑αᵢ) − ∑ lgamma(αᵢ) + ∑ (αᵢ − 1) log θᵢ
+pub fn dirichlet_lpdf(t: &mut Tape, theta: &[Val], alpha: &[Val]) -> Val {
+    let mut sum_alpha = Val::Num(0.0);
+    for a in alpha {
+        sum_alpha = v_add(t, &sum_alpha, a);
+    }
+    let mut lp = v_lgamma(t, &sum_alpha);
+    let k = theta.len().min(alpha.len());
+    for i in 0..k {
+        let lg = v_lgamma(t, &alpha[i]);
+        lp = v_sub(t, &lp, &lg);
+        let am1 = v_sub(t, &alpha[i], &Val::Num(1.0));
+        let log_th = v_log(t, &theta[i]);
+        let term = v_mul(t, &am1, &log_th);
+        lp = v_add(t, &lp, &term);
+    }
+    lp
+}
+
 /// `lkj_corr_cholesky_lpdf(L | η)` — L is the Cholesky factor of a K×K
 /// correlation matrix.
 /// log p = (2η − 2) · Σ_{k=0..K-1} (K − 1 − k) · log Lₖₖ
@@ -253,6 +273,10 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Option<Val>
         },
         "lkj_corr_cholesky" => match x {
             Val::Vec(l_rows) => Some(lkj_corr_cholesky_lpdf(t, l_rows, &args[0])),
+            _ => Some(Val::Num(0.0)),
+        },
+        "dirichlet" => match (x, &args[0]) {
+            (Val::Vec(theta), Val::Vec(alpha)) => Some(dirichlet_lpdf(t, theta, alpha)),
             _ => Some(Val::Num(0.0)),
         },
         _ => None,
