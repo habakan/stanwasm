@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import init, { StanModel } from "stan-wasm-rs";
 import { PRESETS, type Preset } from "./models";
 import { Histogram } from "./Histogram";
 import { DataTable } from "./DataTable";
+import { csvToData } from "./csv";
 
 interface ParamSummary {
   name: string;
@@ -46,6 +47,11 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ParamSummary[] | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  /** When set, overrides the preset's bundled data. */
+  const [customData, setCustomData] = useState<Record<string, number | number[]> | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [csvFilename, setCsvFilename] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // wasm is copied into public/ by the `copy-wasm` npm script and served
@@ -57,6 +63,36 @@ export function App() {
   }, []);
 
   const preset: Preset = PRESETS[presetKey];
+  const effectiveData = customData ?? preset.data;
+
+  const onPresetChange = (key: keyof typeof PRESETS) => {
+    setPresetKey(key);
+    setCustomData(null);
+    setCsvError(null);
+    setCsvFilename(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const onCsvFile = async (file: File) => {
+    setCsvError(null);
+    const text = await file.text();
+    const result = csvToData(text, preset);
+    if ("message" in result) {
+      setCsvError(result.message);
+      setCustomData(null);
+      setCsvFilename(null);
+      return;
+    }
+    setCustomData(result.data);
+    setCsvFilename(file.name);
+  };
+
+  const resetCsv = () => {
+    setCustomData(null);
+    setCsvError(null);
+    setCsvFilename(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const onRun = async () => {
     setRunning(true);
@@ -64,7 +100,7 @@ export function App() {
     setSummary(null);
     setElapsedMs(null);
     try {
-      const model = new StanModel(preset.stanCode, JSON.stringify(preset.data));
+      const model = new StanModel(preset.stanCode, JSON.stringify(effectiveData));
       const init = new Float64Array(preset.init);
       const t0 = performance.now();
       const samples = model.sample(init, nWarmup, nDraws, BigInt(seed));
@@ -104,7 +140,7 @@ export function App() {
             <label>Model:</label>
             <select
               value={presetKey}
-              onChange={(e) => setPresetKey(e.target.value as keyof typeof PRESETS)}
+              onChange={(e) => onPresetChange(e.target.value as keyof typeof PRESETS)}
             >
               {Object.entries(PRESETS).map(([k, p]) => (
                 <option key={k} value={k}>
@@ -114,6 +150,42 @@ export function App() {
             </select>
             <span style={{ color: "#666", fontSize: 13 }}>{preset.description}</span>
           </div>
+
+          <div className="row">
+            <label>Data:</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onCsvFile(f);
+              }}
+            />
+            {customData ? (
+              <>
+                <span style={{ fontSize: 13, color: "#047857" }}>
+                  ✓ {csvFilename}
+                </span>
+                <button className="secondary" onClick={resetCsv}>
+                  Reset to preset
+                </button>
+              </>
+            ) : (
+              <span style={{ fontSize: 13, color: "#666" }}>
+                upload CSV with columns: {preset.csvColumns.join(", ")}{" "}
+                <span style={{ color: "#aaa" }}>
+                  ({preset.rowCountScalar} = row count)
+                </span>
+              </span>
+            )}
+          </div>
+
+          {csvError && (
+            <div className="note" style={{ borderLeftColor: "#b91c1c", background: "#fee2e2" }}>
+              <strong>CSV error:</strong> {csvError}
+            </div>
+          )}
 
           <div className="row">
             <label>Warmup:</label>
@@ -149,8 +221,8 @@ export function App() {
           </div>
 
           <div className="code-section">
-            <h3>Data</h3>
-            <DataTable data={preset.data} />
+            <h3>Data {customData && <span style={{ fontSize: 12, color: "#047857", fontWeight: 400 }}>(custom CSV)</span>}</h3>
+            <DataTable data={effectiveData} />
           </div>
 
           {error && (

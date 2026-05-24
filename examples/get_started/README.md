@@ -33,6 +33,12 @@ npm run build
 - `model.n_params` and `model.paramNames()` for metadata
 - Posterior summarisation in plain JS (mean / sd / 80% interval) plus an
   inline SVG histogram per parameter
+- Custom data loading: upload a CSV whose columns match the preset's
+  expected fields (e.g. `x,y` for linear / poisson regression, `y,sigma`
+  for eight schools). The row count auto-fills the model's size scalar
+  (`N` or `J`).
 
-About 220 lines across all `src/` files. Use it as a template for your own
+Sample CSVs are provided under `sample-csv/` for each preset.
+
+About 280 lines across all `src/` files. Use it as a template for your own
 integration.

@@ -4,6 +4,10 @@ export interface Preset {
   stanCode: string;
   data: Record<string, number | number[]>;
   init: number[];
+  /** Column names expected when uploading a CSV. */
+  csvColumns: string[];
+  /** Scalar field that should be set to the CSV row count (e.g. N, J). */
+  rowCountScalar: string;
 }
 
 export const PRESETS: Record<string, Preset> = {
@@ -33,6 +37,8 @@ model {
       y: Array.from({ length: 30 }, (_, i) => -1.3 + i * 0.18),
     },
     init: [0, 1, 0],
+    csvColumns: ["x", "y"],
+    rowCountScalar: "N",
   },
 
   poisson_regression: {
@@ -58,6 +64,8 @@ model {
       y: [1, 2, 5, 12, 30],
     },
     init: [0, 1],
+    csvColumns: ["x", "y"],
+    rowCountScalar: "N",
   },
 
   eight_schools: {
@@ -89,5 +97,7 @@ model {
       sigma: [15, 10, 16, 11, 9, 11, 10, 18],
     },
     init: Array(10).fill(0.1),
+    csvColumns: ["y", "sigma"],
+    rowCountScalar: "J",
   },
 };
