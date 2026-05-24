@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import init, { StanModel } from "stan-wasm-rs";
 import { PRESETS, type Preset } from "./models";
 import { Histogram } from "./Histogram";
@@ -54,6 +54,11 @@ export function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   /** When set, overrides the preset's bundled Stan code. */
   const [customStan, setCustomStan] = useState<string | null>(null);
+  /** Cached compiled model. null when never compiled or after reset. */
+  const [compiledModel, setCompiledModel] = useState<StanModel | null>(null);
+  const [compileError, setCompileError] = useState<string | null>(null);
+  const [lastCompiledKey, setLastCompiledKey] = useState<string | null>(null);
+  const [compiling, setCompiling] = useState(false);
 
   useEffect(() => {
     // wasm is copied into public/ by the `copy-wasm` npm script and served
@@ -68,12 +73,45 @@ export function App() {
   const effectiveData = customData ?? preset.data;
   const effectiveStan = customStan ?? preset.stanCode;
 
+  /** Identifies the (stan, data) pair currently in the editor. When the
+   *  cached compile was for a different key, the model is "stale". */
+  const compileKey = useMemo(
+    () => JSON.stringify({ s: effectiveStan, d: effectiveData }),
+    [effectiveStan, effectiveData],
+  );
+  const stale = compiledModel !== null && lastCompiledKey !== compileKey;
+
+  const compile = () => {
+    setCompiling(true);
+    setCompileError(null);
+    // Tiny defer so the spinner state lands before the synchronous parse
+    // and trace kicks the main thread.
+    setTimeout(() => {
+      try {
+        if (compiledModel) compiledModel.free();
+        const m = new StanModel(effectiveStan, JSON.stringify(effectiveData));
+        setCompiledModel(m);
+        setLastCompiledKey(compileKey);
+      } catch (e) {
+        setCompileError(String(e));
+        setCompiledModel(null);
+      } finally {
+        setCompiling(false);
+      }
+    }, 0);
+  };
+
   const onPresetChange = (key: keyof typeof PRESETS) => {
     setPresetKey(key);
     setCustomData(null);
     setCsvError(null);
     setCsvFilename(null);
     setCustomStan(null);
+    if (compiledModel) compiledModel.free();
+    setCompiledModel(null);
+    setCompileError(null);
+    setLastCompiledKey(null);
+    setSummary(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -101,23 +139,21 @@ export function App() {
   };
 
   const onRun = async () => {
+    if (!compiledModel || stale) return;
     setRunning(true);
     setError(null);
     setSummary(null);
     setElapsedMs(null);
     try {
-      const model = new StanModel(effectiveStan, JSON.stringify(effectiveData));
-      // Use the preset's hand-tuned init when sizes match, else default to
-      // a small non-zero vector (avoids degenerate gradients at exactly 0).
-      const init =
-        preset.init.length === model.n_params
+      const initVec =
+        preset.init.length === compiledModel.n_params
           ? new Float64Array(preset.init)
-          : new Float64Array(model.n_params).fill(0.1);
+          : new Float64Array(compiledModel.n_params).fill(0.1);
       const t0 = performance.now();
-      const samples = model.sample(init, nWarmup, nDraws, BigInt(seed));
+      const samples = compiledModel.sample(initVec, nWarmup, nDraws, BigInt(seed));
       const elapsed = performance.now() - t0;
-      const n = model.n_params;
-      const names = model.paramNames();
+      const n = compiledModel.n_params;
+      const names = compiledModel.paramNames();
       const post = samples.subarray(nWarmup * n);
       const draws: number[][] = Array.from({ length: n }, () => []);
       for (let i = 0; i < nDraws; i++) {
@@ -220,10 +256,37 @@ export function App() {
               value={seed}
               onChange={(e) => setSeed(Number(e.target.value))}
             />
-            <button onClick={onRun} disabled={running}>
+            <button className="secondary" onClick={compile} disabled={compiling}>
+              {compiling ? "Compiling…" : compiledModel && !stale ? "Recompile" : "Compile"}
+            </button>
+            <button onClick={onRun} disabled={running || !compiledModel || stale}>
               {running ? "Sampling…" : "Run NUTS"}
             </button>
+            <span className="compile-status">
+              {compileError ? (
+                <span style={{ color: "#b91c1c" }}>✗ compile error</span>
+              ) : compiledModel && !stale ? (
+                <span style={{ color: "#047857" }}>
+                  ✓ compiled ({compiledModel.n_params} params)
+                </span>
+              ) : compiledModel && stale ? (
+                <span style={{ color: "#b45309" }}>
+                  ⚠ stale — recompile
+                </span>
+              ) : (
+                <span style={{ color: "#888" }}>not compiled</span>
+              )}
+            </span>
           </div>
+
+          {compileError && (
+            <div className="note" style={{ borderLeftColor: "#b91c1c", background: "#fee2e2" }}>
+              <strong>Compile error:</strong>
+              <pre style={{ background: "transparent", border: "none", padding: "4px 0", margin: 0 }}>
+                {compileError}
+              </pre>
+            </div>
+          )}
 
           <div className="code-section">
             <h3>

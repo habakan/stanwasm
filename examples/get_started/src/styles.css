@@ -142,6 +142,12 @@ pre {
   text-align: right;
 }
 
+.compile-status {
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
 .stan-editor {
   width: 100%;
   min-height: 280px;
