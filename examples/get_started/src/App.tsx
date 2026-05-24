@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import init, { StanModel } from "stan-wasm-rs";
 import { PRESETS, type Preset } from "./models";
 import { Histogram } from "./Histogram";
+import { DataTable } from "./DataTable";
 
 interface ParamSummary {
   name: string;
@@ -148,8 +149,8 @@ export function App() {
           </div>
 
           <div className="code-section">
-            <h3>Data (JSON)</h3>
-            <pre>{JSON.stringify(preset.data, null, 2)}</pre>
+            <h3>Data</h3>
+            <DataTable data={preset.data} />
           </div>
 
           {error && (
