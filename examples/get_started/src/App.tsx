@@ -51,6 +51,7 @@ export function App() {
   const [customData, setCustomData] = useState<Record<string, number | number[]> | null>(null);
   const [csvError, setCsvError] = useState<string | null>(null);
   const [csvFilename, setCsvFilename] = useState<string | null>(null);
+  const [csvSkipped, setCsvSkipped] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   /** When set, overrides the preset's bundled Stan code. */
   const [customStan, setCustomStan] = useState<string | null>(null);
@@ -119,6 +120,7 @@ export function App() {
 
   const onCsvFile = async (file: File) => {
     setCsvError(null);
+    setCsvSkipped([]);
     const text = await file.text();
     const result = csvToData(text);
     if ("message" in result) {
@@ -129,12 +131,14 @@ export function App() {
     }
     setCustomData(result.data);
     setCsvFilename(file.name);
+    setCsvSkipped(result.skippedColumns);
   };
 
   const resetCsv = () => {
     setCustomData(null);
     setCsvError(null);
     setCsvFilename(null);
+    setCsvSkipped([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -214,6 +218,11 @@ export function App() {
                 <span style={{ fontSize: 13, color: "#047857" }}>
                   ✓ {csvFilename}
                 </span>
+                {csvSkipped.length > 0 && (
+                  <span style={{ fontSize: 12, color: "#b45309" }}>
+                    skipped non-numeric column(s): {csvSkipped.join(", ")}
+                  </span>
+                )}
                 <button className="secondary" onClick={resetCsv}>
                   Reset to preset
                 </button>
