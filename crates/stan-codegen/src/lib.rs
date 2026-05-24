@@ -25,8 +25,8 @@ use stan_autodiff::{Op, Tape};
 use stan_runtime::Model;
 use thiserror::Error;
 use wasm_encoder::{
-    CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection,
-    ImportSection, Instruction, MemoryType, Module, TypeSection, ValType,
+    CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
+    Instruction, MemoryType, Module, TypeSection, ValType,
 };
 
 #[derive(Debug, Error)]
@@ -57,11 +57,14 @@ pub fn compile(model: &Model, dummy_params: &[f64]) -> Result<Compiled, CodegenE
     let mut tape = Tape::new();
     let leaves: Vec<u32> = dummy_params.iter().map(|p| tape.new_var(*p)).collect();
     let root = model.trace_forward(&mut tape, &leaves);
-    if tape.len() == 0 {
+    if tape.is_empty() {
         return Err(CodegenError::EmptyTape);
     }
     let wasm = emit(&tape, dummy_params.len(), root);
-    Ok(Compiled { wasm, n_params: dummy_params.len() })
+    Ok(Compiled {
+        wasm,
+        n_params: dummy_params.len(),
+    })
 }
 
 /// Lower the recorded tape to a wasm module.
@@ -78,7 +81,9 @@ fn emit(tape: &Tape, n_params: usize, root: u32) -> Vec<u8> {
         .ty()
         .function([ValType::I32, ValType::I32, ValType::I32], [ValType::F64]);
     types.ty().function([ValType::F64], [ValType::F64]);
-    types.ty().function([ValType::F64, ValType::F64], [ValType::F64]);
+    types
+        .ty()
+        .function([ValType::F64, ValType::F64], [ValType::F64]);
 
     // ---- import section ----------------------------------------------------
     let mut imports = ImportSection::new();
@@ -279,7 +284,7 @@ fn build_log_prob_grad(tape: &Tape, root: u32, n: u32, m: &MathImportIndex) -> F
         f.instruction(&Instruction::LocalGet(GRADS_PTR));
         f.instruction(&Instruction::I32Const((pi * 8) as i32));
         f.instruction(&Instruction::I32Add);
-        f.instruction(&Instruction::LocalGet(adjoint_base + pi as u32));
+        f.instruction(&Instruction::LocalGet(adjoint_base + pi));
         f.instruction(&Instruction::F64Store(wasm_encoder::MemArg {
             offset: 0,
             align: 3,
@@ -698,4 +703,3 @@ fn adj_incr_phi(f: &mut Function, da: u32, dk: u32, ta: u32, exp_idx: u32) {
     f.instruction(&Instruction::F64Add);
     f.instruction(&Instruction::LocalSet(da));
 }
-

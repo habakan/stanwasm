@@ -9,7 +9,12 @@ use stan_autodiff::{lgamma as lgamma_double, phi_cdf as phi_cdf_double, Tape};
 // For Vec broadcasts we collect into Vec<Val> via a for-loop so the
 // recursive call has a clear borrow lifetime on the tape.
 
-fn map_pair(t: &mut Tape, xs: &[Val], ys: &[Val], op: fn(&mut Tape, &Val, &Val) -> Val) -> Vec<Val> {
+fn map_pair(
+    t: &mut Tape,
+    xs: &[Val],
+    ys: &[Val],
+    op: fn(&mut Tape, &Val, &Val) -> Val,
+) -> Vec<Val> {
     xs.iter().zip(ys.iter()).map(|(x, y)| op(t, x, y)).collect()
 }
 
@@ -17,7 +22,12 @@ fn map_left(t: &mut Tape, xs: &[Val], rhs: &Val, op: fn(&mut Tape, &Val, &Val) -
     xs.iter().map(|x| op(t, x, rhs)).collect()
 }
 
-fn map_right(t: &mut Tape, lhs: &Val, ys: &[Val], op: fn(&mut Tape, &Val, &Val) -> Val) -> Vec<Val> {
+fn map_right(
+    t: &mut Tape,
+    lhs: &Val,
+    ys: &[Val],
+    op: fn(&mut Tape, &Val, &Val) -> Val,
+) -> Vec<Val> {
     ys.iter().map(|y| op(t, lhs, y)).collect()
 }
 
@@ -161,4 +171,3 @@ pub fn v_tanh(t: &mut Tape, a: &Val) -> Val {
     let two_il = v_mul(t, &Val::Num(2.0), &il);
     v_sub(t, &two_il, &Val::Num(1.0))
 }
-

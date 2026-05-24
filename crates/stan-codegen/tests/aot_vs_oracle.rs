@@ -36,9 +36,10 @@ fn install_math(linker: &mut Linker<HostState>, store: &mut Store<HostState>) {
     unary!("lgamma", lgamma);
     unary!("digamma", digamma);
     unary!("phi", phi);
-    let pow = Func::wrap(&mut *store, |_: Caller<'_, HostState>, x: f64, y: f64| -> f64 {
-        x.powf(y)
-    });
+    let pow = Func::wrap(
+        &mut *store,
+        |_: Caller<'_, HostState>, x: f64, y: f64| -> f64 { x.powf(y) },
+    );
     linker.define("Math", "pow", pow).unwrap();
 }
 
@@ -124,7 +125,8 @@ fn linear_regression_aot_matches_oracle() {
 
     let test_params = vec![0.5, 1.5, -0.2];
     let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params);
-    let (aot_lp, aot_grads) = run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
+    let (aot_lp, aot_grads) =
+        run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
 
     assert!(
         close(oracle_lp, aot_lp, 1e-12),
@@ -171,9 +173,13 @@ fn poisson_regression_aot_matches_oracle() {
 
     let test_params = vec![0.0, 1.0];
     let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params);
-    let (aot_lp, aot_grads) = run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
+    let (aot_lp, aot_grads) =
+        run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
 
-    assert!(close(oracle_lp, aot_lp, 1e-12), "lp: oracle={oracle_lp}, aot={aot_lp}");
+    assert!(
+        close(oracle_lp, aot_lp, 1e-12),
+        "lp: oracle={oracle_lp}, aot={aot_lp}"
+    );
     for (i, (o, a)) in oracle_grads.iter().zip(aot_grads.iter()).enumerate() {
         assert!(close(*o, *a, 1e-12), "grad[{i}]: oracle={o}, aot={a}");
     }
@@ -207,9 +213,13 @@ fn multivariate_lkj_aot_matches_oracle() {
 
     let test_params = vec![0.5, 1.5, 0.3];
     let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params);
-    let (aot_lp, aot_grads) = run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
+    let (aot_lp, aot_grads) =
+        run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
 
-    assert!(close(oracle_lp, aot_lp, 1e-12), "lp: oracle={oracle_lp}, aot={aot_lp}");
+    assert!(
+        close(oracle_lp, aot_lp, 1e-12),
+        "lp: oracle={oracle_lp}, aot={aot_lp}"
+    );
     for (i, (o, a)) in oracle_grads.iter().zip(aot_grads.iter()).enumerate() {
         assert!(close(*o, *a, 1e-12), "grad[{i}]: oracle={o}, aot={a}");
     }

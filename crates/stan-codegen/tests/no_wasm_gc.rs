@@ -25,7 +25,10 @@ fn aot_output_uses_no_wasm_gc() {
     let mut data = Env::new();
     data.set_scalar("N", 10.0);
     data.set_vector("x", &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
-    data.set_vector("y", &[1.1, 3.2, 5.0, 7.1, 8.9, 11.2, 13.0, 15.1, 16.8, 19.2]);
+    data.set_vector(
+        "y",
+        &[1.1, 3.2, 5.0, 7.1, 8.9, 11.2, 13.0, 15.1, 16.8, 19.2],
+    );
     let model = Model::parse_and_load(
         r#"data { int<lower=0> N; vector[N] x; vector[N] y; }
 parameters { real alpha; real beta; real<lower=0> sigma; }

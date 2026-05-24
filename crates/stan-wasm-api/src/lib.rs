@@ -62,11 +62,7 @@ impl CpuLogpFunc for LogpAdapter {
         self.compiled.n_params()
     }
 
-    fn logp(
-        &mut self,
-        position: &[f64],
-        gradient: &mut [f64],
-    ) -> Result<f64, SamplerError> {
+    fn logp(&mut self, position: &[f64], gradient: &mut [f64]) -> Result<f64, SamplerError> {
         let lp = self.compiled.log_prob_grad(position, gradient);
         if lp.is_finite() {
             Ok(lp)
@@ -75,11 +71,7 @@ impl CpuLogpFunc for LogpAdapter {
         }
     }
 
-    fn expand_vector<R>(
-        &mut self,
-        _rng: &mut R,
-        array: &[f64],
-    ) -> Result<Vec<f64>, CpuMathError>
+    fn expand_vector<R>(&mut self, _rng: &mut R, array: &[f64]) -> Result<Vec<f64>, CpuMathError>
     where
         R: rand::Rng + ?Sized,
     {
@@ -163,9 +155,10 @@ impl StanModel {
         let total = (num_warmup + num_draws) as u64;
 
         // Take the Compiled out for nuts-rs (CpuMath consumes by value).
-        let compiled = self.compiled.take().ok_or_else(|| {
-            JsError::new("internal: compiled missing — call StanModel anew")
-        })?;
+        let compiled = self
+            .compiled
+            .take()
+            .ok_or_else(|| JsError::new("internal: compiled missing — call StanModel anew"))?;
         let math = CpuMath::new(LogpAdapter { compiled });
 
         let settings = DiagNutsSettings {
@@ -196,8 +189,7 @@ impl StanModel {
     #[wasm_bindgen(js_name = compileToWasm)]
     pub fn compile_to_wasm(&self) -> Result<Vec<u8>, JsError> {
         let dummy = vec![0.1_f64; self.model.n_params()];
-        let compiled =
-            stan_codegen::compile(&self.model, &dummy).map_err(jserr)?;
+        let compiled = stan_codegen::compile(&self.model, &dummy).map_err(jserr)?;
         Ok(compiled.wasm)
     }
 }
@@ -289,11 +281,7 @@ impl CpuLogpFunc for AotLogp {
         self.n_params
     }
 
-    fn logp(
-        &mut self,
-        position: &[f64],
-        gradient: &mut [f64],
-    ) -> Result<f64, SamplerError> {
+    fn logp(&mut self, position: &[f64], gradient: &mut [f64]) -> Result<f64, SamplerError> {
         // Copy position into the persistent params buffer; capture pointers.
         self.params_buf.copy_from_slice(position);
         let params_ptr = self.params_buf.as_ptr() as u32;
@@ -307,11 +295,7 @@ impl CpuLogpFunc for AotLogp {
         }
     }
 
-    fn expand_vector<R>(
-        &mut self,
-        _rng: &mut R,
-        array: &[f64],
-    ) -> Result<Vec<f64>, CpuMathError>
+    fn expand_vector<R>(&mut self, _rng: &mut R, array: &[f64]) -> Result<Vec<f64>, CpuMathError>
     where
         R: rand::Rng + ?Sized,
     {
@@ -361,8 +345,7 @@ impl StanModel {
 
         let mut out = vec![0.0_f64; n * total as usize];
         for (i, draw) in iter.enumerate() {
-            let (pos, _progress) =
-                draw.map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
+            let (pos, _progress) = draw.map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
             out[i * n..(i + 1) * n].copy_from_slice(pos.as_ref());
         }
         Ok(out)

@@ -70,5 +70,5 @@ pub const KEYWORDS: &[&str] = &[
 ];
 
 pub fn is_keyword(s: &str) -> bool {
-    KEYWORDS.iter().any(|kw| *kw == s)
+    KEYWORDS.contains(&s)
 }

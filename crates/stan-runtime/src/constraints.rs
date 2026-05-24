@@ -24,8 +24,7 @@ pub fn param_dims(typ: &StanType, env: &Env) -> usize {
             let kk = eval_plain_int(k, env);
             kk * (kk - 1) / 2
         }
-        StanType::CholeskyFactorCov(k)
-        | StanType::CovMatrix(k) => {
+        StanType::CholeskyFactorCov(k) | StanType::CovMatrix(k) => {
             let kk = eval_plain_int(k, env);
             kk * (kk + 1) / 2
         }
@@ -48,12 +47,7 @@ fn eval_plain_int(expr: &stan_ast::Expr, env: &Env) -> usize {
 
 /// Apply the constraint transform to a slice of unconstrained tape leaves.
 /// Returns `(constrained_value, log_jacobian)`.
-pub fn constrain(
-    t: &mut Tape,
-    typ: &StanType,
-    raw: &[Val],
-    env: &Env,
-) -> (Val, Val) {
+pub fn constrain(t: &mut Tape, typ: &StanType, raw: &[Val], env: &Env) -> (Val, Val) {
     match typ {
         StanType::Real(Constraint::None) => (raw[0].clone(), Val::Num(0.0)),
         StanType::Real(Constraint::Lower(lo_e)) => {
@@ -73,9 +67,7 @@ pub fn constrain(
             let hi = eval_plain(t, hi_e, env);
             apply_lower_upper(t, &raw[0], &lo, &hi)
         }
-        StanType::Vector(_, Constraint::None) => {
-            (Val::Vec(raw.to_vec()), Val::Num(0.0))
-        }
+        StanType::Vector(_, Constraint::None) => (Val::Vec(raw.to_vec()), Val::Num(0.0)),
         StanType::Vector(_, Constraint::Lower(lo_e)) => {
             let lo = eval_plain(t, lo_e, env);
             let mut jac = Val::Num(0.0);
@@ -187,6 +179,7 @@ pub fn constrain(
                     row[0] = Val::Num(1.0);
                 } else {
                     let mut rem = Val::Num(1.0);
+                    #[allow(clippy::needless_range_loop)]
                     for j in 0..i {
                         let z = v_tanh(t, &raw[idx]);
                         idx += 1;

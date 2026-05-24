@@ -32,7 +32,10 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(src: &str) -> Self {
-        Self { toks: tokenize(src), pos: 0 }
+        Self {
+            toks: tokenize(src),
+            pos: 0,
+        }
     }
 
     fn peek(&self) -> &Token {
@@ -80,7 +83,10 @@ impl Parser {
         if &got == t {
             Ok(())
         } else {
-            Err(ParseError::Expected { expected: format!("{t:?}"), got })
+            Err(ParseError::Expected {
+                expected: format!("{t:?}"),
+                got,
+            })
         }
     }
 
@@ -88,7 +94,10 @@ impl Parser {
         let got = self.consume();
         match &got {
             Token::Kw(s) if s == kw => Ok(()),
-            _ => Err(ParseError::Expected { expected: format!("Kw({kw})"), got }),
+            _ => Err(ParseError::Expected {
+                expected: format!("Kw({kw})"),
+                got,
+            }),
         }
     }
 
@@ -588,7 +597,14 @@ impl Parser {
                 self.consume();
             }
             self.expect_tok(&Token::RBrace)?;
-            funcs.push((fname, FuncDef { params, body, ret_expr }));
+            funcs.push((
+                fname,
+                FuncDef {
+                    params,
+                    body,
+                    ret_expr,
+                },
+            ));
         }
         Ok(funcs)
     }

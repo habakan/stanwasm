@@ -29,11 +29,19 @@ impl Env {
     }
 
     pub fn get(&self, name: &str) -> Option<&Val> {
-        self.vars.iter().rev().find(|(n, _)| n == name).map(|(_, v)| v)
+        self.vars
+            .iter()
+            .rev()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v)
     }
 
     pub fn len(&self) -> usize {
         self.vars.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.vars.is_empty()
     }
 
     pub fn truncate(&mut self, len: usize) {

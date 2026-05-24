@@ -28,7 +28,11 @@ pub fn mat_mdiv_ltri_low(t: &mut Tape, l_rows: &[Val], b: &[Val]) -> Vec<Val> {
                 let prod = v_mul(t, &row[j], &x[j]);
                 s = v_sub(t, &s, &prod);
             }
-            let diag = if i < row.len() { row[i].clone() } else { Val::Num(1.0) };
+            let diag = if i < row.len() {
+                row[i].clone()
+            } else {
+                Val::Num(1.0)
+            };
             x.push(v_div(t, &s, &diag));
         } else {
             x.push(s);

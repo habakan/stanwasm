@@ -10,9 +10,7 @@
 //! borrow. Equivalent to MoonBit's evaluation order, just more verbose.
 
 use crate::matrix::{mat_mdiv_ltri_low, vec_dot_self};
-use crate::ops::{
-    v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub,
-};
+use crate::ops::{v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub};
 use crate::value::Val;
 use stan_autodiff::Tape;
 
@@ -166,12 +164,7 @@ pub fn neg_binomial_2_lpmf(t: &mut Tape, y: &Val, mu: &Val, phi: &Val) -> Val {
 /// `multi_normal_cholesky_lpdf(y | μ, L)` — y, μ are vectors, L is the
 /// Cholesky factor of the covariance (lower-triangular K×K).
 /// log p = -K/2 · log(2π) − Σ log Lᵢᵢ − 0.5 · ||L⁻¹(y − μ)||²
-pub fn multi_normal_cholesky_lpdf(
-    t: &mut Tape,
-    y: &[Val],
-    mu: &[Val],
-    l_rows: &[Val],
-) -> Val {
+pub fn multi_normal_cholesky_lpdf(t: &mut Tape, y: &[Val], mu: &[Val], l_rows: &[Val]) -> Val {
     let kk = y.len();
     let mut diff = Vec::with_capacity(kk);
     for i in 0..kk {

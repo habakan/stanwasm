@@ -181,10 +181,17 @@ fn bench_case(case: &Case) -> anyhow::Result<Row> {
     // D) End-to-end sampling
     let mut sm = StanModel::new(case.src, case.data).map_err(|e| anyhow::anyhow!("{e:?}"))?;
     let t0 = Instant::now();
-    let _samples = sm.sample(case.init, N_WARMUP, N_DRAWS, 42).map_err(|e| anyhow::anyhow!("{e:?}"))?;
+    let _samples = sm
+        .sample(case.init, N_WARMUP, N_DRAWS, 42)
+        .map_err(|e| anyhow::anyhow!("{e:?}"))?;
     let sample_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
-    Ok(Row { ast_us, replay_us, aot_us, sample_ms })
+    Ok(Row {
+        ast_us,
+        replay_us,
+        aot_us,
+        sample_ms,
+    })
 }
 
 fn mean_us(iters: usize, mut f: impl FnMut()) -> f64 {
@@ -208,7 +215,9 @@ struct HostState;
 fn install_math(linker: &mut Linker<HostState>, store: &mut Store<HostState>) {
     macro_rules! unary {
         ($name:literal, $fn:expr) => {{
-            let f = Func::wrap(&mut *store, |_: Caller<'_, HostState>, x: f64| -> f64 { $fn(x) });
+            let f = Func::wrap(&mut *store, |_: Caller<'_, HostState>, x: f64| -> f64 {
+                $fn(x)
+            });
             linker.define("Math", $name, f).unwrap();
         }};
     }
@@ -219,7 +228,10 @@ fn install_math(linker: &mut Linker<HostState>, store: &mut Store<HostState>) {
     unary!("lgamma", stan_autodiff_lgamma);
     unary!("digamma", stan_autodiff_digamma);
     unary!("phi", stan_autodiff_phi);
-    let pow = Func::wrap(&mut *store, |_: Caller<'_, HostState>, x: f64, y: f64| -> f64 { x.powf(y) });
+    let pow = Func::wrap(
+        &mut *store,
+        |_: Caller<'_, HostState>, x: f64, y: f64| -> f64 { x.powf(y) },
+    );
     linker.define("Math", "pow", pow).unwrap();
 }
 
@@ -237,9 +249,11 @@ fn bench_aot_via_wasmi(wasm: &[u8], n_params: usize, params: &[f64]) -> anyhow::
     let engine = Engine::default();
     let module = WasmModule::new(&engine, wasm)?;
     let mut store = Store::new(&engine, HostState);
-    let memory =
-        Memory::new(&mut store, MemoryType::new(1, None).map_err(|e| anyhow::anyhow!("{e}"))?)
-            .map_err(|e| anyhow::anyhow!("memory: {e}"))?;
+    let memory = Memory::new(
+        &mut store,
+        MemoryType::new(1, None).map_err(|e| anyhow::anyhow!("{e}"))?,
+    )
+    .map_err(|e| anyhow::anyhow!("memory: {e}"))?;
     let mut linker: Linker<HostState> = Linker::new(&engine);
     install_math(&mut linker, &mut store);
     linker

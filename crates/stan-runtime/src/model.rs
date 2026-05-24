@@ -37,7 +37,11 @@ impl Model {
             .iter()
             .map(|d| param_dims(&d.typ, &data_env))
             .sum();
-        Self { prog, data_env, n_params }
+        Self {
+            prog,
+            data_env,
+            n_params,
+        }
     }
 
     pub fn parse_and_load(stan_src: &str, data_env: Env) -> Result<Self, ModelError> {
@@ -107,8 +111,7 @@ impl Model {
         let mut lp: Val = Val::Num(0.0);
         for decl in &self.prog.parameters {
             let k = param_dims(&decl.typ, &self.data_env);
-            let raw: Vec<Val> =
-                (0..k).map(|i| Val::Tape(leaves[leaf_idx + i])).collect();
+            let raw: Vec<Val> = (0..k).map(|i| Val::Tape(leaves[leaf_idx + i])).collect();
             leaf_idx += k;
             let (constrained, log_jac) = constrain(tape, &decl.typ, &raw, &self.data_env);
             env.set(&decl.name, constrained);

@@ -107,7 +107,11 @@ fn cse_invalidates_on_reset() {
     let y = tape.new_var(2.0);
     let len_before = tape.len();
     let _ = tape.log(y);
-    assert_eq!(tape.len() - len_before, 1, "after reset, log must recompute");
+    assert_eq!(
+        tape.len() - len_before,
+        1,
+        "after reset, log must recompute"
+    );
 }
 
 #[test]
@@ -138,7 +142,10 @@ fn forward_replay_matches_fresh_trace() {
         t.log(plus)
     });
 
-    assert!((lp_replay - lp_fresh).abs() < 1e-12, "{lp_replay} vs {lp_fresh}");
+    assert!(
+        (lp_replay - lp_fresh).abs() < 1e-12,
+        "{lp_replay} vs {lp_fresh}"
+    );
     for i in 0..2 {
         assert!(
             (g_replay[i] - g_fresh[i]).abs() < 1e-12,

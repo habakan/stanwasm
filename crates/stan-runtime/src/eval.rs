@@ -3,8 +3,8 @@
 use crate::distributions::{eval_dist, eval_sample_vec};
 use crate::env::Env;
 use crate::ops::{
-    v_abs, v_add, v_div, v_exp, v_inv_logit, v_lgamma, v_log, v_logit, v_mul, v_neg, v_phi,
-    v_pow, v_sqrt, v_sub, v_tanh,
+    v_abs, v_add, v_div, v_exp, v_inv_logit, v_lgamma, v_log, v_logit, v_mul, v_neg, v_phi, v_pow,
+    v_sqrt, v_sub, v_tanh,
 };
 use crate::value::Val;
 use stan_ast::{Expr, Stmt};

@@ -48,7 +48,7 @@ const CSE_SIZE: usize = 512;
 const TAPE_DEFAULT_CAP: usize = 65536;
 
 const INV_SQRT_2PI: f64 = 0.398_942_280_401_432_7;
-const TWO_OVER_SQRT_PI: f64 = 1.128_379_167_095_512_6;
+const TWO_OVER_SQRT_PI: f64 = std::f64::consts::FRAC_2_SQRT_PI;
 
 pub struct Tape {
     val: Vec<f64>,

@@ -15,10 +15,14 @@ fn all_reference_models_parse() {
     let entries: Vec<_> = fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("read_dir({}): {e}", dir.display()))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |x| x == "stan"))
+        .filter(|e| e.path().extension().is_some_and(|x| x == "stan"))
         .collect();
 
-    assert!(!entries.is_empty(), "no .stan files found in {}", dir.display());
+    assert!(
+        !entries.is_empty(),
+        "no .stan files found in {}",
+        dir.display()
+    );
 
     let mut failures = Vec::new();
     let mut ok_count = 0;
@@ -44,8 +48,15 @@ fn all_reference_models_parse() {
     }
 
     if !failures.is_empty() {
-        panic!("{} model(s) failed to parse:\n{}", failures.len(), failures.join("\n"));
+        panic!(
+            "{} model(s) failed to parse:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
     }
     assert_eq!(ok_count, entries.len(), "every model should parse");
-    assert!(ok_count >= 20, "expected at least 20 models, got {ok_count}");
+    assert!(
+        ok_count >= 20,
+        "expected at least 20 models, got {ok_count}"
+    );
 }

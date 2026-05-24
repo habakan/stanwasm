@@ -122,7 +122,10 @@ fn multivariate_lkj_compiles_and_samples() {
 fn compile_to_wasm_returns_valid_module() {
     let model = StanModel::new(LINEAR_REGRESSION, DATA).unwrap();
     let wasm = model.compile_to_wasm().unwrap();
-    assert!(wasm.starts_with(&[0x00, 0x61, 0x73, 0x6d]), "wasm magic missing");
+    assert!(
+        wasm.starts_with(&[0x00, 0x61, 0x73, 0x6d]),
+        "wasm magic missing"
+    );
     let result = wasmparser::Validator::new().validate_all(&wasm);
     assert!(result.is_ok(), "wasm did not validate: {:?}", result.err());
 }
