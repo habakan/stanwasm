@@ -1,22 +1,29 @@
-import type { Preset } from "./models";
-
 export interface CsvParseError {
   message: string;
 }
 
+export interface CsvParseResult {
+  /** Stan data object ready to pass to StanModel. Columns become vectors;
+   *  row count is exposed as `N`, `J`, and `K` so most idiomatic Stan size
+   *  scalar names just work without renaming. */
+  data: Record<string, number | number[]>;
+  /** Column names as they appeared in the header (for display only). */
+  columns: string[];
+}
+
 /**
- * Parse a CSV string into rows of numbers and map onto the preset's
- * expected schema. Returns the new `data` object (same shape as
- * `preset.data`) or an error.
+ * Parse a CSV string into Stan data. The CSV must have:
+ *   - a header row (column names become Stan vector names)
+ *   - data rows of finite numbers
  *
- * The CSV must have a header row whose column names exactly match
- * `preset.csvColumns`. All values must parse as finite numbers.
- * `preset.rowCountScalar` is auto-set to the number of data rows.
+ * No schema validation against any preset — the user is expected to edit
+ * the Stan program so its `data { ... }` block matches the CSV columns.
+ * Row count is auto-published as N / J / K.
  */
-export function csvToData(
-  text: string,
-  preset: Preset,
-): { data: Record<string, number | number[]> } | CsvParseError {
+export function csvToData(text: string): CsvParseResult | CsvParseError {
+  // Strip UTF-8 BOM that Excel and some editors add to CSV exports.
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -24,18 +31,10 @@ export function csvToData(
   if (lines.length < 2) {
     return { message: "CSV needs a header row and at least one data row." };
   }
-  const header = splitCsvLine(lines[0]);
-  const expected = new Set(preset.csvColumns);
-  const got = new Set(header);
-  const missing = preset.csvColumns.filter((c) => !got.has(c));
-  if (missing.length > 0) {
-    return {
-      message: `CSV is missing required column(s): ${missing.join(", ")}. Expected columns: ${preset.csvColumns.join(", ")}.`,
-    };
-  }
 
+  const header = splitCsvLine(lines[0]);
   const cols: Record<string, number[]> = {};
-  for (const col of preset.csvColumns) cols[col] = [];
+  for (const c of header) cols[c] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const row = splitCsvLine(lines[i]);
@@ -45,7 +44,6 @@ export function csvToData(
       };
     }
     for (let j = 0; j < header.length; j++) {
-      if (!expected.has(header[j])) continue;
       const v = Number(row[j]);
       if (!Number.isFinite(v)) {
         return {
@@ -56,24 +54,20 @@ export function csvToData(
     }
   }
 
-  const n = cols[preset.csvColumns[0]].length;
-  for (const col of preset.csvColumns) {
-    if (cols[col].length !== n) {
-      return {
-        message: `Column "${col}" has ${cols[col].length} values but expected ${n}.`,
-      };
-    }
-  }
-
+  const n = cols[header[0]].length;
+  // Publish the row count under common scalar names. Stan data blocks
+  // typically declare one of these.
   const data: Record<string, number | number[]> = {
-    [preset.rowCountScalar]: n,
+    N: n,
+    J: n,
+    K: n,
     ...cols,
   };
-  return { data };
+  return { data, columns: header };
 }
 
 function splitCsvLine(line: string): string[] {
-  // Minimal split: doesn't handle quoted commas. Stan data is numeric so
-  // commas in values aren't expected.
+  // Minimal split: no quoted-field support. Stan data is numeric so commas
+  // in values aren't expected.
   return line.split(",").map((c) => c.trim());
 }

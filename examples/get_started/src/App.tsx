@@ -82,7 +82,7 @@ export function App() {
   const onCsvFile = async (file: File) => {
     setCsvError(null);
     const text = await file.text();
-    const result = csvToData(text, preset);
+    const result = csvToData(text);
     if ("message" in result) {
       setCsvError(result.message);
       setCustomData(null);
@@ -107,7 +107,12 @@ export function App() {
     setElapsedMs(null);
     try {
       const model = new StanModel(effectiveStan, JSON.stringify(effectiveData));
-      const init = new Float64Array(preset.init);
+      // Use the preset's hand-tuned init when sizes match, else default to
+      // a small non-zero vector (avoids degenerate gradients at exactly 0).
+      const init =
+        preset.init.length === model.n_params
+          ? new Float64Array(preset.init)
+          : new Float64Array(model.n_params).fill(0.1);
       const t0 = performance.now();
       const samples = model.sample(init, nWarmup, nDraws, BigInt(seed));
       const elapsed = performance.now() - t0;
@@ -179,10 +184,9 @@ export function App() {
               </>
             ) : (
               <span style={{ fontSize: 13, color: "#666" }}>
-                upload CSV with columns: {preset.csvColumns.join(", ")}{" "}
-                <span style={{ color: "#aaa" }}>
-                  ({preset.rowCountScalar} = row count)
-                </span>
+                any CSV — columns become Stan vectors; row count exposed as{" "}
+                <code>N</code> / <code>J</code> / <code>K</code>. Edit the Stan
+                program if your columns differ from the preset.
               </span>
             )}
           </div>
