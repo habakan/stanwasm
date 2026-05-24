@@ -1,10 +1,28 @@
 # stan-wasm-rs
 
-Stan inference engine for WebAssembly, written in Rust. Successor to [stan-wasm](../stan-wasm) (MoonBit-based); unifies the compiler, runtime, and NUTS sampler in a single Rust workspace and a single `.wasm` artifact.
+> **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
-## Status
+Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~365 KB` wasm bundle, embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
-Phases 0–5 complete. Sampling validated end-to-end: linear regression posterior recovers the true slope to ±0.3 in 1000 draws.
+## When to use this (and when not)
+
+| Need | Use this | Use cmdstan / Stan Playground instead |
+|---|---|---|
+| Full Stan language coverage | | ✓ |
+| Run in a browser with no server | ✓ | |
+| Embed a Bayesian model into a web app (npm package) | ✓ | |
+| Data must not leave the user's device | ✓ | |
+| Offline / air-gapped environment | ✓ | |
+| Research / publication-grade workflows | | ✓ |
+| `functions { ... }` block, `generated quantities`, full multivariate suite | | ✓ |
+
+[Stan Playground](https://stan-playground.flatironinstitute.org) is the official Stan-recommended browser interface; it uses a compile server and supports the full Stan language. stan-wasm-rs is **complementary**: smaller surface, no server, embeddable.
+
+## Validated end-to-end
+
+Linear regression posterior recovers the true slope to ±0.3 in 1000 post-warmup draws (seed=42). AOT codegen output agrees with the AST oracle to 1e-12 on log_prob and gradients across all covered distributions.
+
+## Stan language coverage
 
 Distributions covered:
 - Continuous: `normal`, `std_normal`, `exponential`, `half_normal`, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta`
@@ -17,9 +35,11 @@ Constraint transforms:
 - Vector shape: `simplex`, `ordered`, `positive_ordered`
 - Matrix: `cholesky_factor_corr`
 
-Not yet ported: `multi_normal` (full covariance), `multinomial`, `categorical`, `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`, generated-quantities block, user-defined functions.
+Blocks: `data`, `parameters`, `transformed parameters`, `model`, plus `for` loops (parameter-independent bounds), sampling statements (`y ~ dist(...)`), and `target += expr`.
 
-See `docs/MIGRATION.md` for the per-phase plan, `docs/BENCHMARKS.md` for performance numbers, and `docs/MOONBIT_VS_RUST.md` for a tech-note summarizing what we learned from running both implementations side by side.
+**Not yet supported**: `multi_normal` (full covariance), `multinomial`, `categorical`, `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`, `generated quantities` block, user-defined functions, parameter-dependent control flow.
+
+See [`docs/MIGRATION.md`](docs/MIGRATION.md) for the per-phase plan, [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for performance numbers, and [`docs/MOONBIT_VS_RUST.md`](docs/MOONBIT_VS_RUST.md) for a tech-note on the rewrite history.
 
 ## Architecture
 
@@ -101,6 +121,12 @@ cargo test                    # ~30 tests across all crates
 cargo run --release -p stan-cli -- bench all
 ```
 
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). The project is in alpha and maintained on evenings and weekends, so issue triage and PR reviews happen in batches. Distribution / constraint additions and example PRs are especially welcome.
+
+For the broader Stan ecosystem (cmdstan, stanc3, official interfaces), see [stan-dev](https://github.com/stan-dev). For the official browser playground, see [Stan Playground](https://github.com/flatironinstitute/stan-playground).
+
 ## License
 
-Apache-2.0
+Apache-2.0 — see [`LICENSE`](LICENSE).
