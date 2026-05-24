@@ -52,6 +52,8 @@ export function App() {
   const [csvError, setCsvError] = useState<string | null>(null);
   const [csvFilename, setCsvFilename] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** When set, overrides the preset's bundled Stan code. */
+  const [customStan, setCustomStan] = useState<string | null>(null);
 
   useEffect(() => {
     // wasm is copied into public/ by the `copy-wasm` npm script and served
@@ -64,14 +66,18 @@ export function App() {
 
   const preset: Preset = PRESETS[presetKey];
   const effectiveData = customData ?? preset.data;
+  const effectiveStan = customStan ?? preset.stanCode;
 
   const onPresetChange = (key: keyof typeof PRESETS) => {
     setPresetKey(key);
     setCustomData(null);
     setCsvError(null);
     setCsvFilename(null);
+    setCustomStan(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
+  const resetStan = () => setCustomStan(null);
 
   const onCsvFile = async (file: File) => {
     setCsvError(null);
@@ -100,7 +106,7 @@ export function App() {
     setSummary(null);
     setElapsedMs(null);
     try {
-      const model = new StanModel(preset.stanCode, JSON.stringify(effectiveData));
+      const model = new StanModel(effectiveStan, JSON.stringify(effectiveData));
       const init = new Float64Array(preset.init);
       const t0 = performance.now();
       const samples = model.sample(init, nWarmup, nDraws, BigInt(seed));
@@ -216,8 +222,31 @@ export function App() {
           </div>
 
           <div className="code-section">
-            <h3>Stan program</h3>
-            <pre>{preset.stanCode}</pre>
+            <h3>
+              Stan program
+              {customStan !== null && (
+                <>
+                  {" "}
+                  <span style={{ fontSize: 12, color: "#047857", fontWeight: 400 }}>
+                    (edited)
+                  </span>
+                  {" "}
+                  <button
+                    className="secondary"
+                    style={{ padding: "1px 8px", fontSize: 12 }}
+                    onClick={resetStan}
+                  >
+                    Reset to preset
+                  </button>
+                </>
+              )}
+            </h3>
+            <textarea
+              className="stan-editor"
+              value={effectiveStan}
+              onChange={(e) => setCustomStan(e.target.value)}
+              spellCheck={false}
+            />
           </div>
 
           <div className="code-section">
