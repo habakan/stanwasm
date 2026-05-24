@@ -13,7 +13,7 @@ non-centered) sample entirely in the browser.
 # Then run the demo dev server.
 cd examples/get_started
 npm install
-npm run dev
+npm run dev          # auto-copies the wasm into public/ before starting
 ```
 
 Open `http://localhost:5173`.

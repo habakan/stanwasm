@@ -47,7 +47,12 @@ export function App() {
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
 
   useEffect(() => {
-    init().then(() => setLoaded(true));
+    // wasm is copied into public/ by the `copy-wasm` npm script and served
+    // at BASE_URL + filename. We pass it explicitly because the default
+    // wasm-bindgen resolution uses the JS file's location, which lives in
+    // ../../ts/pkg/ and is outside Vite's served scope by default.
+    const wasmUrl = `${import.meta.env.BASE_URL}stan_wasm_api_bg.wasm`;
+    init({ module_or_path: wasmUrl }).then(() => setLoaded(true));
   }, []);
 
   const preset: Preset = PRESETS[presetKey];
