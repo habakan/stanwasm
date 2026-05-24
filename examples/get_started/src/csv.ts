@@ -14,11 +14,13 @@ export interface CsvParseResult {
 /**
  * Parse a CSV string into Stan data. The CSV must have:
  *   - a header row (column names become Stan vector names)
- *   - data rows of finite numbers
+ *   - data rows whose values can be parsed by `Number(...)`
  *
  * No schema validation against any preset — the user is expected to edit
  * the Stan program so its `data { ... }` block matches the CSV columns.
- * Row count is auto-published as N / J / K.
+ * Row count is auto-published as N / J / K. Non-finite values (NaN / Inf)
+ * are passed through; Stan-side errors will surface if the model can't
+ * handle them.
  */
 export function csvToData(text: string): CsvParseResult | CsvParseError {
   // Strip UTF-8 BOM that Excel and some editors add to CSV exports.
@@ -44,13 +46,7 @@ export function csvToData(text: string): CsvParseResult | CsvParseError {
       };
     }
     for (let j = 0; j < header.length; j++) {
-      const v = Number(row[j]);
-      if (!Number.isFinite(v)) {
-        return {
-          message: `Row ${i} column "${header[j]}" is not a finite number: ${row[j]}`,
-        };
-      }
-      cols[header[j]].push(v);
+      cols[header[j]].push(Number(row[j]));
     }
   }
 
