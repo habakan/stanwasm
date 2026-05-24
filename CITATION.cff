@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+title: stan-wasm-rs
+message: >-
+  If you use this software, please cite it as below.
+type: software
+authors:
+  - alias: habakan
+abstract: >-
+  Stan probabilistic models compiled and sampled entirely inside the
+  browser. Pure Rust, single ~365 KB WebAssembly bundle, embedded
+  nuts-rs sampler, zero backend required. Implements a subset of the
+  Stan language with Bayesian NUTS sampling for in-browser inference.
+keywords:
+  - bayesian-inference
+  - stan
+  - webassembly
+  - nuts
+  - rust
+  - probabilistic-programming
+license: Apache-2.0
+repository-code: 'https://github.com/habakan/stan-wasm-rs'
+version: 0.1.0-alpha
