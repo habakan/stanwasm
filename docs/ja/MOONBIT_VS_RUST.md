@@ -177,8 +177,8 @@ cd ts && node --experimental-strip-types tests/bench.ts
 
 ## 関連ドキュメント
 
-- `docs/MIGRATION.md` — フェーズ別の移植計画
-- `docs/BENCHMARKS.md` — 計測値と再現手順
+- [`docs/en/MIGRATION.md`](../en/MIGRATION.md) — フェーズ別の移植計画
+- [`docs/en/BENCHMARKS.md`](../en/BENCHMARKS.md) — 計測値と再現手順
 - `crates/stan-codegen/tests/no_wasm_gc.rs` — wasm-gc 不使用の検証テスト
 
 ## ライセンス

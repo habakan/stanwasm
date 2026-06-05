@@ -8,7 +8,7 @@ stan-wasm-rs is **not** an attempt to reimplement the full Stan language. It is 
 
 **In scope:**
 - Stan grammar / parser improvements
-- Additional distributions and constraint transforms (see `docs/MIGRATION.md` for what is intentionally deferred)
+- Additional distributions and constraint transforms (see `docs/en/MIGRATION.md` for what is intentionally deferred)
 - Performance work (AOT codegen, replay path, smaller wasm)
 - Better diagnostics / error messages
 - Browser and Node.js examples

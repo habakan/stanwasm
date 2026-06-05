@@ -60,7 +60,7 @@ and multivariate-LKJ-style models end-to-end in the browser.
 | eight_schools_ncp (10 params) | 16 ms | 6 ms |
 
 Comparable to the MoonBit-based predecessor `stan-wasm` and the `nuts-rs`
-direct-call benchmark. See `docs/BENCHMARKS.md`.
+direct-call benchmark. See `docs/en/BENCHMARKS.md`.
 
 ### Validation
 
