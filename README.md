@@ -39,7 +39,7 @@ Blocks: `data`, `parameters`, `transformed parameters`, `model`, plus `for` loop
 
 **Not yet supported**: `multi_normal` (full covariance), `multinomial`, `categorical`, `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`, `generated quantities` block, user-defined functions, parameter-dependent control flow.
 
-See [`docs/en/MIGRATION.md`](docs/en/MIGRATION.md) for the per-phase plan, [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md) for performance numbers, and [`docs/ja/MOONBIT_VS_RUST.md`](docs/ja/MOONBIT_VS_RUST.md) (Japanese, [English summary](docs/en/MOONBIT_VS_RUST.md)) for a tech-note on the rewrite history. Documentation is organized by language under `docs/en/` and `docs/ja/`.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for an internals tour, [`docs/en/MIGRATION.md`](docs/en/MIGRATION.md) for the per-phase plan, [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md) for performance numbers, and [`docs/ja/MOONBIT_VS_RUST.md`](docs/ja/MOONBIT_VS_RUST.md) (Japanese, [English summary](docs/en/MOONBIT_VS_RUST.md)) for a tech-note on the rewrite history. Documentation is organized by language under `docs/en/` and `docs/ja/`.
 
 ## Architecture
 
