@@ -572,7 +572,7 @@ function GraphicalModelInner({ stanCode }: { stanCode: string }) {
               </foreignObject>
             )}
             {n.shape === "square" && !n.formula && (
-              <text x={n.x} y={n.y + SQ / 2 + 16} textAnchor="middle" fontSize={10} fill="#888">known</text>
+              <text x={n.x} y={n.y + SQ / 2 + 16} textAnchor="middle" fontSize={10} fill="#888">obs</text>
             )}
             {n.filled && (
               <text x={n.x} y={subY + (n.formula ? 38 : 12)} textAnchor="middle" fontSize={10} fill="#888">observed</text>
