@@ -124,6 +124,11 @@ console.log(model.genQuantityNames().join(", "));
 const gq = model.generatedQuantities(samples, /*nDraws*/ 1000 + 1000, /*seed*/ 7n);
 ```
 
+### Demos
+
+- [`examples/live_regression`](examples/live_regression) — drag a data point and watch the posterior refit **live**, every animation frame, with no server round trip. The UX this project is for.
+- [`examples/get_started`](examples/get_started) — a fuller API tour: CSV upload, editable Stan source, multiple presets, posterior summary table.
+
 ## Native development
 
 ```bash

@@ -42,3 +42,7 @@ Sample CSVs are provided under `sample-csv/` for each preset.
 
 About 280 lines across all `src/` files. Use it as a template for your own
 integration.
+
+See also [`examples/live_regression`](../live_regression) for a
+single-purpose demo of the UX this project is really for: drag a data point
+and watch the posterior refit live, every animation frame, with no server.
