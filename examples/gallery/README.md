@@ -1,0 +1,42 @@
+# gallery — stan-wasm-rs examples
+
+One Vite + React app, three tabs, each showing a different reason sampling
+entirely in the browser is worth having.
+
+## Run locally
+
+```bash
+# From the repo root: build the wasm bundle first.
+./scripts/build-wasm.sh
+
+# Then run the demo dev server.
+cd examples/gallery
+npm install
+npm run dev          # auto-copies the wasm into public/ before starting
+```
+
+Open `http://localhost:5173`.
+
+## Tabs
+
+- **Live Regression** — drag a point; a robust (Student-t, no closed form)
+  and a normal (conjugate, closed form) regression refit **live**, every
+  animation frame, over the same data. Drag one point into outlier
+  territory and watch them diverge — the normal fit gets dragged toward it,
+  the robust fit barely moves. `src/tabs/LiveRegression.tsx`.
+- **Hierarchical Shrinkage** — six groups, three confident (small known
+  noise) and three noisy (large known noise), fit with a partial-pooling
+  model (the classic "eight schools" structure). Drag a group's observed
+  value and watch its posterior estimate resist by an amount that depends
+  on the group's own noise, not a hand-tuned rule — that's what falls out
+  of the joint posterior. `src/tabs/HierarchicalShrinkage.tsx`.
+- **Get Started** — a fuller API tour: CSV upload, editable Stan source,
+  multiple model presets, posterior summary table with histograms.
+  `src/tabs/GetStarted.tsx`. Sample CSVs for its presets live under
+  `sample-csv/`.
+
+Every drag frame reconstructs the relevant `StanModel`(s) and runs NUTS
+(warm-started from the previous posterior mean via `sample()`'s `init`
+argument) — single-digit milliseconds for the small models here. wasm is
+loaded once in `src/App.tsx` and shared across tabs; only the active tab is
+mounted, so switching tabs frees the inactive one's compiled model.

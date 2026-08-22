@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import init, { StanModel } from "stan-wasm-rs";
+import { StanModel } from "stan-wasm-rs";
 
 // Two likelihoods over the same data, fit side by side. `normal` has a
 // closed-form (conjugate) posterior — no sampler needed. `student_t` with a
@@ -144,8 +144,7 @@ function fitModel(
   return { meanAlpha: sumAlpha / count, meanBeta: sumBeta / count, meanSigma: sumSigma / count, lines };
 }
 
-export function App() {
-  const [loaded, setLoaded] = useState(false);
+export function LiveRegression() {
   const [points, setPoints] = useState<Point[]>(INITIAL_POINTS);
   const [robustFit, setRobustFit] = useState<Fit | null>(null);
   const [normalFit, setNormalFit] = useState<Fit | null>(null);
@@ -158,8 +157,6 @@ export function App() {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
-    const wasmUrl = `${import.meta.env.BASE_URL}stan_wasm_api_bg.wasm`;
-    init({ module_or_path: wasmUrl }).then(() => setLoaded(true));
     return () => {
       robustSlot.modelRef.current?.free();
       normalSlot.modelRef.current?.free();
@@ -170,7 +167,6 @@ export function App() {
   // Resample on every point change, throttled to one run per animation
   // frame — during a drag this reads as continuous, not stepped.
   useEffect(() => {
-    if (!loaded) return;
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
@@ -185,7 +181,7 @@ export function App() {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, loaded]);
+  }, [points]);
 
   function svgPointFromEvent(e: { clientX: number; clientY: number }) {
     const rect = svgRef.current!.getBoundingClientRect();
@@ -234,131 +230,104 @@ export function App() {
   });
 
   return (
-    <div className="app">
-      <h1>stan-wasm-rs — live regression</h1>
-      <p className="tagline">
-        Two Bayesian fits over the same points: <b>robust</b> (Student-t likelihood, no closed form) and{" "}
-        <b>normal</b> (conjugate — a spreadsheet could do this one). Drag a point far from the rest and
-        watch them diverge. Every frame is a fresh NUTS run, entirely in this tab — no server, no network
-        round trip.{" "}
-        <a href="https://github.com/habakan/stan-wasm-rs" target="_blank" rel="noreferrer">
-          GitHub
-        </a>
-        .
+    <>
+      <p className="hint">
+        Click empty space to add a point · drag a point to move it · double-click a point to remove it
+        (min {MIN_POINTS}). Try dragging one point far away — that's where the two fits split.
       </p>
 
-      {!loaded && <p>Loading WebAssembly bundle…</p>}
+      <svg ref={svgRef} className="plot-wrap" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
+        <rect x={0} y={0} width={W} height={H} fill="white" onPointerDown={onBackgroundPointerDown} />
+        {/* axes and fit lines are decorative only — pointerEvents="none" so
+            they never steal a click from the background "add point" handler */}
+        <line
+          x1={xToPx(X_DOMAIN[0])}
+          y1={yToPx(0)}
+          x2={xToPx(X_DOMAIN[1])}
+          y2={yToPx(0)}
+          stroke="#eee"
+          pointerEvents="none"
+        />
+        <line
+          x1={xToPx(0)}
+          y1={yToPx(Y_DOMAIN[0])}
+          x2={xToPx(0)}
+          y2={yToPx(Y_DOMAIN[1])}
+          stroke="#eee"
+          pointerEvents="none"
+        />
 
-      {loaded && (
-        <>
-          <p className="hint">
-            Click empty space to add a point · drag a point to move it · double-click a point to remove it
-            (min {MIN_POINTS}). Try dragging one point far away — that's where the two fits split.
-          </p>
+        {/* robust fit: posterior draws, faint — the "uncertainty band" */}
+        {robustFit?.lines.map(([a, b], i) => {
+          const l = lineAt(a, b);
+          return <line key={i} {...l} stroke="#c2410c" strokeWidth={1} opacity={0.1} pointerEvents="none" />;
+        })}
 
-          <svg ref={svgRef} className="plot-wrap" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
-            <rect x={0} y={0} width={W} height={H} fill="white" onPointerDown={onBackgroundPointerDown} />
-            {/* axes and fit lines are decorative only — pointerEvents="none" so
-                they never steal a click from the background "add point" handler */}
-            <line
-              x1={xToPx(X_DOMAIN[0])}
-              y1={yToPx(0)}
-              x2={xToPx(X_DOMAIN[1])}
-              y2={yToPx(0)}
-              stroke="#eee"
-              pointerEvents="none"
-            />
-            <line
-              x1={xToPx(0)}
-              y1={yToPx(Y_DOMAIN[0])}
-              x2={xToPx(0)}
-              y2={yToPx(Y_DOMAIN[1])}
-              stroke="#eee"
-              pointerEvents="none"
-            />
+        {/* normal (OLS-like) fit: dashed, for contrast */}
+        {normalFit && (
+          <line
+            {...lineAt(normalFit.meanAlpha, normalFit.meanBeta)}
+            stroke="#64748b"
+            strokeWidth={2}
+            strokeDasharray="7 5"
+            pointerEvents="none"
+          />
+        )}
 
-            {/* robust fit: posterior draws, faint — the "uncertainty band" */}
-            {robustFit?.lines.map(([a, b], i) => {
-              const l = lineAt(a, b);
-              return <line key={i} {...l} stroke="#c2410c" strokeWidth={1} opacity={0.1} pointerEvents="none" />;
-            })}
+        {/* robust fit: posterior mean */}
+        {robustFit && (
+          <line
+            {...lineAt(robustFit.meanAlpha, robustFit.meanBeta)}
+            stroke="#c2410c"
+            strokeWidth={2.5}
+            pointerEvents="none"
+          />
+        )}
 
-            {/* normal (OLS-like) fit: dashed, for contrast */}
-            {normalFit && (
-              <line
-                {...lineAt(normalFit.meanAlpha, normalFit.meanBeta)}
-                stroke="#64748b"
-                strokeWidth={2}
-                strokeDasharray="7 5"
-                pointerEvents="none"
-              />
-            )}
+        {points.map((p, i) => (
+          <circle
+            key={i}
+            className="point"
+            cx={xToPx(p.x)}
+            cy={yToPx(p.y)}
+            r={7}
+            fill="white"
+            stroke="#c2410c"
+            strokeWidth={2}
+            onPointerDown={onPointPointerDown(i)}
+            onPointerMove={onPointPointerMove(i)}
+            onPointerUp={onPointPointerUp}
+            onDoubleClick={onPointDoubleClick(i)}
+          />
+        ))}
+      </svg>
 
-            {/* robust fit: posterior mean */}
-            {robustFit && (
-              <line
-                {...lineAt(robustFit.meanAlpha, robustFit.meanBeta)}
-                stroke="#c2410c"
-                strokeWidth={2.5}
-                pointerEvents="none"
-              />
-            )}
+      <div className="legend">
+        <span><i className="swatch solid" /> robust (Student-t, ν=4)</span>
+        <span><i className="swatch dashed" /> normal (conjugate)</span>
+      </div>
 
-            {points.map((p, i) => (
-              <circle
-                key={i}
-                className="point"
-                cx={xToPx(p.x)}
-                cy={yToPx(p.y)}
-                r={7}
-                fill="white"
-                stroke="#c2410c"
-                strokeWidth={2}
-                onPointerDown={onPointPointerDown(i)}
-                onPointerMove={onPointPointerMove(i)}
-                onPointerUp={onPointPointerUp}
-                onDoubleClick={onPointDoubleClick(i)}
-              />
-            ))}
-          </svg>
+      <div className="readout">
+        <span className="stat">
+          robust: α = <b>{robustFit ? robustFit.meanAlpha.toFixed(2) : "…"}</b> β ={" "}
+          <b>{robustFit ? robustFit.meanBeta.toFixed(2) : "…"}</b> σ ={" "}
+          <b>{robustFit ? robustFit.meanSigma.toFixed(2) : "…"}</b>
+        </span>
+        <span className="stat">
+          normal: α = <b>{normalFit ? normalFit.meanAlpha.toFixed(2) : "…"}</b> β ={" "}
+          <b>{normalFit ? normalFit.meanBeta.toFixed(2) : "…"}</b>
+        </span>
+        {elapsedMs !== null && <span className="timing">both resampled in {elapsedMs.toFixed(1)}ms</span>}
+      </div>
 
-          <div className="legend">
-            <span><i className="swatch solid" /> robust (Student-t, ν=4)</span>
-            <span><i className="swatch dashed" /> normal (conjugate)</span>
-          </div>
+      <button onClick={() => setPoints(INITIAL_POINTS)}>Reset points</button>
 
-          <div className="readout">
-            <span className="stat">
-              robust: α = <b>{robustFit ? robustFit.meanAlpha.toFixed(2) : "…"}</b> β ={" "}
-              <b>{robustFit ? robustFit.meanBeta.toFixed(2) : "…"}</b> σ ={" "}
-              <b>{robustFit ? robustFit.meanSigma.toFixed(2) : "…"}</b>
-            </span>
-            <span className="stat">
-              normal: α = <b>{normalFit ? normalFit.meanAlpha.toFixed(2) : "…"}</b> β ={" "}
-              <b>{normalFit ? normalFit.meanBeta.toFixed(2) : "…"}</b>
-            </span>
-            {elapsedMs !== null && <span className="timing">both resampled in {elapsedMs.toFixed(1)}ms</span>}
-          </div>
-
-          <button onClick={() => setPoints(INITIAL_POINTS)}>Reset points</button>
-
-          <div className="note">
-            Each drag frame recompiles both models, runs {N_WARMUP} warmup + {N_DRAWS} NUTS draws for each,
-            and re-derives the constrained posteriors — all inside WebAssembly, in this tab. Nothing is
-            sent anywhere. The robust fit's Student-t likelihood has no conjugate posterior — this is a
-            case sampling is actually for. See <code>examples/get_started</code> for a fuller API tour
-            (CSV upload, editable Stan source, multiple presets).
-          </div>
-
-          <footer>
-            stan-wasm-rs · alpha · Apache-2.0 · embedded{" "}
-            <a href="https://github.com/pymc-devs/nuts-rs" target="_blank" rel="noreferrer">
-              nuts-rs
-            </a>{" "}
-            sampler
-          </footer>
-        </>
-      )}
-    </div>
+      <div className="note">
+        Each drag frame recompiles both models, runs {N_WARMUP} warmup + {N_DRAWS} NUTS draws for each,
+        and re-derives the constrained posteriors — all inside WebAssembly, in this tab. Nothing is sent
+        anywhere. The robust fit's Student-t likelihood has no conjugate posterior — this is a case
+        sampling is actually for.
+      </div>
+    </>
   );
 }

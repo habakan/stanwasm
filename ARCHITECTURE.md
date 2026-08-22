@@ -67,7 +67,7 @@ Seven crates, one TS facade.
 | `stan-wasm-api` | cdylib (wasm32) | wasm-bindgen public API. Embeds `nuts-rs` (Rust crate) for sampling. Exposes `StanModel` class, `setAotExports` bridge, and the `aot_logp` JS shim. |
 | `stan-cli` | bin (native) | Development CLI. `bench all` times AST eval / replay / AOT (via `wasmi`) / end-to-end sampling. |
 
-The `ts/` directory holds the wasm-pack output, hand-written facade, and Node.js integration tests. `examples/get_started/` is a Vite + React demo that consumes the local `ts/` package as a `file:` dep.
+The `ts/` directory holds the wasm-pack output, hand-written facade, and Node.js integration tests. `examples/gallery/` is a Vite + React demo (tabbed: live regression, hierarchical shrinkage, a fuller API tour) that consumes the local `ts/` package as a `file:` dep.
 
 ## Critical paths
 
@@ -239,7 +239,7 @@ cd ts && node --experimental-strip-types tests/smoke.ts
 cd ts && node --experimental-strip-types tests/bench.ts
 
 # 4. Demo site (Vite + React)
-cd examples/get_started && npm install && npm run dev
+cd examples/gallery && npm install && npm run dev
 ```
 
 The CI workflow (`.github/workflows/test.yml`) reproduces step 1 + 2 on Linux and macOS, plus a Node smoke step.

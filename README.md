@@ -126,8 +126,11 @@ const gq = model.generatedQuantities(samples, /*nDraws*/ 1000 + 1000, /*seed*/ 7
 
 ### Demos
 
-- [`examples/live_regression`](examples/live_regression) — drag a data point and watch a robust (Student-t) and a conjugate (normal) regression refit **live**, every animation frame, diverging on the outlier — no closed form for the former, no server round trip for either.
-- [`examples/get_started`](examples/get_started) — a fuller API tour: CSV upload, editable Stan source, multiple presets, posterior summary table.
+[`examples/gallery`](examples/gallery) — one app, tabbed:
+
+- **Live Regression** — drag a data point and watch a robust (Student-t) and a conjugate (normal) regression refit **live**, every animation frame, diverging on the outlier — no closed form for the former, no server round trip for either.
+- **Hierarchical Shrinkage** — drag a group's observed value in a partial-pooling model and watch its posterior estimate resist by an amount that depends on how noisy that group is — the classic "eight schools" shrinkage story, live.
+- **Get Started** — a fuller API tour: CSV upload, editable Stan source, multiple presets, posterior summary table.
 
 ## Native development
 
