@@ -16,7 +16,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use nuts_rs::{
-    sample_sequentially, CpuLogpFunc, CpuMath, CpuMathError, DiagNutsSettings, HasDims, LogpError,
+    sample_sequentially, Chain, CpuLogpFunc, CpuMath, CpuMathError, DiagNutsSettings, HasDims,
+    LogpError, Settings,
 };
 use rand::{rngs::ChaCha8Rng, SeedableRng};
 use stan_runtime::{data_from_json, Compiled, Model};
@@ -81,6 +82,21 @@ impl CpuLogpFunc for LogpAdapter {
     }
 }
 
+/// Concrete type nuts-rs returns from `DiagNutsSettings::new_chain`. Its
+/// `draw()` method advances the chain by exactly one iteration and is what
+/// makes true step-by-step (not precompute-then-replay) sampling possible:
+/// unlike `sample_sequentially`'s iterator, this type owns its RNG outright
+/// (seeded once from ours at construction — see nuts-rs's `new_chain`), so
+/// it has no borrow tying it to a shorter-lived stack frame and can be
+/// stored in `StanModel` across separate wasm-bindgen calls.
+type StepChain = <DiagNutsSettings as Settings>::Chain<CpuMath<LogpAdapter>>;
+
+struct StepSampler {
+    chain: StepChain,
+    total: u32,
+    count: u32,
+}
+
 // ---- Public wasm-bindgen surface --------------------------------------------
 
 /// One compiled Stan model. Holds both the parsed AST (`Model`) and a
@@ -91,6 +107,7 @@ impl CpuLogpFunc for LogpAdapter {
 pub struct StanModel {
     model: Model,
     compiled: Option<Compiled>,
+    step: Option<StepSampler>,
 }
 
 #[wasm_bindgen]
@@ -102,7 +119,11 @@ impl StanModel {
         let env = data_from_json(data_json).map_err(jserr)?;
         let model = Model::parse_and_load(stan_src, env).map_err(jserr)?;
         let compiled = Some(trace(&model));
-        Ok(StanModel { model, compiled })
+        Ok(StanModel {
+            model,
+            compiled,
+            step: None,
+        })
     }
 
     /// Number of unconstrained parameters.
@@ -242,6 +263,95 @@ impl StanModel {
             out[i * n_gq..(i + 1) * n_gq].copy_from_slice(&gq);
         }
         Ok(out)
+    }
+
+    /// Start a step-by-step NUTS run: unlike `sample()`, which runs the whole
+    /// chain inside one wasm call and returns only at the end, this leaves
+    /// the sampler's state alive in the `StanModel` instance so `stepDraw()`
+    /// can advance it one draw at a time — genuinely watching the sampler
+    /// work, not replaying an already-finished chain. Consumes the internal
+    /// `Compiled` the same way `sample()` does; call `finishStepSampling()`
+    /// (or exhaust `stepDraw()` up to `num_warmup + num_draws` calls, which
+    /// does it automatically) before using `logProbGrad`/`sample` again.
+    #[wasm_bindgen(js_name = startStepSampling)]
+    pub fn start_step_sampling(
+        &mut self,
+        init: &[f64],
+        num_warmup: u32,
+        num_draws: u32,
+        seed: u64,
+    ) -> Result<(), JsError> {
+        let n = self.model.n_params();
+        if init.len() != n {
+            return Err(JsError::new(&format!(
+                "init length {} != n_params {n}",
+                init.len()
+            )));
+        }
+        let compiled = self
+            .compiled
+            .take()
+            .ok_or_else(|| JsError::new("internal: compiled missing — call StanModel anew"))?;
+        let math = CpuMath::new(LogpAdapter { compiled });
+        let settings = DiagNutsSettings {
+            num_tune: num_warmup as u64,
+            num_draws: num_draws as u64,
+            ..Default::default()
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let mut chain = settings.new_chain(0, math, &mut rng);
+        chain
+            .set_position(init)
+            .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
+        self.step = Some(StepSampler {
+            chain,
+            total: num_warmup + num_draws,
+            count: 0,
+        });
+        Ok(())
+    }
+
+    /// Advance the step-sampling chain started by `startStepSampling` by
+    /// exactly one draw. Returns a flat array: `n_params` position values,
+    /// then `1.0`/`0.0` for whether this draw was still in the warmup
+    /// (tuning) phase, then `1.0`/`0.0` for whether it diverged. Once the
+    /// requested `num_warmup + num_draws` draws have all been returned, this
+    /// automatically restores `logProbGrad`/`sample` (by re-tracing, same as
+    /// `sample()` does) and further calls fail until `startStepSampling` runs
+    /// again.
+    #[wasm_bindgen(js_name = stepDraw)]
+    pub fn step_draw(&mut self) -> Result<Vec<f64>, JsError> {
+        let done;
+        let out = {
+            let step = self
+                .step
+                .as_mut()
+                .ok_or_else(|| JsError::new("call startStepSampling first"))?;
+            let (pos, progress) = step
+                .chain
+                .draw()
+                .map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
+            step.count += 1;
+            done = step.count >= step.total;
+            let mut out = pos.into_vec();
+            out.push(if progress.tuning { 1.0 } else { 0.0 });
+            out.push(if progress.diverging { 1.0 } else { 0.0 });
+            out
+        };
+        if done {
+            self.finish_step_sampling();
+        }
+        Ok(out)
+    }
+
+    /// Stop step-sampling early (or clean up after it finished naturally —
+    /// safe to call either way) and restore `logProbGrad`/`sample` by
+    /// re-tracing, same as `sample()` does at the end of a run.
+    #[wasm_bindgen(js_name = finishStepSampling)]
+    pub fn finish_step_sampling(&mut self) {
+        if self.step.take().is_some() {
+            self.compiled = Some(trace(&self.model));
+        }
     }
 
     /// AOT-compile this model to a self-contained wasm module. Returns the

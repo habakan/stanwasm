@@ -84,6 +84,61 @@ fn linear_regression_sample_recovers_slope() {
     assert!(mean_alpha.is_finite() && mean_alpha.abs() < 2.0);
 }
 
+#[test]
+fn step_sampling_recovers_slope_and_restores_model() {
+    let mut model = StanModel::new(LINEAR_REGRESSION, DATA).unwrap();
+    let init = vec![0.0, 0.0, 0.0];
+    let n_warmup: u32 = 200;
+    let n_draws: u32 = 400;
+    let n = model.n_params();
+
+    model
+        .start_step_sampling(&init, n_warmup, n_draws, 42)
+        .unwrap();
+
+    let mut sum_alpha = 0.0;
+    let mut sum_beta = 0.0;
+    for i in 0..(n_warmup + n_draws) {
+        let out = model.step_draw().unwrap();
+        // n_params position values + tuning flag + diverging flag.
+        assert_eq!(out.len(), n + 2);
+        assert!(out[..n].iter().all(|v| v.is_finite()));
+        let tuning = out[n] != 0.0;
+        assert_eq!(
+            tuning,
+            i < n_warmup,
+            "tuning flag should match warmup phase at draw {i}"
+        );
+        if !tuning {
+            sum_alpha += out[0];
+            sum_beta += out[1];
+        }
+    }
+    let mean_alpha = sum_alpha / n_draws as f64;
+    let mean_beta = sum_beta / n_draws as f64;
+    assert!(
+        (mean_beta - 1.5).abs() < 0.3,
+        "mean β = {mean_beta}, expected near 1.5"
+    );
+    assert!(mean_alpha.is_finite() && mean_alpha.abs() < 2.0);
+
+    // Exhausting stepDraw() should have auto-restored logProbGrad/sample.
+    let out = model.log_prob_grad(&init).unwrap();
+    assert!(out.iter().all(|v| v.is_finite()));
+    let samples = model.sample(&init, 10, 10, 7).unwrap();
+    assert_eq!(samples.len(), n * 20);
+}
+
+#[test]
+fn finish_step_sampling_is_safe_to_call_when_idle() {
+    let mut model = StanModel::new(LINEAR_REGRESSION, DATA).unwrap();
+    // No startStepSampling call yet — must not panic.
+    model.finish_step_sampling();
+    // Still usable afterward.
+    let out = model.log_prob_grad(&[0.0, 0.0, 0.0]).unwrap();
+    assert!(out.iter().all(|v| v.is_finite()));
+}
+
 const MULTIVARIATE_LKJ: &str = r#"
 data {
   int<lower=1> K;
