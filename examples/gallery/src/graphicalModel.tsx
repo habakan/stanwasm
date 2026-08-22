@@ -4,9 +4,15 @@ import { MathJax, MathJaxContext } from "better-react-mathjax";
 /** Wrap once at the app root. MathJax is served from a locally-copied
  *  bundle (see `copy-mathjax` in package.json), not a CDN — every other
  *  part of this app runs offline, and a runtime fetch to a third-party
- *  CDN just to typeset a formula would quietly break that. */
+ *  CDN just to typeset a formula would quietly break that. Uses the SVG
+ *  output component specifically (not the more common CHTML one): CHTML
+ *  draws glyphs via @font-face files referenced relative to the loaded
+ *  script, which we'd have to vendor and keep path-matched separately —
+ *  miss that and it silently falls back to the browser's default font
+ *  instead of MathJax's. SVG embeds glyph outlines directly in the output,
+ *  so a single self-contained JS file is enough. */
 export function MathJaxProvider({ children }: { children: ReactNode }) {
-  const src = `${import.meta.env.BASE_URL}mathjax-tex-mml-chtml.js`;
+  const src = `${import.meta.env.BASE_URL}mathjax-tex-svg.js`;
   return (
     <MathJaxContext version={3} src={src} config={{ tex: { packages: { "[+]": ["ams"] } } }}>
       {children}

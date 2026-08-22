@@ -6,4 +6,4 @@ dist
 vite.config.d.ts
 vite.config.js
 public/*.wasm
-public/mathjax-tex-mml-chtml.js
+public/mathjax-tex-svg.js
