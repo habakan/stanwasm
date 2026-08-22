@@ -426,6 +426,11 @@ footer a {
   font-variant-numeric: tabular-nums;
 }
 
+.panel-stat.mono {
+  font-family: "SF Mono", Menlo, monospace;
+  color: #888;
+}
+
 .mcmc-panel h5 {
   margin: 14px 0 6px;
   font-size: 11px;

@@ -236,6 +236,12 @@ export function McmcRace() {
   const [frame, setFrame] = useState(0);
   const [rwmAccepts, setRwmAccepts] = useState<number[]>([]);
   const [nutsDivergences, setNutsDivergences] = useState<number[]>([]);
+  // step_size/num_steps are nuts-rs's own dual-averaging adaptation and
+  // trajectory-length search for chain 0, read straight off each draw — not
+  // a value this app computes. A JS reimplementation of "a NUTS demo" would
+  // have to fake these; the real sampler produces them as a side effect of
+  // actually running.
+  const [nutsStepInfo, setNutsStepInfo] = useState<{ stepSize: number; numSteps: number } | null>(null);
 
   const sharedModelRef = useRef<StanModel | null>(null); // heatmap + all RWM logProbGrad calls
   const heatmapRef = useRef<ImageData | null>(null);
@@ -271,6 +277,7 @@ export function McmcRace() {
         const out = m.stepDraw();
         nutsPathsRef.current[c].push([out[0], out[1]]);
         if (out[3] === 1.0) nutsDivergeCountRef.current[c] += 1;
+        if (c === 0) setNutsStepInfo({ stepSize: out[4], numSteps: out[5] });
       } catch {
         nutsDoneRef.current[c] = true;
         return;
@@ -366,6 +373,7 @@ export function McmcRace() {
     setFrame(0);
     setRwmAccepts(new Array(numChains).fill(0));
     setNutsDivergences(new Array(numChains).fill(0));
+    setNutsStepInfo(null);
     drawForeground(nutsFgRef.current, nutsPathsRef.current);
     drawForeground(rwmFgRef.current, rwmPathsRef.current);
     drawImageToCanvas(nutsHistRef.current, computeExplorationVeil(nutsPathsRef.current));
@@ -468,6 +476,11 @@ export function McmcRace() {
               <canvas ref={nutsFgRef} width={PANEL_W} height={PANEL_H} className="plot-wrap overlay" />
             </div>
             <p className="panel-stat">{totalDiverge} divergence{totalDiverge === 1 ? "" : "s"} across all chains</p>
+            <p className="panel-stat mono">
+              {nutsStepInfo
+                ? `step_size ${nutsStepInfo.stepSize.toFixed(4)} · ${nutsStepInfo.numSteps} leapfrog steps (chain 1, live from nuts-rs)`
+                : "step_size … (chain 1, live from nuts-rs)"}
+            </p>
           </div>
           <div className="mcmc-panel">
             <h4>Random-Walk Metropolis</h4>
@@ -510,6 +523,10 @@ export function McmcRace() {
           computation happening now, not a replay of a finished run. The gray haze is fog of war: it
           starts opaque everywhere and clears — revealing the true orange density underneath — wherever
           a draw actually lands, recomputed from a live 2D histogram of every draw so far each frame.
+          The NUTS panel's <code>step_size</code>/leapfrog-step readout below it isn't something this
+          app computes — it's nuts-rs's own dual-averaging step-size adaptation and trajectory-length
+          search, read straight off each draw, which only exists because the actual Rust sampler is
+          running in wasm right now.
         </div>
       </div>
     </div>

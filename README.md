@@ -128,7 +128,10 @@ const gq = model.generatedQuantities(samples, /*nDraws*/ 1000 + 1000, /*seed*/ 7
 // calls, so you can drive it one draw at a time (e.g. one per animation
 // frame) instead of blocking on the whole run:
 model.startStepSampling(new Float64Array([0, 0, 0]), 500, 500, 42n);
-const draw = model.stepDraw(); // [alpha, beta, log_sigma, tuning(0/1), diverging(0/1)]
+const draw = model.stepDraw();
+// [alpha, beta, log_sigma, tuning(0/1), diverging(0/1), step_size, num_steps]
+// step_size/num_steps are nuts-rs's own live adaptation state, not values
+// this crate computes.
 ```
 
 ### Demos

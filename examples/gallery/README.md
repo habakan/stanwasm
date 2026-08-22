@@ -30,7 +30,12 @@ Open `http://localhost:5173`.
   a draw actually lands, so which regions a method has (and hasn't) explored
   is visible at a glance. A third "Ground Truth" panel shows the same true
   density with no fog, as a fixed reference to compare both methods against.
-  500 warmup + 500 sampling draws per chain. `src/tabs/McmcRace.tsx`.
+  The NUTS panel also shows a live `step_size`/leapfrog-step readout, read
+  straight off nuts-rs's own adaptation state each draw — real sampler
+  internals, not a value the app computes, and a way to see the actual wasm
+  computation at work since raw speed isn't a meaningful difference at this
+  model's tiny size. 500 warmup + 500 sampling draws per chain.
+  `src/tabs/McmcRace.tsx`.
 - **Live Regression** — drag a point; a robust (Student-t, no closed form)
   and a normal (conjugate, closed form) regression refit **live**, every
   animation frame, over the same data. Drag one point into outlier

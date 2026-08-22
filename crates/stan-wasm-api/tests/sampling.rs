@@ -100,8 +100,8 @@ fn step_sampling_recovers_slope_and_restores_model() {
     let mut sum_beta = 0.0;
     for i in 0..(n_warmup + n_draws) {
         let out = model.step_draw().unwrap();
-        // n_params position values + tuning flag + diverging flag.
-        assert_eq!(out.len(), n + 2);
+        // n_params position values + tuning flag + diverging flag + step_size + num_steps.
+        assert_eq!(out.len(), n + 4);
         assert!(out[..n].iter().all(|v| v.is_finite()));
         let tuning = out[n] != 0.0;
         assert_eq!(
@@ -109,6 +109,8 @@ fn step_sampling_recovers_slope_and_restores_model() {
             i < n_warmup,
             "tuning flag should match warmup phase at draw {i}"
         );
+        assert!(out[n + 2] > 0.0, "step_size should be positive");
+        assert!(out[n + 3] >= 1.0, "num_steps should be at least 1");
         if !tuning {
             sum_alpha += out[0];
             sum_beta += out[1];

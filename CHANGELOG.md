@@ -27,11 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alive between calls (`.finishStepSampling()` to stop early), instead of
   `sample()`'s "run the whole chain, return at the end" model — for driving
   a live visualization of sampling in progress rather than replaying an
-  already-finished chain.
+  already-finished chain. `.stepDraw()` also returns nuts-rs's own
+  `step_size`/`num_steps` for that draw (its live dual-averaging adaptation
+  and trajectory-length search), not values this crate computes.
 - `examples/gallery`: new "MCMC Race" tab using the step-by-step API to
   race NUTS against Random-Walk Metropolis on Neal's funnel, chain count
   adjustable, with a live "fog of war" veil (clears wherever a draw lands,
-  revealing the true density underneath) showing each method's coverage.
+  revealing the true density underneath) showing each method's coverage,
+  and a live `step_size`/leapfrog-step readout on the NUTS panel sourced
+  straight from nuts-rs's own adaptation state.
 
 ### Changed
 

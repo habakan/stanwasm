@@ -314,8 +314,13 @@ impl StanModel {
     /// Advance the step-sampling chain started by `startStepSampling` by
     /// exactly one draw. Returns a flat array: `n_params` position values,
     /// then `1.0`/`0.0` for whether this draw was still in the warmup
-    /// (tuning) phase, then `1.0`/`0.0` for whether it diverged. Once the
-    /// requested `num_warmup + num_draws` draws have all been returned, this
+    /// (tuning) phase, then `1.0`/`0.0` for whether it diverged, then the
+    /// leapfrog `step_size` and `num_steps` nuts-rs actually used for this
+    /// draw — these come straight out of nuts-rs's own dual-averaging
+    /// adaptation and trajectory-length search, not anything this crate
+    /// computes, so they're a way to show the real sampler internals at
+    /// work rather than just the resulting draw. Once the requested
+    /// `num_warmup + num_draws` draws have all been returned, this
     /// automatically restores `logProbGrad`/`sample` (by re-tracing, same as
     /// `sample()` does) and further calls fail until `startStepSampling` runs
     /// again.
@@ -336,6 +341,8 @@ impl StanModel {
             let mut out = pos.into_vec();
             out.push(if progress.tuning { 1.0 } else { 0.0 });
             out.push(if progress.diverging { 1.0 } else { 0.0 });
+            out.push(progress.step_size);
+            out.push(progress.num_steps as f64);
             out
         };
         if done {
