@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already-finished chain. `.stepDraw()` also returns nuts-rs's own
   `step_size`/`num_steps` for that draw (its live dual-averaging adaptation
   and trajectory-length search), not values this crate computes.
-- `examples/gallery`: new "MCMC Race" tab using the step-by-step API to
+- `examples/gallery`: new "MCMC Visualizer" tab using the step-by-step API to
   race NUTS against Random-Walk Metropolis on Neal's funnel, chain count
   adjustable, with a live "fog of war" veil (clears wherever a draw lands,
   revealing the true density underneath) showing each method's coverage,

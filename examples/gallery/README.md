@@ -19,7 +19,7 @@ Open `http://localhost:5173`.
 
 ## Tabs
 
-- **MCMC Race** — NUTS and Random-Walk Metropolis step the same hard 2D
+- **MCMC Visualizer** — NUTS and Random-Walk Metropolis step the same hard 2D
   posterior (Neal's funnel — wide at large `y`, vanishingly narrow at small
   `y`) side by side, one real draw per animation frame, adjustable chain
   count. This uses `StanModel`'s step-by-step sampling API
@@ -35,7 +35,7 @@ Open `http://localhost:5173`.
   internals, not a value the app computes, and a way to see the actual wasm
   computation at work since raw speed isn't a meaningful difference at this
   model's tiny size. 500 warmup + 500 sampling draws per chain.
-  `src/tabs/McmcRace.tsx`.
+  `src/tabs/McmcVisualizer.tsx`.
 - **Live Regression** — drag a point; a robust (Student-t, no closed form)
   and a normal (conjugate, closed form) regression refit **live**, every
   animation frame, over the same data. Drag one point into outlier

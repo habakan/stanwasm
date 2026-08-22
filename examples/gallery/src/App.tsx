@@ -3,16 +3,16 @@ import init from "stan-wasm-rs";
 import { GetStarted } from "./tabs/GetStarted";
 import { LiveRegression } from "./tabs/LiveRegression";
 import { HierarchicalShrinkage } from "./tabs/HierarchicalShrinkage";
-import { McmcRace } from "./tabs/McmcRace";
+import { McmcVisualizer } from "./tabs/McmcVisualizer";
 import { MathJaxProvider } from "./graphicalModel";
 
 const TABS = [
   {
-    key: "mcmc-race",
-    label: "MCMC Race",
+    key: "mcmc-visualizer",
+    label: "MCMC Visualizer",
     description:
       "Watch NUTS and Random-Walk Metropolis sample the same hard posterior (Neal's funnel), step by step, live — not a replay.",
-    Component: McmcRace,
+    Component: McmcVisualizer,
   },
   {
     key: "live-regression",

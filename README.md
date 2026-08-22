@@ -138,7 +138,7 @@ const draw = model.stepDraw();
 
 [`examples/gallery`](examples/gallery) — one app, tabbed:
 
-- **MCMC Race** — NUTS and Random-Walk Metropolis step the same hard posterior (Neal's funnel) side by side, one real draw per animation frame, via the step-by-step sampling API (`startStepSampling`/`stepDraw`) — not a replay of a finished chain.
+- **MCMC Visualizer** — NUTS and Random-Walk Metropolis step the same hard posterior (Neal's funnel) side by side, one real draw per animation frame, via the step-by-step sampling API (`startStepSampling`/`stepDraw`) — not a replay of a finished chain.
 - **Live Regression** — drag a data point and watch a robust (Student-t) and a conjugate (normal) regression refit **live**, every animation frame, diverging on the outlier — no closed form for the former, no server round trip for either.
 - **Hierarchical Shrinkage** — drag a group's observed value in a partial-pooling model and watch its posterior estimate resist by an amount that depends on how noisy that group is — the classic "eight schools" shrinkage story, live.
 - **Get Started** — a fuller API tour: CSV upload, editable Stan source, multiple presets, posterior summary table.

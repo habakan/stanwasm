@@ -477,11 +477,6 @@ footer a {
   font-variant-numeric: tabular-nums;
 }
 
-.panel-stat.mono {
-  font-family: "SF Mono", Menlo, monospace;
-  color: #888;
-}
-
 .mcmc-panel h5 {
   margin: 14px 0 6px;
   font-size: 11px;
@@ -529,6 +524,19 @@ footer a {
 .plot-wrap circle.point:active,
 .plot-wrap circle.draggable:active {
   cursor: grabbing;
+}
+
+.wasm-log {
+  background: #1a1a1a;
+  color: #d4d4d4;
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  white-space: pre;
+  overflow-x: auto;
+  margin: 12px 0 0;
 }
 
 .legend {
