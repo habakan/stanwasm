@@ -159,9 +159,15 @@ export function App() {
       const n = compiledModel.n_params;
       const names = compiledModel.paramNames();
       const post = samples.subarray(nWarmup * n);
-      const draws: number[][] = Array.from({ length: n }, () => []);
+      // `sample()` returns unconstrained draws (e.g. sigma on the log scale);
+      // constrainDraw() maps each draw back to the natural scale and also
+      // fills in transformed parameters, which paramNames() includes but the
+      // raw draw doesn't carry.
+      const draws: number[][] = Array.from({ length: names.length }, () => []);
       for (let i = 0; i < nDraws; i++) {
-        for (let j = 0; j < n; j++) draws[j].push(post[i * n + j]);
+        const row = post.subarray(i * n, (i + 1) * n);
+        const constrained = compiledModel.constrainDraw(row);
+        for (let j = 0; j < names.length; j++) draws[j].push(constrained[j]);
       }
       setSummary(draws.map((vals, i) => summarize(names[i], vals)));
       setElapsedMs(elapsed);
