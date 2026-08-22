@@ -28,7 +28,9 @@ Open `http://localhost:5173`.
   happening now, not a replay of an already-finished chain. Each panel is
   also a live "fog of war": a gray haze over the true density clears wherever
   a draw actually lands, so which regions a method has (and hasn't) explored
-  is visible at a glance. `src/tabs/McmcRace.tsx`.
+  is visible at a glance. A third "Ground Truth" panel shows the same true
+  density with no fog, as a fixed reference to compare both methods against.
+  500 warmup + 500 sampling draws per chain. `src/tabs/McmcRace.tsx`.
 - **Live Regression** — drag a point; a robust (Student-t, no closed form)
   and a normal (conjugate, closed form) regression refit **live**, every
   animation frame, over the same data. Drag one point into outlier

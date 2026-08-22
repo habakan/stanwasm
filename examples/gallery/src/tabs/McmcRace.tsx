@@ -24,8 +24,8 @@ const X_DOMAIN: [number, number] = [-20, 20];
 const PANEL_W = 320;
 const PANEL_H = 320;
 const GRID_N = 90;
-const N_WARMUP = 150;
-const N_DRAWS = 150;
+const N_WARMUP = 500;
+const N_DRAWS = 500;
 const TOTAL_ITERS = N_WARMUP + N_DRAWS;
 const MIN_CHAINS = 1;
 const MAX_CHAINS = 8;
@@ -240,6 +240,7 @@ export function McmcRace() {
   const rwmFgRef = useRef<HTMLCanvasElement>(null);
   const nutsHistRef = useRef<HTMLCanvasElement>(null);
   const rwmHistRef = useRef<HTMLCanvasElement>(null);
+  const truthRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -323,6 +324,7 @@ export function McmcRace() {
     if (!heatmapRef.current) heatmapRef.current = computeHeatmap(shared);
     drawImageToCanvas(nutsBgRef.current, heatmapRef.current);
     drawImageToCanvas(rwmBgRef.current, heatmapRef.current);
+    drawImageToCanvas(truthRef.current, heatmapRef.current);
 
     const nutsModels: StanModel[] = [];
     for (let c = 0; c < numChains; c++) {
@@ -461,6 +463,13 @@ export function McmcRace() {
             <p className="panel-stat">
               acceptance rate: {stepsShown > 0 ? ((totalAccept / (stepsShown * numChains)) * 100).toFixed(0) : "…"}%
             </p>
+          </div>
+          <div className="mcmc-panel">
+            <h4>Ground Truth</h4>
+            <div className="canvas-stack">
+              <canvas ref={truthRef} width={PANEL_W} height={PANEL_H} className="plot-wrap" />
+            </div>
+            <p className="panel-stat">the funnel's actual density — no fog, nothing sampled</p>
           </div>
         </div>
 
