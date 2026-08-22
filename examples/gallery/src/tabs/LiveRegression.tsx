@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { StanModel } from "stan-wasm-rs";
+import { GraphicalModel } from "../graphicalModel";
 
 // Two likelihoods over the same data, fit side by side. `normal` has a
 // closed-form (conjugate) posterior — no sampler needed. `student_t` with a
@@ -144,44 +145,6 @@ function fitModel(
   return { meanAlpha: sumAlpha / count, meanBeta: sumBeta / count, meanSigma: sumSigma / count, lines };
 }
 
-/** Plate diagram of the shared model structure. Both fits use the same
- *  structure — they differ only in the family of the likelihood node,
- *  which is spelled out in the Stan code blocks instead of here. */
-function RegressionDiagram() {
-  const node = (cx: number, cy: number, label: string, sub: string, filled: boolean) => (
-    <g>
-      <circle cx={cx} cy={cy} r={18} fill={filled ? "#c2410c" : "white"} stroke="#c2410c" strokeWidth={1.5} />
-      <text x={cx} y={cy + 4} textAnchor="middle" fontSize={12} fontWeight={600} fill={filled ? "white" : "#1a1a1a"}>
-        {label}
-      </text>
-      <text x={cx} y={cy + 32} textAnchor="middle" fontSize={10} fill="#888">
-        {sub}
-      </text>
-    </g>
-  );
-  return (
-    <svg viewBox="0 0 300 190" width={300} height={190}>
-      <defs>
-        <marker id="arrow-reg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={6} markerHeight={6} orient="auto-start-reverse">
-          <path d="M0,0 L10,5 L0,10 z" fill="#999" />
-        </marker>
-      </defs>
-      {node(50, 28, "α", "N(0,10)", false)}
-      {node(150, 28, "β", "N(0,10)", false)}
-      {node(250, 28, "σ", "Exp(1)", false)}
-      <rect x={20} y={80} width={260} height={95} rx={6} fill="none" stroke="#ccc" />
-      <text x={268} y={166} textAnchor="end" fontSize={10} fill="#888">i = 1..N</text>
-      <rect x={70} y={130} width={26} height={26} fill="white" stroke="#64748b" strokeWidth={1.5} />
-      <text x={83} y={148} textAnchor="middle" fontSize={11} fill="#1a1a1a">xᵢ</text>
-      {node(220, 143, "yᵢ", "observed", true)}
-      <line x1={50} y1={46} x2={210} y2={128} stroke="#999" markerEnd="url(#arrow-reg)" />
-      <line x1={150} y1={46} x2={216} y2={126} stroke="#999" markerEnd="url(#arrow-reg)" />
-      <line x1={250} y1={46} x2={228} y2={128} stroke="#999" markerEnd="url(#arrow-reg)" />
-      <line x1={96} y1={143} x2={200} y2={143} stroke="#999" markerEnd="url(#arrow-reg)" />
-    </svg>
-  );
-}
-
 export function LiveRegression() {
   const [points, setPoints] = useState<Point[]>(INITIAL_POINTS);
   const [robustFit, setRobustFit] = useState<Fit | null>(null);
@@ -271,7 +234,7 @@ export function LiveRegression() {
     <div className="demo-layout">
       <div className="demo-model">
         <div className="model-diagram">
-          <RegressionDiagram />
+          <GraphicalModel stanCode={STAN_ROBUST} />
         </div>
         <div className="code-blocks">
           <div className="code-block">

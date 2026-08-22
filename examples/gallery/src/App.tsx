@@ -4,6 +4,7 @@ import { GetStarted } from "./tabs/GetStarted";
 import { LiveRegression } from "./tabs/LiveRegression";
 import { HierarchicalShrinkage } from "./tabs/HierarchicalShrinkage";
 import { McmcRace } from "./tabs/McmcRace";
+import { MathJaxProvider } from "./graphicalModel";
 
 const TABS = [
   {
@@ -55,6 +56,7 @@ export function App() {
   const active = TABS.find((t) => t.key === tab)!;
 
   return (
+    <MathJaxProvider>
     <div className="app">
       <h1>stan-wasm-rs — examples</h1>
       <p className="tagline">
@@ -89,5 +91,6 @@ export function App() {
         sampler
       </footer>
     </div>
+    </MathJaxProvider>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { StanModel } from "stan-wasm-rs";
+import { GraphicalModel } from "../graphicalModel";
 
 // Neal's funnel: a hard 2D posterior with no closed form and a notoriously
 // difficult geometry (wide at large y, vanishingly narrow at small y) — the
@@ -208,26 +209,6 @@ function drawForeground(canvas: HTMLCanvasElement | null, paths: Point[][]) {
   });
 }
 
-/** Simple 2-node diagram (no plate — this model has no repeated groups). */
-function FunnelDiagram() {
-  return (
-    <svg viewBox="0 0 220 160" width={220} height={160}>
-      <defs>
-        <marker id="arrow-funnel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={6} markerHeight={6} orient="auto-start-reverse">
-          <path d="M0,0 L10,5 L0,10 z" fill="#999" />
-        </marker>
-      </defs>
-      <circle cx={110} cy={30} r={18} fill="white" stroke="#c2410c" strokeWidth={1.5} />
-      <text x={110} y={34} textAnchor="middle" fontSize={12} fontWeight={600}>y</text>
-      <text x={110} y={62} textAnchor="middle" fontSize={10} fill="#888">N(0, 3)</text>
-      <circle cx={110} cy={130} r={18} fill="white" stroke="#c2410c" strokeWidth={1.5} />
-      <text x={110} y={134} textAnchor="middle" fontSize={12} fontWeight={600}>x</text>
-      <text x={110} y={158} textAnchor="middle" fontSize={10} fill="#888">N(0, exp(y/2))</text>
-      <line x1={110} y1={48} x2={110} y2={112} stroke="#999" markerEnd="url(#arrow-funnel)" />
-    </svg>
-  );
-}
-
 export function McmcRace() {
   const [numChains, setNumChains] = useState(DEFAULT_CHAINS);
   const [restartKey, setRestartKey] = useState(0);
@@ -420,7 +401,7 @@ export function McmcRace() {
     <div className="demo-layout">
       <div className="demo-model">
         <div className="model-diagram">
-          <FunnelDiagram />
+          <GraphicalModel stanCode={STAN_CODE} />
         </div>
         <div className="code-blocks">
           <div className="code-block">

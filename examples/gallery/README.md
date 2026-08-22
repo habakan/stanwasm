@@ -57,3 +57,15 @@ Every drag frame reconstructs the relevant `StanModel`(s) and runs NUTS
 argument) — single-digit milliseconds for the small models here. wasm is
 loaded once in `src/App.tsx` and shared across tabs; only the active tab is
 mounted, so switching tabs frees the inactive one's compiled model.
+
+## Graphical models
+
+Every "graphical model" diagram (the node-and-plate plot next to each Stan
+code block, including a live one in Get Started that follows the editor) is
+parsed straight out of the Stan source in `src/graphicalModel.tsx` — nodes
+from `data`/`parameters`/`transformed parameters` declarations, edges and
+distribution formulas from `model`-block sampling statements — rather than
+hand-drawn per tab. Distribution formulas render via MathJax, served from a
+locally-copied bundle (`copy-mathjax` in `package.json`, output to
+`public/mathjax-tex-mml-chtml.js`) rather than a CDN, so the "runs fully
+offline" story holds for this too.

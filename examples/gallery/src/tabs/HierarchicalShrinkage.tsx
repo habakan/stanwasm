@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { StanModel } from "stan-wasm-rs";
+import { GraphicalModel } from "../graphicalModel";
 
 // Classic partial-pooling model (the "eight schools" structure, non-centered
 // parameterization). Each group has an observed value y_j with known noise
@@ -68,46 +69,6 @@ interface Fit {
   thetaMean: number[];
   thetaSd: number[];
   elapsedMs: number;
-}
-
-/** Plate diagram: population-level mu/tau sit outside the plate; each
- *  group's theta_j and observed y_j sit inside it, one instance per group. */
-function ShrinkageDiagram() {
-  const node = (cx: number, cy: number, label: string, sub: string, filled: boolean) => (
-    <g>
-      <circle cx={cx} cy={cy} r={18} fill={filled ? "#c2410c" : "white"} stroke="#c2410c" strokeWidth={1.5} />
-      <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11} fontWeight={600} fill={filled ? "white" : "#1a1a1a"}>
-        {label}
-      </text>
-      <text x={cx} y={cy + 32} textAnchor="middle" fontSize={10} fill="#888">
-        {sub}
-      </text>
-    </g>
-  );
-  return (
-    <svg viewBox="0 0 300 230" width={300} height={230}>
-      <defs>
-        <marker id="arrow-hier" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={6} markerHeight={6} orient="auto-start-reverse">
-          <path d="M0,0 L10,5 L0,10 z" fill="#999" />
-        </marker>
-      </defs>
-      {node(110, 26, "μ", "N(0,10)", false)}
-      {node(190, 26, "τ", "HalfNormal(10)", false)}
-
-      <rect x={20} y={80} width={260} height={140} rx={6} fill="none" stroke="#ccc" />
-      <text x={268} y={206} textAnchor="end" fontSize={10} fill="#888">j = 1..J</text>
-
-      {node(150, 120, "θⱼ", "μ + τθ̃ⱼ", false)}
-      <rect x={70} y={175} width={26} height={26} fill="white" stroke="#64748b" strokeWidth={1.5} />
-      <text x={83} y={193} textAnchor="middle" fontSize={10} fill="#1a1a1a">σⱼ</text>
-      {node(200, 188, "yⱼ", "observed", true)}
-
-      <line x1={110} y1={44} x2={145} y2={104} stroke="#999" markerEnd="url(#arrow-hier)" />
-      <line x1={190} y1={44} x2={155} y2={104} stroke="#999" markerEnd="url(#arrow-hier)" />
-      <line x1={155} y1={136} x2={192} y2={175} stroke="#999" markerEnd="url(#arrow-hier)" />
-      <line x1={96} y1={188} x2={180} y2={188} stroke="#999" markerEnd="url(#arrow-hier)" />
-    </svg>
-  );
 }
 
 export function HierarchicalShrinkage() {
@@ -202,7 +163,7 @@ export function HierarchicalShrinkage() {
     <div className="demo-layout">
       <div className="demo-model">
         <div className="model-diagram">
-          <ShrinkageDiagram />
+          <GraphicalModel stanCode={STAN_CODE} />
         </div>
         <div className="code-blocks">
           <div className="code-block">

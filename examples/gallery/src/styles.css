@@ -339,6 +339,27 @@ footer a {
   flex: 0 0 auto;
 }
 
+.model-diagram-card {
+  padding: 16px;
+  background: white;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.graphical-model {
+  max-width: 100%;
+  height: auto;
+}
+
+.gm-formula {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.15;
+  color: #888;
+}
+
 .code-blocks {
   display: flex;
   gap: 12px;

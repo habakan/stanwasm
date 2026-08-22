@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   revealing the true density underneath) showing each method's coverage,
   and a live `step_size`/leapfrog-step readout on the NUTS panel sourced
   straight from nuts-rs's own adaptation state.
+- `examples/gallery`: graphical-model diagrams (node-and-plate plots next
+  to each Stan code block) are now parsed directly from the Stan source
+  instead of hand-drawn per tab, including a live one in Get Started that
+  follows the editor. Distribution formulas render via MathJax, served
+  from a locally-copied bundle rather than a CDN.
 
 ### Changed
 

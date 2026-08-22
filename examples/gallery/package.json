@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "copy-wasm": "mkdir -p public && cp ../../ts/pkg/stan_wasm_api_bg.wasm public/",
-    "dev": "npm run copy-wasm && vite",
-    "build": "npm run copy-wasm && tsc -b && vite build",
+    "copy-mathjax": "mkdir -p public && cp node_modules/mathjax-full/es5/tex-mml-chtml.js public/mathjax-tex-mml-chtml.js",
+    "dev": "npm run copy-wasm && npm run copy-mathjax && vite",
+    "build": "npm run copy-wasm && npm run copy-mathjax && tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "better-react-mathjax": "^3.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "stan-wasm-rs": "file:../../ts"

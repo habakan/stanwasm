@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StanModel } from "stan-wasm-rs";
 import { PRESETS, type Preset } from "../models";
 import { Histogram } from "../Histogram";
 import { DataTable } from "../DataTable";
 import { csvToData } from "../csv";
+import { GraphicalModel } from "../graphicalModel";
 
 interface ParamSummary {
   name: string;
@@ -63,6 +64,15 @@ export function GetStarted() {
   const preset: Preset = PRESETS[presetKey];
   const effectiveData = customData ?? preset.data;
   const effectiveStan = customStan ?? preset.stanCode;
+
+  // Debounced so the graphical-model diagram (which re-parses the Stan
+  // source and re-typesets MathJax) doesn't redo that work on every
+  // keystroke while editing.
+  const [debouncedStan, setDebouncedStan] = useState(effectiveStan);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedStan(effectiveStan), 250);
+    return () => clearTimeout(t);
+  }, [effectiveStan]);
 
   /** Identifies the (stan, data) pair currently in the editor. When the
    *  cached compile was for a different key, the model is "stale". */
@@ -306,6 +316,13 @@ export function GetStarted() {
           onChange={(e) => setCustomStan(e.target.value)}
           spellCheck={false}
         />
+      </div>
+
+      <div className="code-section">
+        <h3>Graphical model</h3>
+        <div className="model-diagram-card">
+          <GraphicalModel stanCode={debouncedStan} />
+        </div>
       </div>
 
       <div className="code-section">
