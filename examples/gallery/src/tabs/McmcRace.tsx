@@ -118,6 +118,11 @@ function computeHeatmap(model: StanModel): ImageData {
  *  Computed on the same grid as the true-density heatmap so the two line up
  *  pixel-for-pixel; recomputed from scratch every frame — cheap, at most a
  *  few hundred points per chain into a small grid. */
+const VEIL_SPLAT = [
+  [0, 0, 1], [-1, 0, 0.5], [1, 0, 0.5], [0, -1, 0.5], [0, 1, 0.5],
+  [-1, -1, 0.25], [-1, 1, 0.25], [1, -1, 0.25], [1, 1, 0.25],
+] as const;
+
 function computeExplorationVeil(paths: Point[][]): ImageData {
   const counts = new Float64Array(GRID_N * GRID_N);
   let maxCount = 0;
@@ -126,21 +131,32 @@ function computeExplorationVeil(paths: Point[][]): ImageData {
       if (yv < Y_DOMAIN[0] || yv > Y_DOMAIN[1] || xv < X_DOMAIN[0] || xv > X_DOMAIN[1]) continue;
       const j = Math.min(GRID_N - 1, Math.floor(((Y_DOMAIN[1] - yv) / (Y_DOMAIN[1] - Y_DOMAIN[0])) * GRID_N));
       const i = Math.min(GRID_N - 1, Math.floor(((xv - X_DOMAIN[0]) / (X_DOMAIN[1] - X_DOMAIN[0])) * GRID_N));
-      const idx = j * GRID_N + i;
-      counts[idx] += 1;
-      if (counts[idx] > maxCount) maxCount = counts[idx];
+      // Splat each draw over its 3x3 neighborhood, not just its exact cell —
+      // a lone visited cell reads as a nearly invisible fleck at this grid
+      // resolution; a small blob is what actually looks "revealed".
+      for (const [di, dj, w] of VEIL_SPLAT) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni < 0 || ni >= GRID_N || nj < 0 || nj >= GRID_N) continue;
+        const idx = nj * GRID_N + ni;
+        counts[idx] += w;
+        if (counts[idx] > maxCount) maxCount = counts[idx];
+      }
     }
   }
   const img = new ImageData(GRID_N, GRID_N);
   for (let k = 0; k < counts.length; k++) {
-    // sqrt compresses the range so a handful of early samples already clear
-    // the fog a good deal, rather than needing to rival the hottest bin.
-    const rel = maxCount > 0 ? Math.sqrt(counts[k] / maxCount) : 0;
+    const rel = maxCount > 0 ? counts[k] / maxCount : 0;
+    // Any visited cell jumps to at least half-revealed immediately — sqrt
+    // alone left a single early visit almost imperceptible against a
+    // hundred-plus-cell hot spot, which read as "too faint to tell anything
+    // happened here" rather than "lightly explored".
+    const revealed = counts[k] > 0 ? Math.min(1, 0.5 + 0.5 * Math.sqrt(rel)) : 0;
     const idx = k * 4;
     img.data[idx] = 245;
     img.data[idx + 1] = 245;
     img.data[idx + 2] = 245;
-    img.data[idx + 3] = Math.round((1 - rel) * 235); // opaque fog when unexplored, clears toward 0
+    img.data[idx + 3] = Math.round((1 - revealed) * 235); // opaque fog when unexplored, clears toward 0
   }
   return img;
 }
