@@ -71,10 +71,50 @@ interface Fit {
   elapsedMs: number;
 }
 
+type PopView = "band" | "curve";
+
+/** Normal density, used only to draw the population distribution N(mu, tau)
+ *  that every group's theta is pooled toward — not part of the model or the
+ *  sampler, purely a visualization of the posterior mu/tau this tab already
+ *  computes. */
+function normalPdf(y: number, mu: number, tau: number): number {
+  if (tau <= 0) return 0;
+  const z = (y - mu) / tau;
+  return Math.exp(-0.5 * z * z) / (tau * Math.sqrt(2 * Math.PI));
+}
+
+const CURVE_SAMPLES = 48;
+const CURVE_MAX_HALF_WIDTH = (W / 2 - PAD) * 0.9;
+
+/** A violin-style outline: width at each y is the population density there,
+ *  normalized so the peak (at y = mu) spans CURVE_MAX_HALF_WIDTH on each
+ *  side — this is what makes "how much does tau narrow/widen this" visible
+ *  at a glance, the same way a wider or narrower bell curve would. */
+function populationCurvePath(mu: number, tau: number): string {
+  const peak = normalPdf(mu, mu, tau);
+  if (peak <= 0) return "";
+  const cx = W / 2;
+  const yLo = Math.max(Y_DOMAIN[0], mu - 4 * tau);
+  const yHi = Math.min(Y_DOMAIN[1], mu + 4 * tau);
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= CURVE_SAMPLES; i++) {
+    const y = yLo + ((yHi - yLo) * i) / CURVE_SAMPLES;
+    const halfW = (normalPdf(y, mu, tau) / peak) * CURVE_MAX_HALF_WIDTH;
+    pts.push([cx + halfW, yToPx(y)]);
+  }
+  for (let i = CURVE_SAMPLES; i >= 0; i--) {
+    const y = yLo + ((yHi - yLo) * i) / CURVE_SAMPLES;
+    const halfW = (normalPdf(y, mu, tau) / peak) * CURVE_MAX_HALF_WIDTH;
+    pts.push([cx - halfW, yToPx(y)]);
+  }
+  return `M${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L")} Z`;
+}
+
 export function HierarchicalShrinkage() {
   const [groups, setGroups] = useState<Group[]>(INITIAL_GROUPS);
   const [fit, setFit] = useState<Fit | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
+  const [popView, setPopView] = useState<PopView>("band");
 
   const modelRef = useRef<StanModel | null>(null);
   const warmStart = useRef<number[] | null>(null);
@@ -180,9 +220,54 @@ export function HierarchicalShrinkage() {
         much it gets pulled back toward the dashed population mean.
       </p>
 
+      <div className="controls">
+        <label>
+          Population N(μ, τ):
+          <select value={popView} onChange={(e) => setPopView(e.target.value as PopView)}>
+            <option value="band">±τ / ±2τ band</option>
+            <option value="curve">density curve</option>
+          </select>
+        </label>
+      </div>
+
       <svg ref={svgRef} className="plot-wrap" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
         <rect x={0} y={0} width={W} height={H} fill="white" />
         <line x1={PAD} y1={yToPx(0)} x2={W - PAD} y2={yToPx(0)} stroke="#eee" pointerEvents="none" />
+
+        {fit && popView === "band" && (
+          <>
+            <rect
+              x={PAD}
+              y={Math.min(yToPx(fit.mu - 2 * fit.tau), yToPx(fit.mu + 2 * fit.tau))}
+              width={W - 2 * PAD}
+              height={Math.abs(yToPx(fit.mu - 2 * fit.tau) - yToPx(fit.mu + 2 * fit.tau))}
+              fill="#c2410c"
+              opacity={0.07}
+              pointerEvents="none"
+            />
+            <rect
+              x={PAD}
+              y={Math.min(yToPx(fit.mu - fit.tau), yToPx(fit.mu + fit.tau))}
+              width={W - 2 * PAD}
+              height={Math.abs(yToPx(fit.mu - fit.tau) - yToPx(fit.mu + fit.tau))}
+              fill="#c2410c"
+              opacity={0.14}
+              pointerEvents="none"
+            />
+          </>
+        )}
+        {fit && popView === "curve" && fit.tau > 0 && (
+          <path
+            d={populationCurvePath(fit.mu, fit.tau)}
+            fill="#c2410c"
+            opacity={0.16}
+            stroke="#c2410c"
+            strokeWidth={1}
+            strokeOpacity={0.4}
+            pointerEvents="none"
+          />
+        )}
+
         {fit && (
           <line
             x1={PAD}
@@ -259,6 +344,7 @@ export function HierarchicalShrinkage() {
         <span><i className="dot raw" /> observed yⱼ ± σⱼ</span>
         <span><i className="dot shrunk" /> partially-pooled θⱼ ± posterior sd</span>
         <span><i className="swatch dashed" /> population mean μ</span>
+        <span><i className="dot raw" style={{ background: "#c2410c", opacity: 0.3, border: "none" }} /> population N(μ, τ) — where every θⱼ is pooled toward</span>
       </div>
 
       <div className="readout">
@@ -277,7 +363,10 @@ export function HierarchicalShrinkage() {
         Every drag frame recompiles the model and runs {N_WARMUP} warmup + {N_DRAWS} NUTS draws — all
         inside WebAssembly, in this tab. The amount of shrinkage (how far the orange estimate sits from
         the gray observed value) isn't a fixed rule someone hand-tuned — it falls out of the posterior,
-        different for every group, every frame.
+        different for every group, every frame. The shaded population distribution behind the groups is
+        N(μ, τ) at the current posterior mean of μ and τ — it's what every θⱼ is actually being pulled
+        toward, and its width (τ) is itself estimated from how much the groups agree with each other:
+        make the six values more consistent and watch it narrow; spread them out and watch it widen.
       </div>
       </div>
     </div>
