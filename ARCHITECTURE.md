@@ -19,7 +19,7 @@ A contributor-facing tour of `stan-wasm-rs` internals: workspace layout, data fl
            │
            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  stan_wasm_api.wasm  (single bundle, ~365 KB after wasm-opt)     │
+│  stan_wasm_api.wasm  (single bundle, ~415 KB after wasm-opt)     │
 │                                                                  │
 │   parser ──► AST ──► trace forward pass ──► autodiff tape        │
 │                              │                                   │
@@ -232,7 +232,7 @@ cargo run --release -p stan-cli -- bench all
 ./scripts/build-wasm.sh
 #   ├─ cargo build --release --target wasm32-unknown-unknown -p stan-wasm-api
 #   ├─ wasm-bindgen processes the cdylib, generates JS glue
-#   └─ wasm-opt -Oz shrinks the bundle to ~365 KB
+#   └─ wasm-opt -Oz shrinks the bundle to ~415 KB
 
 # 3. TS facade smoke + Node bench in V8
 cd ts && node --experimental-strip-types tests/smoke.ts

@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`
 - Status banner and Stan ecosystem positioning in README
+- `generated quantities { ... }` block, evaluated natively (tape-replay,
+  inside the same wasm bundle) after sampling: `_rng` draws for every
+  covered distribution (`normal_rng`, `exponential_rng`, `gamma_rng`,
+  `dirichlet_rng`, `multi_normal_cholesky_rng`, etc.) plus `uniform_rng`.
+  New `StanModel` methods: `genQuantityNames()`, `generatedQuantities()`,
+  `constrainDraw()` (constrained parameter values for one unconstrained
+  draw — previously `sample()`'s output had no way to recover these).
+- Real evaluation of `if`/`else`, `while`, `break`/`continue`, and
+  comparison/logical operators (`== != < > <= >= && ||`) in `model`,
+  `transformed parameters`, and `generated quantities` — these previously
+  parsed but silently no-oped.
+
+### Changed
+
+- wasm bundle grew from ~365 KB to ~415 KB after `wasm-opt` (added `rand`/
+  `rand_distr` for `generated quantities` RNG support).
 
 ## [0.1.0] — TBD (alpha)
 

@@ -11,7 +11,9 @@
 
 #![forbid(unsafe_code)]
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use nuts_rs::{
     sample_sequentially, CpuLogpFunc, CpuMath, CpuMathError, DiagNutsSettings, HasDims, LogpError,
@@ -179,6 +181,66 @@ impl StanModel {
 
         // Restore by re-tracing. Cheap relative to the sampling itself.
         self.compiled = Some(trace(&self.model));
+        Ok(out)
+    }
+
+    /// Constrained values of `parameters` + `transformed parameters` for one
+    /// unconstrained draw (e.g. one row out of `sample()`'s output), flattened
+    /// in `paramNames()` order.
+    #[wasm_bindgen(js_name = constrainDraw)]
+    pub fn constrain_draw(&self, unconstrained: &[f64]) -> Result<Vec<f64>, JsError> {
+        let n = self.model.n_params();
+        if unconstrained.len() != n {
+            return Err(JsError::new(&format!(
+                "unconstrained length {} != n_params {n}",
+                unconstrained.len()
+            )));
+        }
+        Ok(self.model.constrained_draw(unconstrained))
+    }
+
+    /// Names of the top-level `generated quantities` declarations, flattened
+    /// the same way as `paramNames()`.
+    #[wasm_bindgen(js_name = genQuantityNames)]
+    pub fn gen_quantity_names(&self) -> Vec<String> {
+        self.model.gen_quantity_names()
+    }
+
+    /// Evaluate `generated quantities` for a batch of unconstrained draws
+    /// (e.g. `sample()`'s output). `draws` is a flat row-major buffer of
+    /// shape `(n_draws, n_params)`; the result is `(n_draws, n_gen_quantities)`,
+    /// row-major, in `genQuantityNames()` order. A single RNG stream (seeded
+    /// by `seed`) is shared across all draws so repeated `_rng` calls don't
+    /// repeat the same values draw-to-draw.
+    ///
+    /// Note: unlike `sampleViaAot`, there is no AOT-compiled counterpart of
+    /// this method — `compileToWasm` only exports `log_prob_grad`. Generated
+    /// quantities involve RNG and branching that the flat-tape AOT codegen
+    /// doesn't model, and (running once per draw rather than once per NUTS
+    /// leapfrog step) don't need it for performance.
+    #[wasm_bindgen(js_name = generatedQuantities)]
+    pub fn generated_quantities(
+        &self,
+        draws: &[f64],
+        num_draws: u32,
+        seed: u64,
+    ) -> Result<Vec<f64>, JsError> {
+        let n = self.model.n_params();
+        let num_draws = num_draws as usize;
+        if draws.len() != n * num_draws {
+            return Err(JsError::new(&format!(
+                "draws length {} != num_draws * n_params ({num_draws} * {n})",
+                draws.len()
+            )));
+        }
+        let n_gq = self.model.gen_quantity_names().len();
+        let rng = Rc::new(RefCell::new(ChaCha8Rng::seed_from_u64(seed)));
+        let mut out = vec![0.0_f64; n_gq * num_draws];
+        for i in 0..num_draws {
+            let draw = &draws[i * n..(i + 1) * n];
+            let gq = self.model.generated_quantities(draw, rng.clone());
+            out[i * n_gq..(i + 1) * n_gq].copy_from_slice(&gq);
+        }
         Ok(out)
     }
 

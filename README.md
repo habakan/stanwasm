@@ -2,7 +2,7 @@
 
 > **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
-Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~365 KB` wasm bundle, embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
+Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~415 KB` wasm bundle, embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
 ## When to use this (and when not)
 
@@ -14,7 +14,7 @@ Stan probabilistic models compiled and sampled entirely inside the browser. Pure
 | Data must not leave the user's device | ✓ | |
 | Offline / air-gapped environment | ✓ | |
 | Research / publication-grade workflows | | ✓ |
-| `functions { ... }` block, `generated quantities`, full multivariate suite | | ✓ |
+| `functions { ... }` block, full multivariate suite | | ✓ |
 
 [Stan Playground](https://stan-playground.flatironinstitute.org) is the official Stan-recommended browser interface; it uses a compile server and supports the full Stan language. stan-wasm-rs is **complementary**: smaller surface, no server, embeddable.
 
@@ -35,9 +35,11 @@ Constraint transforms:
 - Vector shape: `simplex`, `ordered`, `positive_ordered`
 - Matrix: `cholesky_factor_corr`
 
-Blocks: `data`, `parameters`, `transformed parameters`, `model`, plus `for` loops (parameter-independent bounds), sampling statements (`y ~ dist(...)`), and `target += expr`.
+Blocks: `data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, plus `for`/`while` loops, `if`/`else` (including parameter-dependent conditions), `break`/`continue`, comparison/logical operators, sampling statements (`y ~ dist(...)`), and `target += expr`.
 
-**Not yet supported**: `multi_normal` (full covariance), `multinomial`, `categorical`, `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`, `generated quantities` block, user-defined functions, parameter-dependent control flow.
+`generated quantities` supports RNG draws for every covered distribution above (`normal_rng`, `exponential_rng`, `gamma_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng`, etc.) plus `uniform_rng`. It runs natively (tape-replay) inside the same wasm bundle — there is no separate AOT-compiled path for it (see [Architecture](#architecture)).
+
+**Not yet supported**: `multi_normal` (full covariance), `multinomial`, `categorical`, `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`, `lkj_corr_cholesky_rng`, `functions { ... }` block (user-defined functions).
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for an internals tour, [`docs/en/MIGRATION.md`](docs/en/MIGRATION.md) for the per-phase plan, [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md) for performance numbers, and [`docs/ja/MOONBIT_VS_RUST.md`](docs/ja/MOONBIT_VS_RUST.md) (Japanese, [English summary](docs/en/MOONBIT_VS_RUST.md)) for a tech-note on the rewrite history. Documentation is organized by language under `docs/en/` and `docs/ja/`.
 
@@ -111,6 +113,15 @@ const samples = model.sample(
   /*seed*/    42n,
 );
 // samples is Float64Array, row-major shape (nWarmup + nDraws) × n_params
+
+// `sample()`/`sampleViaAot` return unconstrained draws; get constrained
+// parameter values (e.g. sigma on its natural, not log, scale) per draw:
+const constrained = model.constrainDraw(samples.slice(0, model.n_params));
+
+// If the model has a `generated quantities` block, evaluate it over a batch
+// of draws (one shared, seeded RNG stream across the whole batch):
+console.log(model.genQuantityNames().join(", "));
+const gq = model.generatedQuantities(samples, /*nDraws*/ 1000 + 1000, /*seed*/ 7n);
 ```
 
 ## Native development

@@ -118,6 +118,72 @@ fn multivariate_lkj_compiles_and_samples() {
     assert!(samples.iter().all(|s| s.is_finite()));
 }
 
+const GQ_RNG_MODEL: &str = r#"
+data {
+  int<lower=0> N;
+  vector[N] x;
+  array[N] real y;
+}
+parameters {
+  real mu;
+  real<lower=0> sigma;
+}
+model {
+  mu    ~ normal(0, 5);
+  sigma ~ exponential(1);
+  for (i in 1:N) {
+    y[i] ~ normal(mu, sigma);
+  }
+}
+generated quantities {
+  real y_ln  = lognormal_rng(mu, sigma);
+  real y_exp = exponential_rng(1.0);
+  real y_unif = uniform_rng(0.0, 1.0);
+  real y_gam = gamma_rng(2.0, 1.0);
+}
+"#;
+
+const GQ_RNG_DATA: &str = r#"{
+  "N": 2,
+  "x": [0.0, 1.0],
+  "y": [0.0, 1.0]
+}"#;
+
+#[test]
+fn generated_quantities_end_to_end() {
+    let mut model = StanModel::new(GQ_RNG_MODEL, GQ_RNG_DATA).unwrap();
+    assert_eq!(
+        model.gen_quantity_names(),
+        vec!["y_ln", "y_exp", "y_unif", "y_gam"]
+    );
+
+    let n = model.n_params();
+    let n_warmup = 50;
+    let n_draws = 20;
+    let draws = model.sample(&[0.0, 0.0], n_warmup, n_draws, 42).unwrap();
+    let post_warmup = &draws[n * n_warmup as usize..];
+    assert_eq!(post_warmup.len(), n * n_draws as usize);
+
+    let constrained = model.constrain_draw(&post_warmup[0..n]).unwrap();
+    assert_eq!(constrained.len(), 2);
+    assert!(
+        constrained[1] > 0.0,
+        "sigma must be positive: {constrained:?}"
+    );
+
+    let gq = model
+        .generated_quantities(post_warmup, n_draws, 123)
+        .unwrap();
+    assert_eq!(gq.len(), 4 * n_draws as usize);
+    for row in gq.chunks(4) {
+        let [y_ln, y_exp, y_unif, y_gam] = [row[0], row[1], row[2], row[3]];
+        assert!(y_ln > 0.0);
+        assert!(y_exp >= 0.0);
+        assert!((0.0..=1.0).contains(&y_unif));
+        assert!(y_gam >= 0.0);
+    }
+}
+
 #[test]
 fn compile_to_wasm_returns_valid_module() {
     let model = StanModel::new(LINEAR_REGRESSION, DATA).unwrap();

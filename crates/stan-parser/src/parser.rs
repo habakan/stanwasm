@@ -415,10 +415,15 @@ impl Parser {
                 self.expect_tok(&Token::Semi)?;
                 Ok(Stmt::Return(e))
             }
-            Token::Kw(s) if s == "break" || s == "continue" => {
+            Token::Kw(s) if s == "break" => {
                 self.consume();
                 self.expect_tok(&Token::Semi)?;
-                Ok(Stmt::Return(Expr::Num(0.0)))
+                Ok(Stmt::Break)
+            }
+            Token::Kw(s) if s == "continue" => {
+                self.consume();
+                self.expect_tok(&Token::Semi)?;
+                Ok(Stmt::Continue)
             }
             tok => {
                 if is_type_kw(&tok) {

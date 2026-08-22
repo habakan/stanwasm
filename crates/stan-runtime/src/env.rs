@@ -1,10 +1,18 @@
 //! Variable environment. Most-recent binding wins (for nested scopes).
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::value::Val;
+use rand::rngs::ChaCha8Rng;
 
 #[derive(Debug, Default, Clone)]
 pub struct Env {
     vars: Vec<(String, Val)>,
+    /// Shared RNG handle for `_rng` calls (only set while evaluating
+    /// `generated quantities`; `Rc` sharing means a clone of `Env` still
+    /// advances the same underlying stream).
+    rng: Option<Rc<RefCell<ChaCha8Rng>>>,
 }
 
 impl Env {
@@ -54,5 +62,13 @@ impl Env {
 
     pub fn set_vector(&mut self, name: &str, xs: &[f64]) {
         self.set(name, Val::Vec(xs.iter().map(|x| Val::Num(*x)).collect()));
+    }
+
+    pub fn set_rng(&mut self, rng: Rc<RefCell<ChaCha8Rng>>) {
+        self.rng = Some(rng);
+    }
+
+    pub fn rng(&self) -> Option<Rc<RefCell<ChaCha8Rng>>> {
+        self.rng.clone()
     }
 }

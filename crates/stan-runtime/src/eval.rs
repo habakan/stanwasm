@@ -30,6 +30,14 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Val {
                 "*" => v_mul(t, &lv, &rv),
                 "/" => v_div(t, &lv, &rv),
                 "^" => v_pow(t, &lv, &rv),
+                "==" => bool_val(lv.to_f64(t) == rv.to_f64(t)),
+                "!=" => bool_val(lv.to_f64(t) != rv.to_f64(t)),
+                "<" => bool_val(lv.to_f64(t) < rv.to_f64(t)),
+                ">" => bool_val(lv.to_f64(t) > rv.to_f64(t)),
+                "<=" => bool_val(lv.to_f64(t) <= rv.to_f64(t)),
+                ">=" => bool_val(lv.to_f64(t) >= rv.to_f64(t)),
+                "&&" => bool_val(lv.to_f64(t) != 0.0 && rv.to_f64(t) != 0.0),
+                "||" => bool_val(lv.to_f64(t) != 0.0 || rv.to_f64(t) != 0.0),
                 _ => Val::Num(0.0),
             }
         }
@@ -37,6 +45,7 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Val {
             let v = eval_expr(t, e, env);
             match op.as_str() {
                 "-" => v_neg(t, &v),
+                "!" => bool_val(v.to_f64(t) == 0.0),
                 _ => v,
             }
         }
@@ -50,6 +59,10 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Val {
         }
         Expr::Call(name, args) => eval_call(t, name, args, env),
     }
+}
+
+fn bool_val(b: bool) -> Val {
+    Val::Num(if b { 1.0 } else { 0.0 })
 }
 
 fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Val {
@@ -100,42 +113,93 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Val {
                 }
             }
         }
+        // RNG forms, valid only in generated quantities (env carries an rng).
+        (n, args) if n.ends_with("_rng") => {
+            let base = &n[..n.len() - 4];
+            crate::rng::dispatch(t, base, args, env)
+        }
         _ => Val::Num(0.0),
     }
 }
 
-/// Evaluate a statement; returns the increment to log_prob (zero for non-target stmts).
-pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Val {
+/// Result of evaluating a statement: either a plain log-prob contribution, or
+/// a loop-control signal (each still carrying the log-prob accumulated up to
+/// the point of exit, e.g. from statements executed before a `break`).
+pub enum Flow {
+    Val(Val),
+    Break(Val),
+    Continue(Val),
+}
+
+impl Flow {
+    pub fn into_val(self) -> Val {
+        match self {
+            Flow::Val(v) | Flow::Break(v) | Flow::Continue(v) => v,
+        }
+    }
+}
+
+/// Evaluate a statement list as a scoped block: locals declared inside are
+/// visible only for the duration of the block, and a `break`/`continue`
+/// short-circuits the remaining statements while propagating the signal (and
+/// the log-prob accumulated so far) to the caller.
+fn eval_block(t: &mut Tape, stmts: &[Stmt], env: &mut Env) -> Flow {
+    let saved = env.len();
+    let mut acc = Val::Num(0.0);
+    let mut result = None;
+    for s in stmts {
+        match eval_stmt(t, s, env) {
+            Flow::Val(v) => acc = v_add(t, &acc, &v),
+            Flow::Break(v) => {
+                acc = v_add(t, &acc, &v);
+                result = Some(Flow::Break(acc.clone()));
+                break;
+            }
+            Flow::Continue(v) => {
+                acc = v_add(t, &acc, &v);
+                result = Some(Flow::Continue(acc.clone()));
+                break;
+            }
+        }
+    }
+    env.truncate(saved);
+    result.unwrap_or(Flow::Val(acc))
+}
+
+/// Evaluate a statement; returns the increment to log_prob (zero for non-target
+/// statements) wrapped in a `Flow` that also carries `break`/`continue` signals.
+pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Flow {
     match stmt {
         Stmt::Sample(lhs, dist, args) => {
             let x = eval_expr(t, lhs, env);
             let evaled_args: Vec<Val> = args.iter().map(|a| eval_expr(t, a, env)).collect();
-            match &x {
+            let v = match &x {
                 Val::Vec(xs) => eval_sample_vec(t, dist, xs, &evaled_args).unwrap_or(Val::Num(0.0)),
                 _ => eval_dist(t, dist, &x, &evaled_args).unwrap_or(Val::Num(0.0)),
-            }
+            };
+            Flow::Val(v)
         }
-        Stmt::TargetIncr(e) => eval_expr(t, e, env),
+        Stmt::TargetIncr(e) => Flow::Val(eval_expr(t, e, env)),
         Stmt::IncrAssign(lhs, rhs) => {
             // For target += rhs (lhs is `target`), already handled above.
             // Generic form: lhs += rhs. Update env if lhs is a Var.
             if let Expr::Var(name) = lhs {
                 if name == "target" {
-                    return eval_expr(t, rhs, env);
+                    return Flow::Val(eval_expr(t, rhs, env));
                 }
                 let cur = env.get(name).cloned().unwrap_or(Val::Num(0.0));
                 let r = eval_expr(t, rhs, env);
                 let new_val = v_add(t, &cur, &r);
                 env.set(name, new_val);
             }
-            Val::Num(0.0)
+            Flow::Val(Val::Num(0.0))
         }
         Stmt::Assign(lhs, rhs) => {
             let r = eval_expr(t, rhs, env);
             if let Expr::Var(name) = lhs {
                 env.set(name, r);
             }
-            Val::Num(0.0)
+            Flow::Val(Val::Num(0.0))
         }
         Stmt::LocalDecl(_typ, name, init) => {
             let v = match init {
@@ -143,7 +207,7 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Val {
                 None => Val::Num(0.0),
             };
             env.set(name, v);
-            Val::Num(0.0)
+            Flow::Val(Val::Num(0.0))
         }
         Stmt::For(var, lo_e, hi_e, body) => {
             let lo = eval_expr(t, lo_e, env).to_i32(t);
@@ -152,14 +216,51 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Val {
             let mut acc = Val::Num(0.0);
             for i in lo..=hi {
                 env.set(var, Val::Num(i as f64));
-                for s in body {
-                    let r = eval_stmt(t, s, env);
-                    acc = v_add(t, &acc, &r);
+                match eval_block(t, body, env) {
+                    Flow::Val(v) | Flow::Continue(v) => acc = v_add(t, &acc, &v),
+                    Flow::Break(v) => {
+                        acc = v_add(t, &acc, &v);
+                        break;
+                    }
                 }
             }
             env.truncate(saved_len);
-            acc
+            Flow::Val(acc)
         }
-        Stmt::While(_, _) | Stmt::If(_, _, _) | Stmt::Return(_) => Val::Num(0.0),
+        Stmt::While(cond, body) => {
+            const MAX_ITERS: u64 = 1_000_000;
+            let mut acc = Val::Num(0.0);
+            let mut iters: u64 = 0;
+            loop {
+                let c = eval_expr(t, cond, env);
+                if c.to_f64(t) == 0.0 {
+                    break;
+                }
+                iters += 1;
+                if iters > MAX_ITERS {
+                    panic!("while loop exceeded {MAX_ITERS} iterations — possible infinite loop");
+                }
+                match eval_block(t, body, env) {
+                    Flow::Val(v) | Flow::Continue(v) => acc = v_add(t, &acc, &v),
+                    Flow::Break(v) => {
+                        acc = v_add(t, &acc, &v);
+                        break;
+                    }
+                }
+            }
+            Flow::Val(acc)
+        }
+        Stmt::If(cond, then_body, else_body) => {
+            let c = eval_expr(t, cond, env);
+            let body = if c.to_f64(t) != 0.0 {
+                then_body
+            } else {
+                else_body
+            };
+            eval_block(t, body, env)
+        }
+        Stmt::Break => Flow::Break(Val::Num(0.0)),
+        Stmt::Continue => Flow::Continue(Val::Num(0.0)),
+        Stmt::Return(_) => Flow::Val(Val::Num(0.0)),
     }
 }

@@ -10,6 +10,8 @@ stan-autodiff.workspace = true
 stan-parser.workspace = true
 thiserror.workspace = true
 serde_json = { workspace = true, optional = true }
+rand.workspace = true
+rand_distr = "0.6"
 
 [features]
 default = ["json"]

@@ -19,6 +19,7 @@ mod eval;
 mod matrix;
 mod model;
 mod ops;
+mod rng;
 mod value;
 
 #[cfg(feature = "json")]

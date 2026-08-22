@@ -68,4 +68,56 @@ if (Math.abs(meanBeta - 1.8) > 0.5) {
   console.error(`FAIL: posterior mean of β too far from data slope`);
   process.exit(1);
 }
+
+// --- generated quantities -------------------------------------------------
+
+const gqCode = `
+data {
+  int<lower=0> N;
+  vector[N] x;
+  array[N] real y;
+}
+parameters {
+  real mu;
+  real<lower=0> sigma;
+}
+model {
+  mu    ~ normal(0, 5);
+  sigma ~ exponential(1);
+  for (i in 1:N) {
+    y[i] ~ normal(mu, sigma);
+  }
+}
+generated quantities {
+  real y_ln  = lognormal_rng(mu, sigma);
+  real y_exp = exponential_rng(1.0);
+  real y_unif = uniform_rng(0.0, 1.0);
+  real y_gam = gamma_rng(2.0, 1.0);
+}
+`;
+const gqData = { N: 2, x: [0.0, 1.0], y: [0.0, 1.0] };
+const gqModel = new StanModel(gqCode, JSON.stringify(gqData));
+console.log(`genQuantityNames = ${gqModel.genQuantityNames().join(", ")}`);
+
+const gqDraws = gqModel.sample(new Float64Array([0, 0]), 50, 20, 42n);
+const gqN = gqModel.n_params;
+const gqPostWarmup = gqDraws.slice(50 * gqN);
+
+const constrained = gqModel.constrainDraw(gqPostWarmup.slice(0, gqN));
+console.log(`constrainDraw(first draw) = [${[...constrained].map(v => v.toFixed(3)).join(", ")}]`);
+if (!(constrained[1] > 0)) {
+  console.error(`FAIL: constrained sigma must be positive, got ${constrained[1]}`);
+  process.exit(1);
+}
+
+const gq = gqModel.generatedQuantities(gqPostWarmup, 20, 123n);
+for (let i = 0; i < 20; i++) {
+  const [yLn, yExp, yUnif, yGam] = gq.slice(i * 4, i * 4 + 4);
+  if (!(yLn > 0) || !(yExp >= 0) || !(yUnif >= 0 && yUnif <= 1) || !(yGam >= 0)) {
+    console.error(`FAIL: generated quantities out of support at draw ${i}: ${[yLn, yExp, yUnif, yGam]}`);
+    process.exit(1);
+  }
+}
+console.log(`generatedQuantities OK (${20} draws)`);
+
 console.log("OK");

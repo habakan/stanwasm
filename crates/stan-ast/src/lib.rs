@@ -78,6 +78,8 @@ pub enum Stmt {
     LocalDecl(StanType, String, Option<Expr>),
     /// return expr;
     Return(Expr),
+    Break,
+    Continue,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
