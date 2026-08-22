@@ -122,12 +122,20 @@ const constrained = model.constrainDraw(samples.slice(0, model.n_params));
 // of draws (one shared, seeded RNG stream across the whole batch):
 console.log(model.genQuantityNames().join(", "));
 const gq = model.generatedQuantities(samples, /*nDraws*/ 1000 + 1000, /*seed*/ 7n);
+
+// Want to watch the sampler work rather than just get the finished draws?
+// startStepSampling/stepDraw keep the NUTS chain's state alive between
+// calls, so you can drive it one draw at a time (e.g. one per animation
+// frame) instead of blocking on the whole run:
+model.startStepSampling(new Float64Array([0, 0, 0]), 500, 500, 42n);
+const draw = model.stepDraw(); // [alpha, beta, log_sigma, tuning(0/1), diverging(0/1)]
 ```
 
 ### Demos
 
 [`examples/gallery`](examples/gallery) — one app, tabbed:
 
+- **MCMC Race** — NUTS and Random-Walk Metropolis step the same hard posterior (Neal's funnel) side by side, one real draw per animation frame, via the step-by-step sampling API (`startStepSampling`/`stepDraw`) — not a replay of a finished chain.
 - **Live Regression** — drag a data point and watch a robust (Student-t) and a conjugate (normal) regression refit **live**, every animation frame, diverging on the outlier — no closed form for the former, no server round trip for either.
 - **Hierarchical Shrinkage** — drag a group's observed value in a partial-pooling model and watch its posterior estimate resist by an amount that depends on how noisy that group is — the classic "eight schools" shrinkage story, live.
 - **Get Started** — a fuller API tour: CSV upload, editable Stan source, multiple presets, posterior summary table.

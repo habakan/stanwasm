@@ -1,6 +1,6 @@
 # gallery — stan-wasm-rs examples
 
-One Vite + React app, three tabs, each showing a different reason sampling
+One Vite + React app, four tabs, each showing a different reason sampling
 entirely in the browser is worth having.
 
 ## Run locally
@@ -19,6 +19,13 @@ Open `http://localhost:5173`.
 
 ## Tabs
 
+- **MCMC Race** — NUTS and Random-Walk Metropolis step the same hard 2D
+  posterior (Neal's funnel — wide at large `y`, vanishingly narrow at small
+  `y`) side by side, one real draw per animation frame, adjustable chain
+  count. This uses `StanModel`'s step-by-step sampling API
+  (`startStepSampling`/`stepDraw`), not `sample()` — the sampler's state
+  stays alive between calls so what's on screen is the actual computation
+  happening now, not a replay of an already-finished chain. `src/tabs/McmcRace.tsx`.
 - **Live Regression** — drag a point; a robust (Student-t, no closed form)
   and a normal (conjugate, closed form) regression refit **live**, every
   animation frame, over the same data. Drag one point into outlier

@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comparison/logical operators (`== != < > <= >= && ||`) in `model`,
   `transformed parameters`, and `generated quantities` — these previously
   parsed but silently no-oped.
+- Step-by-step NUTS sampling: `StanModel.startStepSampling()` +
+  `.stepDraw()` advance the sampler one draw at a time, keeping its state
+  alive between calls (`.finishStepSampling()` to stop early), instead of
+  `sample()`'s "run the whole chain, return at the end" model — for driving
+  a live visualization of sampling in progress rather than replaying an
+  already-finished chain.
+- `examples/gallery`: new "MCMC Race" tab using the step-by-step API to
+  race NUTS against Random-Walk Metropolis on Neal's funnel, chain count
+  adjustable.
 
 ### Changed
 
