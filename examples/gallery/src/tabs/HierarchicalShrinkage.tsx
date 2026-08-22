@@ -68,6 +68,10 @@ interface Fit {
   tau: number;
   thetaMean: number[];
   thetaSd: number[];
+  /** Every theta_j draw this resample produced, kept per group so the UI can
+   *  show each group's actual posterior shape (a KDE over these) rather than
+   *  just its mean/sd. */
+  thetaDraws: number[][];
   elapsedMs: number;
 }
 
@@ -110,11 +114,51 @@ function populationCurvePath(mu: number, tau: number): string {
   return `M${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L")} Z`;
 }
 
+/** Gaussian-kernel density estimate — used only for the per-group violin
+ *  below, evaluated directly over that group's own posterior draws (not a
+ *  normal-distribution approximation from mean/sd, the way the population
+ *  curve above necessarily is — theta_j's actual posterior needn't be
+ *  symmetric, and this shows whatever shape 200 real NUTS draws produced). */
+function kde(draws: number[], y: number, bandwidth: number): number {
+  let sum = 0;
+  for (const d of draws) {
+    const z = (y - d) / bandwidth;
+    sum += Math.exp(-0.5 * z * z);
+  }
+  return sum / (draws.length * bandwidth * Math.sqrt(2 * Math.PI));
+}
+
+const GROUP_CURVE_SAMPLES = 32;
+const GROUP_CURVE_MAX_HALF_WIDTH = 16;
+
+function groupCurvePath(draws: number[], mean: number, sd: number, cx: number): string {
+  if (draws.length === 0 || sd <= 0) return "";
+  // Silverman's rule of thumb for kernel bandwidth.
+  const bandwidth = Math.max(1e-6, 1.06 * sd * Math.pow(draws.length, -0.2));
+  const yLo = mean - 3.5 * sd;
+  const yHi = mean + 3.5 * sd;
+  const density = Array.from({ length: GROUP_CURVE_SAMPLES + 1 }, (_, i) =>
+    kde(draws, yLo + ((yHi - yLo) * i) / GROUP_CURVE_SAMPLES, bandwidth),
+  );
+  const peak = Math.max(...density);
+  if (peak <= 0) return "";
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= GROUP_CURVE_SAMPLES; i++) {
+    const y = yLo + ((yHi - yLo) * i) / GROUP_CURVE_SAMPLES;
+    pts.push([cx + (density[i] / peak) * GROUP_CURVE_MAX_HALF_WIDTH, yToPx(y)]);
+  }
+  for (let i = GROUP_CURVE_SAMPLES; i >= 0; i--) {
+    const y = yLo + ((yHi - yLo) * i) / GROUP_CURVE_SAMPLES;
+    pts.push([cx - (density[i] / peak) * GROUP_CURVE_MAX_HALF_WIDTH, yToPx(y)]);
+  }
+  return `M${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L")} Z`;
+}
+
 export function HierarchicalShrinkage() {
   const [groups, setGroups] = useState<Group[]>(INITIAL_GROUPS);
   const [fit, setFit] = useState<Fit | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
-  const [popView, setPopView] = useState<PopView>("band");
+  const [popView, setPopView] = useState<PopView>("curve");
 
   const modelRef = useRef<StanModel | null>(null);
   const warmStart = useRef<number[] | null>(null);
@@ -168,6 +212,7 @@ export function HierarchicalShrinkage() {
     const thetaStart = n;
     const thetaSum = new Array(gs.length).fill(0);
     const thetaSqSum = new Array(gs.length).fill(0);
+    const thetaDraws: number[][] = Array.from({ length: gs.length }, () => []);
     let muSum = 0, tauSum = 0;
     for (let i = 0; i < N_DRAWS; i++) {
       const c = model.constrainDraw(post.subarray(i * n, (i + 1) * n));
@@ -177,11 +222,12 @@ export function HierarchicalShrinkage() {
         const th = c[thetaStart + j];
         thetaSum[j] += th;
         thetaSqSum[j] += th * th;
+        thetaDraws[j].push(th);
       }
     }
     const thetaMean = thetaSum.map((s) => s / N_DRAWS);
     const thetaSd = thetaMean.map((m, j) => Math.sqrt(Math.max(0, thetaSqSum[j] / N_DRAWS - m * m)));
-    setFit({ mu: muSum / N_DRAWS, tau: tauSum / N_DRAWS, thetaMean, thetaSd, elapsedMs: performance.now() - t0 });
+    setFit({ mu: muSum / N_DRAWS, tau: tauSum / N_DRAWS, thetaMean, thetaSd, thetaDraws, elapsedMs: performance.now() - t0 });
   }
 
   const onPointerDown = (i: number) => (e: React.PointerEvent<SVGCircleElement>) => {
@@ -304,16 +350,13 @@ export function HierarchicalShrinkage() {
                 strokeWidth={1.5}
                 pointerEvents="none"
               />
-              {/* partially-pooled estimate ± posterior sd */}
-              {shrunkY !== null && thetaMean !== undefined && (
-                <line
-                  x1={shrunkX}
-                  y1={yToPx(thetaMean - thetaSd)}
-                  x2={shrunkX}
-                  y2={yToPx(thetaMean + thetaSd)}
-                  stroke="#c2410c"
-                  strokeWidth={1.5}
-                  opacity={0.5}
+              {/* theta_j's actual posterior shape — a KDE over its own real
+                  draws from this resample, not a mean±sd approximation. */}
+              {thetaMean !== undefined && fit && (
+                <path
+                  d={groupCurvePath(fit.thetaDraws[i], thetaMean, thetaSd, shrunkX)}
+                  fill="#c2410c"
+                  opacity={0.35}
                   pointerEvents="none"
                 />
               )}
@@ -342,9 +385,10 @@ export function HierarchicalShrinkage() {
 
       <div className="legend">
         <span><i className="dot raw" /> observed yⱼ ± σⱼ</span>
-        <span><i className="dot shrunk" /> partially-pooled θⱼ ± posterior sd</span>
+        <span><i className="dot shrunk" /> partially-pooled θⱼ (posterior mean)</span>
+        <span><i className="dot raw" style={{ background: "#c2410c", opacity: 0.4, border: "none" }} /> θⱼ's actual posterior (KDE over its own draws)</span>
         <span><i className="swatch dashed" /> population mean μ</span>
-        <span><i className="dot raw" style={{ background: "#c2410c", opacity: 0.3, border: "none" }} /> population N(μ, τ) — where every θⱼ is pooled toward</span>
+        <span><i className="dot raw" style={{ background: "#c2410c", opacity: 0.2, border: "none" }} /> population N(μ, τ) — where every θⱼ is pooled toward</span>
       </div>
 
       <div className="readout">
@@ -363,10 +407,13 @@ export function HierarchicalShrinkage() {
         Every drag frame recompiles the model and runs {N_WARMUP} warmup + {N_DRAWS} NUTS draws — all
         inside WebAssembly, in this tab. The amount of shrinkage (how far the orange estimate sits from
         the gray observed value) isn't a fixed rule someone hand-tuned — it falls out of the posterior,
-        different for every group, every frame. The shaded population distribution behind the groups is
-        N(μ, τ) at the current posterior mean of μ and τ — it's what every θⱼ is actually being pulled
-        toward, and its width (τ) is itself estimated from how much the groups agree with each other:
-        make the six values more consistent and watch it narrow; spread them out and watch it widen.
+        different for every group, every frame. The wide shaded curve is the population distribution
+        N(μ, τ) — what every θⱼ is actually being pulled toward — and its width (τ) is itself estimated
+        from how much the groups agree with each other: make the six values more consistent and watch it
+        narrow; spread them out and watch it widen. The small violin at each group is that group's own
+        θⱼ posterior specifically — a kernel density estimate over its real 200 NUTS draws from this
+        resample, not a mean±sd stand-in — so you can compare an individual group's actual uncertainty
+        against the population it's being shrunk toward.
       </div>
       </div>
     </div>
