@@ -126,7 +126,7 @@ const gq = model.generatedQuantities(samples, /*nDraws*/ 1000 + 1000, /*seed*/ 7
 
 ### Demos
 
-- [`examples/live_regression`](examples/live_regression) — drag a data point and watch the posterior refit **live**, every animation frame, with no server round trip. The UX this project is for.
+- [`examples/live_regression`](examples/live_regression) — drag a data point and watch a robust (Student-t) and a conjugate (normal) regression refit **live**, every animation frame, diverging on the outlier — no closed form for the former, no server round trip for either.
 - [`examples/get_started`](examples/get_started) — a fuller API tour: CSV upload, editable Stan source, multiple presets, posterior summary table.
 
 ## Native development

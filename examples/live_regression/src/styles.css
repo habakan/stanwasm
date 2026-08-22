@@ -52,13 +52,36 @@ h1 {
   cursor: grabbing;
 }
 
+.legend {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #555;
+}
+
+.legend .swatch {
+  display: inline-block;
+  width: 22px;
+  height: 0;
+  margin-right: 6px;
+  border-top: 2.5px solid #c2410c;
+  vertical-align: middle;
+}
+
+.legend .swatch.dashed {
+  border-top: 2px dashed #64748b;
+}
+
 .readout {
   display: flex;
   gap: 20px;
   flex-wrap: wrap;
   align-items: baseline;
-  margin: 16px 0;
-  font-size: 15px;
+  margin: 12px 0 16px;
+  font-size: 14px;
 }
 
 .readout .stat {
