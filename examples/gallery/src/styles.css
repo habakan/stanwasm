@@ -426,6 +426,15 @@ footer a {
   font-variant-numeric: tabular-nums;
 }
 
+.mcmc-panel h5 {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  color: #888;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .canvas-stack {
   position: relative;
   width: 100%;

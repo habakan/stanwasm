@@ -108,13 +108,51 @@ function computeHeatmap(model: StanModel): ImageData {
   return img;
 }
 
-function drawBackground(canvas: HTMLCanvasElement | null, img: ImageData | null) {
+/** "Fog of war" veil over the true-density panel: a light gray haze that
+ *  starts opaque everywhere and clears wherever draws have actually landed,
+ *  revealing the orange truth underneath. (An earlier version tinted
+ *  covered cells blue instead — additively mixing a color on top of the
+ *  funnel's already-saturated orange neck just produced murky purple there,
+ *  unreadable exactly where coverage mattered most. A brightness veil never
+ *  has that problem: it only ever *un-obscures*, never mixes hues.)
+ *  Computed on the same grid as the true-density heatmap so the two line up
+ *  pixel-for-pixel; recomputed from scratch every frame — cheap, at most a
+ *  few hundred points per chain into a small grid. */
+function computeExplorationVeil(paths: Point[][]): ImageData {
+  const counts = new Float64Array(GRID_N * GRID_N);
+  let maxCount = 0;
+  for (const path of paths) {
+    for (const [yv, xv] of path) {
+      if (yv < Y_DOMAIN[0] || yv > Y_DOMAIN[1] || xv < X_DOMAIN[0] || xv > X_DOMAIN[1]) continue;
+      const j = Math.min(GRID_N - 1, Math.floor(((Y_DOMAIN[1] - yv) / (Y_DOMAIN[1] - Y_DOMAIN[0])) * GRID_N));
+      const i = Math.min(GRID_N - 1, Math.floor(((xv - X_DOMAIN[0]) / (X_DOMAIN[1] - X_DOMAIN[0])) * GRID_N));
+      const idx = j * GRID_N + i;
+      counts[idx] += 1;
+      if (counts[idx] > maxCount) maxCount = counts[idx];
+    }
+  }
+  const img = new ImageData(GRID_N, GRID_N);
+  for (let k = 0; k < counts.length; k++) {
+    // sqrt compresses the range so a handful of early samples already clear
+    // the fog a good deal, rather than needing to rival the hottest bin.
+    const rel = maxCount > 0 ? Math.sqrt(counts[k] / maxCount) : 0;
+    const idx = k * 4;
+    img.data[idx] = 245;
+    img.data[idx + 1] = 245;
+    img.data[idx + 2] = 245;
+    img.data[idx + 3] = Math.round((1 - rel) * 235); // opaque fog when unexplored, clears toward 0
+  }
+  return img;
+}
+
+function drawImageToCanvas(canvas: HTMLCanvasElement | null, img: ImageData | null) {
   if (!canvas || !img) return;
   const off = document.createElement("canvas");
   off.width = img.width;
   off.height = img.height;
   off.getContext("2d")!.putImageData(img, 0, 0);
   const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, PANEL_W, PANEL_H);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(off, 0, 0, PANEL_W, PANEL_H);
 }
@@ -127,15 +165,9 @@ function drawForeground(canvas: HTMLCanvasElement | null, paths: Point[][]) {
     if (path.length === 0) return;
     const color = CHAIN_COLORS[c % CHAIN_COLORS.length];
 
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.3;
-    for (const [yv, xv] of path) {
-      ctx.beginPath();
-      ctx.arc(xToPx(xv), yToPx(yv), 1.4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
+    // Where every draw so far landed is already shown by the fog-of-war
+    // veil (see computeExplorationVeil) — this layer only needs the
+    // recent trail, so it doesn't re-encode the same information twice.
     const start = Math.max(0, path.length - TRAIL_LEN);
     ctx.beginPath();
     for (let i = start; i < path.length; i++) {
@@ -206,6 +238,8 @@ export function McmcRace() {
   const nutsFgRef = useRef<HTMLCanvasElement>(null);
   const rwmBgRef = useRef<HTMLCanvasElement>(null);
   const rwmFgRef = useRef<HTMLCanvasElement>(null);
+  const nutsHistRef = useRef<HTMLCanvasElement>(null);
+  const rwmHistRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -253,6 +287,8 @@ export function McmcRace() {
     setNutsDivergences([...nutsDivergeCountRef.current]);
     drawForeground(nutsFgRef.current, nutsPathsRef.current);
     drawForeground(rwmFgRef.current, rwmPathsRef.current);
+    drawImageToCanvas(nutsHistRef.current, computeExplorationVeil(nutsPathsRef.current));
+    drawImageToCanvas(rwmHistRef.current, computeExplorationVeil(rwmPathsRef.current));
 
     if (!anyActive) setPlaying(false);
   }
@@ -285,8 +321,8 @@ export function McmcRace() {
     const shared = new StanModel(STAN_CODE, "{}");
     sharedModelRef.current = shared;
     if (!heatmapRef.current) heatmapRef.current = computeHeatmap(shared);
-    drawBackground(nutsBgRef.current, heatmapRef.current);
-    drawBackground(rwmBgRef.current, heatmapRef.current);
+    drawImageToCanvas(nutsBgRef.current, heatmapRef.current);
+    drawImageToCanvas(rwmBgRef.current, heatmapRef.current);
 
     const nutsModels: StanModel[] = [];
     for (let c = 0; c < numChains; c++) {
@@ -314,6 +350,8 @@ export function McmcRace() {
     setNutsDivergences(new Array(numChains).fill(0));
     drawForeground(nutsFgRef.current, nutsPathsRef.current);
     drawForeground(rwmFgRef.current, rwmPathsRef.current);
+    drawImageToCanvas(nutsHistRef.current, computeExplorationVeil(nutsPathsRef.current));
+    drawImageToCanvas(rwmHistRef.current, computeExplorationVeil(rwmPathsRef.current));
     setReady(true);
     setPlaying(true);
 
@@ -408,6 +446,7 @@ export function McmcRace() {
             <h4>NUTS</h4>
             <div className="canvas-stack">
               <canvas ref={nutsBgRef} width={PANEL_W} height={PANEL_H} className="plot-wrap" />
+              <canvas ref={nutsHistRef} width={PANEL_W} height={PANEL_H} className="plot-wrap overlay" />
               <canvas ref={nutsFgRef} width={PANEL_W} height={PANEL_H} className="plot-wrap overlay" />
             </div>
             <p className="panel-stat">{totalDiverge} divergence{totalDiverge === 1 ? "" : "s"} across all chains</p>
@@ -416,6 +455,7 @@ export function McmcRace() {
             <h4>Random-Walk Metropolis</h4>
             <div className="canvas-stack">
               <canvas ref={rwmBgRef} width={PANEL_W} height={PANEL_H} className="plot-wrap" />
+              <canvas ref={rwmHistRef} width={PANEL_W} height={PANEL_H} className="plot-wrap overlay" />
               <canvas ref={rwmFgRef} width={PANEL_W} height={PANEL_H} className="plot-wrap overlay" />
             </div>
             <p className="panel-stat">
@@ -424,6 +464,10 @@ export function McmcRace() {
           </div>
         </div>
 
+        <div className="legend">
+          <span><i className="dot raw" style={{ background: "#c2410c", borderColor: "#c2410c" }} /> revealed (sampled)</span>
+          <span><i className="dot raw" style={{ background: "#d4d4d4", borderColor: "#a3a3a3" }} /> fogged (not yet sampled)</span>
+        </div>
         <div className="legend">
           {Array.from({ length: numChains }, (_, c) => (
             <span key={c}>
@@ -438,7 +482,9 @@ export function McmcRace() {
           — {N_WARMUP} warmup + {N_DRAWS} sampling draws each. NUTS's step-by-step API
           (<code>startStepSampling</code>/<code>stepDraw</code>) keeps the sampler's state alive between
           calls instead of running the whole chain in one shot, so what you're watching is the actual
-          computation happening now, not a replay of a finished run.
+          computation happening now, not a replay of a finished run. The gray haze is fog of war: it
+          starts opaque everywhere and clears — revealing the true orange density underneath — wherever
+          a draw actually lands, recomputed from a live 2D histogram of every draw so far each frame.
         </div>
       </div>
     </div>

@@ -30,7 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already-finished chain.
 - `examples/gallery`: new "MCMC Race" tab using the step-by-step API to
   race NUTS against Random-Walk Metropolis on Neal's funnel, chain count
-  adjustable.
+  adjustable, with a live "fog of war" veil (clears wherever a draw lands,
+  revealing the true density underneath) showing each method's coverage.
 
 ### Changed
 

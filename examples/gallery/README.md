@@ -25,7 +25,10 @@ Open `http://localhost:5173`.
   count. This uses `StanModel`'s step-by-step sampling API
   (`startStepSampling`/`stepDraw`), not `sample()` — the sampler's state
   stays alive between calls so what's on screen is the actual computation
-  happening now, not a replay of an already-finished chain. `src/tabs/McmcRace.tsx`.
+  happening now, not a replay of an already-finished chain. Each panel is
+  also a live "fog of war": a gray haze over the true density clears wherever
+  a draw actually lands, so which regions a method has (and hasn't) explored
+  is visible at a glance. `src/tabs/McmcRace.tsx`.
 - **Live Regression** — drag a point; a robust (Student-t, no closed form)
   and a normal (conjugate, closed form) regression refit **live**, every
   animation frame, over the same data. Drag one point into outlier
