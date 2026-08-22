@@ -441,9 +441,13 @@ export function parseStanGraph(src: string): Graph | null {
 const NODE_R = 18;
 const SQ = 26;
 const ROW_GAP = 90;
-const COL_GAP = 92;
+// Wide enough that two adjacent same-row nodes' formula boxes (FORMULA_W
+// below, each centered on its node) never overlap — with FORMULA_W=140,
+// anything under ~150 lets neighboring labels visually collide.
+const COL_GAP = 156;
 const TOP_PAD = 34;
 const SIDE_PAD = 44;
+const FORMULA_W = 140;
 
 interface Laid extends GNode { x: number; y: number; }
 interface PlateBox { plate: string; loopVar: string; x: number; y: number; w: number; h: number; }
@@ -561,7 +565,7 @@ function GraphicalModelInner({ stanCode }: { stanCode: string }) {
               {n.symbol}
             </text>
             {n.formula && (
-              <foreignObject x={n.x - 80} y={subY} width={160} height={34}>
+              <foreignObject x={n.x - FORMULA_W / 2} y={subY} width={FORMULA_W} height={34}>
                 <div className="gm-formula">
                   <MathJax inline dynamic>{`\\(${n.formula}\\)`}</MathJax>
                 </div>

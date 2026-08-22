@@ -169,6 +169,25 @@ footer a {
   margin-left: 4px;
 }
 
+.stan-editor-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.stan-editor-col {
+  flex: 1 1 420px;
+  min-width: 320px;
+}
+
+.graph-col {
+  flex: 0 1 auto;
+  min-width: 260px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .results {
   margin-top: 24px;
 }
@@ -336,7 +355,14 @@ footer a {
 }
 
 .model-diagram {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  /* Caps how wide a wide diagram (many top-level nodes) is allowed to force
+     this box — without it, flex:0 0 auto lets the SVG's native width push
+     .demo-model past its flex-basis and overlap .demo-interactive instead
+     of wrapping, since that decision is made from flex-basis, not from
+     content overflowing afterward. max-width:100% on the svg itself then
+     shrinks it responsively to fit. */
+  max-width: 340px;
 }
 
 .model-diagram-card {
@@ -357,7 +383,11 @@ footer a {
   text-align: center;
   font-size: 11px;
   line-height: 1.15;
-  color: #888;
+  color: #1a1a1a;
+  /* Opaque backing so an edge line that happens to pass behind the label
+     (the layout is a simple grid, not an edge-avoiding router) is hidden
+     rather than drawn through the text. */
+  background: white;
 }
 
 .code-blocks {

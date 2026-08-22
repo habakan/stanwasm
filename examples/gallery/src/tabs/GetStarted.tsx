@@ -290,38 +290,40 @@ export function GetStarted() {
         </div>
       )}
 
-      <div className="code-section">
-        <h3>
-          Stan program
-          {customStan !== null && (
-            <>
-              {" "}
-              <span style={{ fontSize: 12, color: "#047857", fontWeight: 400 }}>
-                (edited)
-              </span>
-              {" "}
-              <button
-                className="secondary"
-                style={{ padding: "1px 8px", fontSize: 12 }}
-                onClick={resetStan}
-              >
-                Reset to preset
-              </button>
-            </>
-          )}
-        </h3>
-        <textarea
-          className="stan-editor"
-          value={effectiveStan}
-          onChange={(e) => setCustomStan(e.target.value)}
-          spellCheck={false}
-        />
-      </div>
+      <div className="stan-editor-row">
+        <div className="code-section stan-editor-col">
+          <h3>
+            Stan program
+            {customStan !== null && (
+              <>
+                {" "}
+                <span style={{ fontSize: 12, color: "#047857", fontWeight: 400 }}>
+                  (edited)
+                </span>
+                {" "}
+                <button
+                  className="secondary"
+                  style={{ padding: "1px 8px", fontSize: 12 }}
+                  onClick={resetStan}
+                >
+                  Reset to preset
+                </button>
+              </>
+            )}
+          </h3>
+          <textarea
+            className="stan-editor"
+            value={effectiveStan}
+            onChange={(e) => setCustomStan(e.target.value)}
+            spellCheck={false}
+          />
+        </div>
 
-      <div className="code-section">
-        <h3>Graphical model</h3>
-        <div className="model-diagram-card">
-          <GraphicalModel stanCode={debouncedStan} />
+        <div className="code-section graph-col">
+          <h3>Graphical model</h3>
+          <div className="model-diagram-card">
+            <GraphicalModel stanCode={debouncedStan} />
+          </div>
         </div>
       </div>
 
