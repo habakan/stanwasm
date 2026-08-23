@@ -177,7 +177,7 @@ Requires Rust 1.88+ (the workspace MSRV; `nuts-rs` needs edition 2024).
 
 ```bash
 cargo build --release
-cargo test                    # ~67 tests across all crates
+cargo test                    # ~71 tests across all crates
 cargo run --release -p stan-cli -- bench all
 ```
 
