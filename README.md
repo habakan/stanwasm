@@ -181,6 +181,12 @@ cargo test                    # ~76 tests across all crates
 cargo run --release -p stan-cli -- bench all
 ```
 
+## Security
+
+See [`SECURITY.md`](SECURITY.md) for how to report a vulnerability and what is
+in scope. In short: a malicious Stan model crashing its own page is expected
+(the sandbox contains it), a sandbox escape or a supply-chain problem is not.
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md). The project is in alpha and maintained on evenings and weekends, so issue triage and PR reviews happen in batches. Distribution / constraint additions and example PRs are especially welcome.

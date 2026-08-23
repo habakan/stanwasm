@@ -1,0 +1,42 @@
+version: 2
+
+updates:
+  # Keeps the SHA-pinned actions in test.yml current — pinning by SHA is what
+  # makes a compromised action tag harmless, but it also means nothing updates
+  # on its own without this.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(ci)"
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      cargo-minor-patch:
+        update-types: [minor, patch]
+
+  # The examples gallery. Its dependencies are dev-only and never ship, so
+  # these are grouped and low-priority.
+  - package-ecosystem: npm
+    directory: /examples/gallery
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(gallery)"
+    groups:
+      gallery:
+        patterns: ["*"]
+
+  # The published npm package (`ts/`) has one devDependency, tsx.
+  - package-ecosystem: npm
+    directory: /ts
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(deps)"

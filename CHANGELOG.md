@@ -124,6 +124,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cargo +1.88 test --workspace`. `CONTRIBUTING.md` previously said 1.80,
   which does not build.
 
+### Security
+
+- CI pins every third-party action by commit SHA instead of by mutable tag, and
+  declares `permissions: contents: read`. A tag can be re-pointed by whoever
+  controls the action repository, which would have run arbitrary code with this
+  workflow's token.
+- `examples/gallery` moves to Vite 7 / `@vitejs/plugin-react` 5, clearing the
+  esbuild dev-server advisory (GHSA-67mh-4wv8-2f99) and the Vite 5 path
+  traversal reports. Dev-server-only and dev-dependency-only, so nothing
+  shipped was affected. `npm audit` is clean; the built gallery renders and
+  samples unchanged.
+- Added `SECURITY.md` (reporting channel and threat model) and
+  `.github/dependabot.yml` (Cargo, npm, GitHub Actions).
+
 ### Removed
 
 - `docs/internal/DELIVERY.md` (maintainer-only release-planning notes) is no
