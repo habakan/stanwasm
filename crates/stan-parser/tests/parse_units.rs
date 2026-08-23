@@ -15,7 +15,7 @@ parameters {
     let p = &prog.parameters[0];
     assert_eq!(p.name, "sigma");
     match &p.typ {
-        StanType::Real(Constraint::Lower(Expr::Num(v))) => assert_eq!(*v, 0.0),
+        StanType::Real(Constraint::Lower(Expr::IntNum(v))) => assert_eq!(*v, 0),
         other => panic!("unexpected type: {other:?}"),
     }
 }
@@ -30,8 +30,8 @@ parameters {
     let prog = parse(src).unwrap();
     match &prog.parameters[0].typ {
         StanType::Real(Constraint::LowerUpper(lo, hi)) => {
-            assert_eq!(lo, &Expr::Num(0.0));
-            assert_eq!(hi, &Expr::Num(1.0));
+            assert_eq!(lo, &Expr::IntNum(0));
+            assert_eq!(hi, &Expr::IntNum(1));
         }
         other => panic!("unexpected type: {other:?}"),
     }
@@ -72,7 +72,7 @@ model {
         Stmt::TargetIncr(Expr::Call(name, args)) if name == "sum" => match &args[0] {
             Expr::Call(seg, seg_args) if seg == "segment" => {
                 assert_eq!(seg_args.len(), 3);
-                assert_eq!(&seg_args[1], &Expr::Num(2.0));
+                assert_eq!(&seg_args[1], &Expr::IntNum(2));
             }
             other => panic!("expected segment call, got {other:?}"),
         },
@@ -91,8 +91,8 @@ parameters { real mu; }
     let prog = parse(src).unwrap();
     match &prog.data[0].typ {
         StanType::Array(size, elem) => {
-            assert_eq!(size, &Expr::Num(5.0));
-            assert!(matches!(elem.as_ref(), StanType::Int));
+            assert_eq!(size, &Expr::IntNum(5));
+            assert!(matches!(elem.as_ref(), StanType::Int(_)));
         }
         other => panic!("unexpected type: {other:?}"),
     }

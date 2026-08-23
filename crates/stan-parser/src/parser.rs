@@ -192,8 +192,9 @@ impl Parser {
                 Ok(StanType::Real(c))
             }
             Token::Kw(s) if s == "int" => {
-                let _ = self.parse_constraints()?; // e.g. int<lower=0>
-                Ok(StanType::Int)
+                // e.g. `int<lower=0> N;` — the bound is checked against the
+                // supplied data (see `Model::parse_and_load`).
+                Ok(StanType::Int(self.parse_constraints()?))
             }
             Token::Kw(s) if s == "vector" => {
                 let c = self.parse_constraints()?;
@@ -293,8 +294,25 @@ impl Parser {
                 self.consume();
                 Ok(Expr::UnOp("!".into(), Box::new(self.parse_unary()?)))
             }
-            _ => self.parse_postfix(),
+            _ => self.parse_power(),
         }
+    }
+
+    /// `^` is handled here rather than in the `prec` table because Stan gives
+    /// it two properties the precedence-climbing loop can't express:
+    /// it binds *tighter than unary minus* (`-a^2` is `-(a^2)`, not `(-a)^2`)
+    /// and it is *right-associative* (`2^3^2` is `2^(3^2)` = 512, not 64).
+    /// Recursing into `parse_unary` for the exponent gives both: the base
+    /// comes from `parse_postfix` (so a leading `-` never gets swallowed into
+    /// it), and the exponent may itself be a signed power (`a^-b`, `2^3^2`).
+    fn parse_power(&mut self) -> Result<Expr> {
+        let base = self.parse_postfix()?;
+        if matches!(self.peek(), Token::Caret) {
+            self.consume();
+            let exp = self.parse_unary()?;
+            return Ok(Expr::BinOp("^".into(), Box::new(base), Box::new(exp)));
+        }
+        Ok(base)
     }
 
     fn parse_postfix(&mut self) -> Result<Expr> {
@@ -309,10 +327,13 @@ impl Parser {
             if self.try_tok(&Token::Colon) {
                 let hi = self.parse_expr(0)?;
                 self.expect_tok(&Token::RBrack)?;
+                // `IntNum(1)`, not `Num(1.0)`: the length has to stay
+                // int-typed so `/` inside a slice bound keeps Stan's integer
+                // division semantics.
                 let len = Expr::BinOp(
                     "+".into(),
                     Box::new(Expr::BinOp("-".into(), Box::new(hi), Box::new(idx.clone()))),
-                    Box::new(Expr::Num(1.0)),
+                    Box::new(Expr::IntNum(1)),
                 );
                 e = Expr::Call("segment".into(), vec![e, idx, len]);
             } else {
@@ -333,6 +354,10 @@ impl Parser {
             Token::Num(v) => {
                 self.consume();
                 Ok(Expr::Num(v))
+            }
+            Token::IntNum(v) => {
+                self.consume();
+                Ok(Expr::IntNum(v))
             }
             Token::Id(name) | Token::Kw(name) => {
                 self.consume();
@@ -665,7 +690,7 @@ fn prec(tok: &Token) -> i32 {
         Token::Lt | Token::Gt | Token::Le | Token::Ge => 4,
         Token::Plus | Token::Minus => 6,
         Token::Star | Token::Slash => 7,
-        Token::Caret => 8,
+        // `Token::Caret` is deliberately absent: see `parse_power`.
         _ => -1,
     }
 }

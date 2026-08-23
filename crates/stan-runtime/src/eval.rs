@@ -7,8 +7,8 @@ use crate::ops::{
     v_abs, v_add, v_div, v_exp, v_inv_logit, v_lgamma, v_log, v_logit, v_mul, v_neg, v_phi, v_pow,
     v_sqrt, v_sub, v_tanh,
 };
-use crate::value::Val;
-use stan_ast::{Expr, Stmt};
+use crate::value::{Shape, Val};
+use stan_ast::{Expr, StanType, Stmt};
 use stan_autodiff::Tape;
 
 type Result<T> = std::result::Result<T, EvalError>;
@@ -20,6 +20,7 @@ pub fn eval_plain(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
 pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
     match expr {
         Expr::Num(v) => Ok(Val::Num(*v)),
+        Expr::IntNum(v) => Ok(Val::Num(*v as f64)),
         Expr::Var(n) => env
             .get(n)
             .cloned()
@@ -39,20 +40,32 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 check_no_param_branch(env, &lv)?;
                 check_no_param_branch(env, &rv)?;
             }
+            check_binop_shapes(op, &lv, &rv)?;
             Ok(match op.as_str() {
                 "+" => v_add(t, &lv, &rv),
                 "-" => v_sub(t, &lv, &rv),
                 "*" => v_mul(t, &lv, &rv),
+                // Stan is statically typed and `int / int` truncates toward
+                // zero (`N / 2` with `N = 3` is 1, not 1.5). Int-ness is a
+                // property of the *declarations*, not of the runtime value,
+                // so it's decided from the expression tree.
+                "/" if is_int_expr(l, env) && is_int_expr(r, env) => {
+                    let denom = rv.to_f64(t)?;
+                    if denom == 0.0 {
+                        return Err(EvalError::IntDivisionByZero);
+                    }
+                    Val::Num((lv.to_f64(t)? / denom).trunc())
+                }
                 "/" => v_div(t, &lv, &rv),
                 "^" => v_pow(t, &lv, &rv),
-                "==" => bool_val(lv.to_f64(t) == rv.to_f64(t)),
-                "!=" => bool_val(lv.to_f64(t) != rv.to_f64(t)),
-                "<" => bool_val(lv.to_f64(t) < rv.to_f64(t)),
-                ">" => bool_val(lv.to_f64(t) > rv.to_f64(t)),
-                "<=" => bool_val(lv.to_f64(t) <= rv.to_f64(t)),
-                ">=" => bool_val(lv.to_f64(t) >= rv.to_f64(t)),
-                "&&" => bool_val(lv.to_f64(t) != 0.0 && rv.to_f64(t) != 0.0),
-                "||" => bool_val(lv.to_f64(t) != 0.0 || rv.to_f64(t) != 0.0),
+                "==" => bool_val(lv.to_f64(t)? == rv.to_f64(t)?),
+                "!=" => bool_val(lv.to_f64(t)? != rv.to_f64(t)?),
+                "<" => bool_val(lv.to_f64(t)? < rv.to_f64(t)?),
+                ">" => bool_val(lv.to_f64(t)? > rv.to_f64(t)?),
+                "<=" => bool_val(lv.to_f64(t)? <= rv.to_f64(t)?),
+                ">=" => bool_val(lv.to_f64(t)? >= rv.to_f64(t)?),
+                "&&" => bool_val(lv.to_f64(t)? != 0.0 && rv.to_f64(t)? != 0.0),
+                "||" => bool_val(lv.to_f64(t)? != 0.0 || rv.to_f64(t)? != 0.0),
                 // Unreachable in practice: the parser only ever produces the
                 // operator strings matched above.
                 _ => Val::Num(0.0),
@@ -62,12 +75,12 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
             let v = eval_expr(t, e, env)?;
             Ok(match op.as_str() {
                 "-" => v_neg(t, &v),
-                "!" => bool_val(v.to_f64(t) == 0.0),
+                "!" => bool_val(v.to_f64(t)? == 0.0),
                 _ => v,
             })
         }
         Expr::Index(arr_e, idx_e) => {
-            let one_based = eval_expr(t, idx_e, env)?.to_i32(t);
+            let one_based = eval_expr(t, idx_e, env)?.to_i32(t)?;
             let idx = one_based - 1;
             let arr = eval_expr(t, arr_e, env)?;
             match arr {
@@ -91,6 +104,66 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
 
 fn bool_val(b: bool) -> Val {
     Val::Num(if b { 1.0 } else { 0.0 })
+}
+
+/// Whether an expression has an integral Stan type. Only `/` cares (integer
+/// division), but the answer has to propagate through the arithmetic that
+/// feeds it: `(N + 1) / 2` is still integer division.
+fn is_int_expr(e: &Expr, env: &Env) -> bool {
+    match e {
+        Expr::IntNum(_) => true,
+        Expr::Num(_) => false,
+        Expr::Var(n) => env.is_int(n),
+        // `y[i]` is an int exactly when `y` is an `array[...] int`.
+        Expr::Index(base, _) => is_int_expr(base, env),
+        Expr::UnOp(op, a) => op == "-" && is_int_expr(a, env),
+        Expr::BinOp(op, l, r) => match op.as_str() {
+            // `^` yields a real in Stan even for int operands.
+            "+" | "-" | "*" | "/" => is_int_expr(l, env) && is_int_expr(r, env),
+            // Comparisons and logical ops are int-valued (0/1) in Stan.
+            "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" => true,
+            _ => false,
+        },
+        Expr::Call(..) => false,
+    }
+}
+
+/// Whether a declared type binds an integral value (`int`, `array[...] int`).
+pub fn stan_type_is_int(typ: &StanType) -> bool {
+    match typ {
+        StanType::Int(_) => true,
+        StanType::Array(_, elem) => stan_type_is_int(elem),
+        _ => false,
+    }
+}
+
+/// Reject operand shapes this runtime would otherwise answer *wrongly*.
+///
+/// `ops::v_*` broadcast element-wise and `zip` silently truncates, so without
+/// this check `vector[3] + vector[2]` quietly returns a length-2 vector and
+/// `X * beta` (matrix × vector) quietly returns the matrix with each row
+/// scaled by one element of `beta` — neither is what Stan computes.
+fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
+    use Shape::*;
+    let (ls, rs) = (lhs.shape(), rhs.shape());
+    let ok = match (ls, rs) {
+        (Scalar, Scalar) => true,
+        // scalar ⊙ container broadcasts element-wise, in both directions.
+        (Scalar, _) | (_, Scalar) => true,
+        (Vector(a), Vector(b)) => a == b,
+        (Matrix(a), Matrix(b)) => a == b,
+        // Matrix × vector / vector × matrix is linear algebra, not
+        // element-wise broadcast — not implemented (see `EvalError::NotAScalar`).
+        (Matrix(_), Vector(_)) | (Vector(_), Matrix(_)) => false,
+    };
+    if ok {
+        return Ok(());
+    }
+    Err(EvalError::ShapeMismatch {
+        op: op.to_string(),
+        lhs: ls.to_string(),
+        rhs: rs.to_string(),
+    })
 }
 
 fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> {
@@ -126,9 +199,18 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             v_div(t, &acc, &Val::Num(n))
         }
         ("segment", [Val::Vec(xs), start_v, len_v]) => {
-            let start = start_v.to_i32(t) as usize - 1;
-            let len = len_v.to_i32(t) as usize;
-            Val::Vec(xs.iter().skip(start).take(len).cloned().collect())
+            let start_1b = start_v.to_i32(t)?;
+            let len = len_v.to_i32(t)?;
+            // `skip`/`take` would silently return a short vector for an
+            // out-of-range slice; a range index is a bounds error in Stan.
+            if start_1b < 1 || len < 0 || (start_1b - 1 + len) as usize > xs.len() {
+                return Err(EvalError::IndexOutOfBounds {
+                    index: start_1b + len - 1,
+                    len: xs.len(),
+                });
+            }
+            let start = (start_1b - 1) as usize;
+            Val::Vec(xs[start..start + len as usize].to_vec())
         }
         // distribution _lpdf / _lpmf forms used as expressions
         (n, args) if n.ends_with("_lpdf") || n.ends_with("_lpmf") => {
@@ -139,10 +221,8 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 let x = &args[0];
                 let rest: Vec<Val> = args[1..].to_vec();
                 match x {
-                    Val::Vec(xs) => eval_sample_vec(t, base, xs, &rest)
-                        .ok_or_else(|| EvalError::UnknownDistribution(base.to_string()))?,
-                    _ => eval_dist(t, base, x, &rest)
-                        .ok_or_else(|| EvalError::UnknownDistribution(base.to_string()))?,
+                    Val::Vec(xs) => eval_sample_vec(t, base, xs, &rest)?,
+                    _ => eval_dist(t, base, x, &rest)?,
                 }
             }
         }
@@ -210,10 +290,8 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
                 .map(|a| eval_expr(t, a, env))
                 .collect::<Result<_>>()?;
             let v = match &x {
-                Val::Vec(xs) => eval_sample_vec(t, dist, xs, &evaled_args)
-                    .ok_or_else(|| EvalError::UnknownDistribution(dist.clone()))?,
-                _ => eval_dist(t, dist, &x, &evaled_args)
-                    .ok_or_else(|| EvalError::UnknownDistribution(dist.clone()))?,
+                Val::Vec(xs) => eval_sample_vec(t, dist, xs, &evaled_args)?,
+                _ => eval_dist(t, dist, &x, &evaled_args)?,
             };
             Ok(Flow::Val(v))
         }
@@ -241,21 +319,26 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
             env.set(name, r);
             Ok(Flow::Val(Val::Num(0.0)))
         }
-        Stmt::LocalDecl(_typ, name, init) => {
+        Stmt::LocalDecl(typ, name, init) => {
             let v = match init {
                 Some(e) => eval_expr(t, e, env)?,
-                None => Val::Num(0.0),
+                None => default_for_type(t, typ, env)?,
             };
-            env.set(name, v);
+            if stan_type_is_int(typ) {
+                env.set_int_typed(name, v);
+            } else {
+                env.set(name, v);
+            }
             Ok(Flow::Val(Val::Num(0.0)))
         }
         Stmt::For(var, lo_e, hi_e, body) => {
-            let lo = eval_expr(t, lo_e, env)?.to_i32(t);
-            let hi = eval_expr(t, hi_e, env)?.to_i32(t);
+            let lo = eval_expr(t, lo_e, env)?.to_i32(t)?;
+            let hi = eval_expr(t, hi_e, env)?.to_i32(t)?;
             let saved_len = env.len();
             let mut acc = Val::Num(0.0);
             for i in lo..=hi {
-                env.set(var, Val::Num(i as f64));
+                // Loop counters are `int` in Stan, so `i / 2` truncates.
+                env.set_int_typed(var, Val::Num(i as f64));
                 match eval_block(t, body, env)? {
                     Flow::Val(v) | Flow::Continue(v) => acc = v_add(t, &acc, &v),
                     Flow::Break(v) => {
@@ -274,7 +357,7 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
             loop {
                 let c = eval_expr(t, cond, env)?;
                 check_no_param_branch(env, &c)?;
-                if c.to_f64(t) == 0.0 {
+                if c.to_f64(t)? == 0.0 {
                     break;
                 }
                 iters += 1;
@@ -294,7 +377,7 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
         Stmt::If(cond, then_body, else_body) => {
             let c = eval_expr(t, cond, env)?;
             check_no_param_branch(env, &c)?;
-            let body = if c.to_f64(t) != 0.0 {
+            let body = if c.to_f64(t)? != 0.0 {
                 then_body
             } else {
                 else_body
@@ -305,6 +388,40 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
         Stmt::Continue => Ok(Flow::Continue(Val::Num(0.0))),
         Stmt::Return(_) => Ok(Flow::Val(Val::Num(0.0))),
     }
+}
+
+/// Zero value matching a declaration's shape, used when a local is declared
+/// without an initializer (`vector[N] y_rep;`). Sizing it correctly matters
+/// for `generated quantities`, where the declared shape decides how many
+/// columns the draw matrix gets.
+fn default_for_type(t: &mut Tape, typ: &StanType, env: &Env) -> Result<Val> {
+    fn size_of(t: &mut Tape, e: &Expr, env: &Env) -> Result<usize> {
+        Ok(eval_expr(t, e, env)?.to_i32(t)?.max(0) as usize)
+    }
+    Ok(match typ {
+        StanType::Real(_) | StanType::Int(_) => Val::Num(0.0),
+        StanType::Vector(n, _)
+        | StanType::Simplex(n)
+        | StanType::Ordered(n)
+        | StanType::PositiveOrdered(n)
+        | StanType::UnitVector(n) => Val::Vec(vec![Val::Num(0.0); size_of(t, n, env)?]),
+        StanType::Matrix(r, c) => {
+            let (rows, cols) = (size_of(t, r, env)?, size_of(t, c, env)?);
+            Val::Vec(vec![Val::Vec(vec![Val::Num(0.0); cols]); rows])
+        }
+        StanType::CholeskyFactorCorr(k)
+        | StanType::CholeskyFactorCov(k)
+        | StanType::CovMatrix(k)
+        | StanType::CorrMatrix(k) => {
+            let kk = size_of(t, k, env)?;
+            Val::Vec(vec![Val::Vec(vec![Val::Num(0.0); kk]); kk])
+        }
+        StanType::Array(n, elem) => {
+            let len = size_of(t, n, env)?;
+            let proto = default_for_type(t, elem, env)?;
+            Val::Vec(vec![proto; len])
+        }
+    })
 }
 
 /// See `Env::strict_no_param_branch` — refuses to freeze a parameter-dependent

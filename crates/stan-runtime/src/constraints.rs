@@ -1,8 +1,15 @@
 //! Constraint transforms with Jacobian.
 //!
-//! Phase 3 covers the scalar real cases (none, lower, upper, lower_upper)
-//! plus vectors with element-wise constraints. Multivariate transforms
-//! (simplex, ordered, cholesky_factor_*) are not yet ported.
+//! Covered: scalar reals (none, lower, upper, lower_upper), vectors and
+//! arrays with element-wise constraints, unconstrained matrices, and the
+//! shape transforms `simplex`, `ordered`, `positive_ordered`,
+//! `cholesky_factor_corr`.
+//!
+//! Anything else (`cov_matrix`, `corr_matrix`, `cholesky_factor_cov`,
+//! `unit_vector`) is rejected with `EvalError::UnsupportedConstraint` rather
+//! than passed through untransformed: an untransformed declaration samples the
+//! parameter on the wrong space with no Jacobian, which yields a wrong
+//! posterior with no outward sign that anything went wrong.
 
 use crate::env::Env;
 use crate::error::EvalError;
@@ -15,7 +22,7 @@ use stan_autodiff::Tape;
 pub fn param_dims(typ: &StanType, env: &Env) -> usize {
     match typ {
         StanType::Real(_) => 1,
-        StanType::Int => 0,
+        StanType::Int(_) => 0,
         StanType::Vector(size, _) => eval_plain_int(size, env),
         StanType::Matrix(r, c) => eval_plain_int(r, env) * eval_plain_int(c, env),
         StanType::Simplex(k) => eval_plain_int(k, env).saturating_sub(1),
@@ -207,9 +214,75 @@ pub fn constrain(
             }
             (Val::Vec(mat), log_jac)
         }
-        // Phase 3 fallback: pass-through. Higher-order constraints port later.
-        _ => (Val::Vec(raw.to_vec()), Val::Num(0.0)),
+        // array[N] T — constrain each element independently and sum the
+        // Jacobians. Without this, `array[N] real<lower=0> s;` fell through to
+        // the old pass-through arm: no transform, no Jacobian, negative values
+        // accepted as if they were positive.
+        StanType::Array(_, elem) => {
+            let chunk = param_dims(elem, env);
+            if chunk == 0 {
+                return Err(EvalError::UnsupportedConstraint(format!(
+                    "array of {}",
+                    type_name(elem)
+                )));
+            }
+            let mut out = Vec::with_capacity(raw.len() / chunk);
+            let mut log_jac = Val::Num(0.0);
+            for part in raw.chunks(chunk) {
+                let (c, j) = constrain(t, elem, part, env)?;
+                log_jac = v_add(t, &log_jac, &j);
+                out.push(c);
+            }
+            (Val::Vec(out), log_jac)
+        }
+        // matrix[R, C] — unconstrained, but still needs reshaping into rows so
+        // that indexing (`M[i, j]`) and the matrix-shaped distributions see the
+        // structure they expect instead of one flat vector.
+        StanType::Matrix(r_e, c_e) => {
+            let cols = match eval_plain(t, c_e, env)? {
+                Val::Num(v) => v as usize,
+                other => return Err(bad_size(c_e, &other)),
+            };
+            let rows = match eval_plain(t, r_e, env)? {
+                Val::Num(v) => v as usize,
+                other => return Err(bad_size(r_e, &other)),
+            };
+            if cols == 0 || rows * cols != raw.len() {
+                return Err(EvalError::UnsupportedConstraint(format!(
+                    "matrix[{rows}, {cols}] (sizes must be positive data values)"
+                )));
+            }
+            let mat = raw.chunks(cols).map(|row| Val::Vec(row.to_vec())).collect();
+            (Val::Vec(mat), Val::Num(0.0))
+        }
+        other => return Err(EvalError::UnsupportedConstraint(type_name(other))),
     })
+}
+
+/// Human-readable Stan type name, for `UnsupportedConstraint` messages.
+fn type_name(typ: &StanType) -> String {
+    match typ {
+        StanType::Real(_) => "real".into(),
+        StanType::Int(_) => "int (parameters cannot be integer-valued in Stan)".into(),
+        StanType::Vector(..) => "vector".into(),
+        StanType::Matrix(..) => "matrix".into(),
+        StanType::Simplex(_) => "simplex".into(),
+        StanType::Ordered(_) => "ordered".into(),
+        StanType::PositiveOrdered(_) => "positive_ordered".into(),
+        StanType::Array(_, elem) => format!("array[...] {}", type_name(elem)),
+        StanType::CholeskyFactorCorr(_) => "cholesky_factor_corr".into(),
+        StanType::CholeskyFactorCov(_) => "cholesky_factor_cov".into(),
+        StanType::CovMatrix(_) => "cov_matrix".into(),
+        StanType::CorrMatrix(_) => "corr_matrix".into(),
+        StanType::UnitVector(_) => "unit_vector".into(),
+    }
+}
+
+fn bad_size(expr: &stan_ast::Expr, got: &Val) -> EvalError {
+    EvalError::UnsupportedConstraint(format!(
+        "size expression {expr:?} must evaluate to a plain data integer, got {}",
+        got.shape()
+    ))
 }
 
 fn apply_upper(t: &mut Tape, raw: &Val, upper: &Val) -> (Val, Val) {

@@ -94,8 +94,14 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
                 }
             }
             let s = std::str::from_utf8(&bytes[start..i]).expect("ascii numeric");
-            let v: f64 = s.parse().unwrap_or(0.0);
-            tokens.push(Token::Num(v));
+            // A literal with no `.` and no exponent is an *int* in Stan, which
+            // changes what `/` means (integer division). Anything that doesn't
+            // fit i64 falls back to the real path rather than wrapping.
+            let is_int = !s.contains(['.', 'e', 'E']);
+            match (is_int, s.parse::<i64>()) {
+                (true, Ok(iv)) => tokens.push(Token::IntNum(iv)),
+                _ => tokens.push(Token::Num(s.parse().unwrap_or(0.0))),
+            }
             continue;
         }
 

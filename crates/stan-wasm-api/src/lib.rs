@@ -175,7 +175,9 @@ impl StanModel {
                 init.len()
             )));
         }
-        let total = (num_warmup + num_draws) as u64;
+        // Widen before adding: `u32 + u32` wraps, and a wrapped total
+        // silently becomes a different (possibly enormous) run length.
+        let total = num_warmup as u64 + num_draws as u64;
 
         // Take the Compiled out for nuts-rs (CpuMath consumes by value).
         let compiled = self
@@ -319,7 +321,7 @@ impl StanModel {
         }
         self.step = Some(StepSampler {
             chain,
-            total: num_warmup + num_draws,
+            total: num_warmup.saturating_add(num_draws),
             count: 0,
         });
         Ok(())
@@ -534,7 +536,9 @@ impl StanModel {
                 init.len()
             )));
         }
-        let total = (num_warmup + num_draws) as u64;
+        // Widen before adding: `u32 + u32` wraps, and a wrapped total
+        // silently becomes a different (possibly enormous) run length.
+        let total = num_warmup as u64 + num_draws as u64;
 
         let math = CpuMath::new(AotLogp {
             n_params: n,

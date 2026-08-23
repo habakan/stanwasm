@@ -139,33 +139,39 @@ pub fn dispatch(t: &Tape, base: &str, args: &[Val], env: &Env) -> Result<Val> {
         .ok_or_else(|| EvalError::RngOutsideGeneratedQuantities(base.to_string()))?;
     let mut rng = rng_handle.borrow_mut();
     Ok(match (base, args) {
-        ("normal", [mu, sigma]) => Val::Num(normal_rng(&mut *rng, mu.to_f64(t), sigma.to_f64(t))?),
+        ("normal", [mu, sigma]) => {
+            Val::Num(normal_rng(&mut *rng, mu.to_f64(t)?, sigma.to_f64(t)?)?)
+        }
         ("std_normal", []) => Val::Num(normal_rng(&mut *rng, 0.0, 1.0)?),
-        ("exponential", [lambda]) => Val::Num(exponential_rng(&mut *rng, lambda.to_f64(t))?),
-        ("half_normal", [sigma]) => Val::Num(half_normal_rng(&mut *rng, sigma.to_f64(t))?),
-        ("cauchy", [mu, sigma]) => Val::Num(cauchy_rng(&mut *rng, mu.to_f64(t), sigma.to_f64(t))?),
+        ("exponential", [lambda]) => Val::Num(exponential_rng(&mut *rng, lambda.to_f64(t)?)?),
+        ("half_normal", [sigma]) => Val::Num(half_normal_rng(&mut *rng, sigma.to_f64(t)?)?),
+        ("cauchy", [mu, sigma]) => {
+            Val::Num(cauchy_rng(&mut *rng, mu.to_f64(t)?, sigma.to_f64(t)?)?)
+        }
         ("student_t", [nu, mu, sigma]) => Val::Num(student_t_rng(
             &mut *rng,
-            nu.to_f64(t),
-            mu.to_f64(t),
-            sigma.to_f64(t),
+            nu.to_f64(t)?,
+            mu.to_f64(t)?,
+            sigma.to_f64(t)?,
         )?),
         ("lognormal", [mu, sigma]) => {
-            Val::Num(lognormal_rng(&mut *rng, mu.to_f64(t), sigma.to_f64(t))?)
+            Val::Num(lognormal_rng(&mut *rng, mu.to_f64(t)?, sigma.to_f64(t)?)?)
         }
         ("gamma", [alpha, beta]) => {
-            Val::Num(gamma_rng(&mut *rng, alpha.to_f64(t), beta.to_f64(t))?)
+            Val::Num(gamma_rng(&mut *rng, alpha.to_f64(t)?, beta.to_f64(t)?)?)
         }
-        ("beta", [a, b]) => Val::Num(beta_rng(&mut *rng, a.to_f64(t), b.to_f64(t))?),
-        ("uniform", [lo, hi]) => Val::Num(uniform_rng(&mut *rng, lo.to_f64(t), hi.to_f64(t))?),
-        ("bernoulli", [theta]) => Val::Num(bernoulli_rng(&mut *rng, theta.to_f64(t))?),
-        ("bernoulli_logit", [alpha]) => Val::Num(bernoulli_logit_rng(&mut *rng, alpha.to_f64(t))?),
-        ("poisson", [lambda]) => Val::Num(poisson_rng(&mut *rng, lambda.to_f64(t))?),
-        ("neg_binomial_2", [mu, phi]) => {
-            Val::Num(neg_binomial_2_rng(&mut *rng, mu.to_f64(t), phi.to_f64(t))?)
-        }
+        ("beta", [a, b]) => Val::Num(beta_rng(&mut *rng, a.to_f64(t)?, b.to_f64(t)?)?),
+        ("uniform", [lo, hi]) => Val::Num(uniform_rng(&mut *rng, lo.to_f64(t)?, hi.to_f64(t)?)?),
+        ("bernoulli", [theta]) => Val::Num(bernoulli_rng(&mut *rng, theta.to_f64(t)?)?),
+        ("bernoulli_logit", [alpha]) => Val::Num(bernoulli_logit_rng(&mut *rng, alpha.to_f64(t)?)?),
+        ("poisson", [lambda]) => Val::Num(poisson_rng(&mut *rng, lambda.to_f64(t)?)?),
+        ("neg_binomial_2", [mu, phi]) => Val::Num(neg_binomial_2_rng(
+            &mut *rng,
+            mu.to_f64(t)?,
+            phi.to_f64(t)?,
+        )?),
         ("dirichlet", [Val::Vec(alpha)]) => {
-            let a: Vec<f64> = alpha.iter().map(|v| v.to_f64(t)).collect();
+            let a: Vec<f64> = alpha.iter().map(|v| v.to_f64(t)).collect::<Result<_>>()?;
             Val::Vec(
                 dirichlet_rng(&mut *rng, &a)?
                     .into_iter()
@@ -174,14 +180,14 @@ pub fn dispatch(t: &Tape, base: &str, args: &[Val], env: &Env) -> Result<Val> {
             )
         }
         ("multi_normal_cholesky", [Val::Vec(mu), Val::Vec(l_rows)]) => {
-            let mu: Vec<f64> = mu.iter().map(|v| v.to_f64(t)).collect();
+            let mu: Vec<f64> = mu.iter().map(|v| v.to_f64(t)).collect::<Result<_>>()?;
             let l: Vec<Vec<f64>> = l_rows
                 .iter()
                 .map(|row| match row {
-                    Val::Vec(r) => r.iter().map(|v| v.to_f64(t)).collect(),
-                    _ => Vec::new(),
+                    Val::Vec(r) => r.iter().map(|v| v.to_f64(t)).collect::<Result<_>>(),
+                    _ => Ok(Vec::new()),
                 })
-                .collect();
+                .collect::<Result<_>>()?;
             Val::Vec(
                 multi_normal_cholesky_rng(&mut *rng, &mu, &l)?
                     .into_iter()

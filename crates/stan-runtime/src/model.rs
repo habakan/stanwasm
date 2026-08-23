@@ -6,26 +6,27 @@ use std::rc::Rc;
 use crate::constraints::{constrain, param_dims};
 use crate::env::Env;
 use crate::error::EvalError;
-use crate::eval::{eval_expr, eval_stmt};
+use crate::eval::{eval_expr, eval_stmt, stan_type_is_int};
 use crate::ops::v_add;
 use crate::value::Val;
 use rand::rngs::ChaCha8Rng;
-use stan_ast::{StanProgram, StanType, Stmt};
+use stan_ast::{Constraint, StanProgram, StanType, Stmt};
 use stan_autodiff::Tape;
 use thiserror::Error;
 
 /// Flatten a `Val` (scalar / vector / matrix-as-vec-of-rows) into `out`,
 /// reading tape-node primals through `tape`. Matches the flattening order
 /// used by `param_names`/`gen_quantity_names`.
-fn flatten_val(tape: &Tape, v: &Val, out: &mut Vec<f64>) {
+fn flatten_val(tape: &Tape, v: &Val, out: &mut Vec<f64>) -> Result<(), EvalError> {
     match v {
         Val::Vec(xs) => {
             for x in xs {
-                flatten_val(tape, x, out);
+                flatten_val(tape, x, out)?;
             }
         }
-        other => out.push(other.to_f64(tape)),
+        other => out.push(other.to_f64(tape)?),
     }
+    Ok(())
 }
 
 /// Push flattened names for one declared variable, matching Stan's naming
@@ -70,6 +71,237 @@ fn eval_int(expr: &stan_ast::Expr, env: &Env) -> usize {
 pub enum ModelError {
     #[error("parse: {0}")]
     Parse(#[from] stan_parser::ParseError),
+    #[error("data block: {0}")]
+    Data(#[from] DataMismatch),
+}
+
+/// A `data { ... }` declaration the supplied JSON doesn't satisfy.
+///
+/// Every one of these used to be accepted silently: a missing field read as
+/// `undefined variable` only if the model happened to use it, a wrong-length
+/// vector was zipped down to the shorter of the two, and `int<lower=0> N`
+/// accepted `-5`. All of them produce a wrong answer rather than an error, so
+/// they are checked once at load.
+#[derive(Debug, Error)]
+pub enum DataMismatch {
+    #[error("`{name}` is declared in the data block but missing from the data")]
+    Missing { name: String },
+    #[error("`{name}`: expected {expected}, got {got}")]
+    Shape {
+        name: String,
+        expected: String,
+        got: String,
+    },
+    #[error("`{name}`{at} is declared `int` but the value {value} is not a whole number")]
+    NotInteger {
+        name: String,
+        at: String,
+        value: f64,
+    },
+    #[error("`{name}`{at}: value {value} violates the declared bound {bound}")]
+    Constraint {
+        name: String,
+        at: String,
+        value: f64,
+        bound: String,
+    },
+    #[error("`{name}`: size expression does not evaluate to a positive integer from earlier data")]
+    BadSize { name: String },
+}
+
+/// Concrete expected shape of a data declaration, with all size expressions
+/// resolved against the data bound so far.
+#[derive(Debug, Clone, PartialEq)]
+enum Shaped {
+    Scalar,
+    Vector(usize),
+    Matrix(usize, usize),
+    Array(usize, Box<Shaped>),
+}
+
+impl std::fmt::Display for Shaped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Shaped::Scalar => write!(f, "a scalar"),
+            Shaped::Vector(n) => write!(f, "a length-{n} vector"),
+            Shaped::Matrix(r, c) => write!(f, "a {r}x{c} matrix"),
+            Shaped::Array(n, e) => write!(f, "an array of {n} x ({e})"),
+        }
+    }
+}
+
+fn describe(v: &Val) -> String {
+    match v {
+        Val::Vec(xs) => match xs.first() {
+            Some(Val::Vec(row)) => format!("a {}x{} nested array", xs.len(), row.len()),
+            _ => format!("a length-{} array", xs.len()),
+        },
+        _ => "a scalar".to_string(),
+    }
+}
+
+/// Resolve a declared type's sizes against the data bound so far. Sizes may
+/// reference earlier data declarations (`int N; vector[N] x;`), which is why
+/// this runs in declaration order.
+fn shape_of(name: &str, typ: &StanType, env: &Env) -> Result<Shaped, DataMismatch> {
+    let size = |e: &stan_ast::Expr| -> Result<usize, DataMismatch> {
+        let mut t = Tape::new();
+        match eval_expr(&mut t, e, env) {
+            Ok(Val::Num(v)) if v >= 0.0 && v.fract() == 0.0 => Ok(v as usize),
+            _ => Err(DataMismatch::BadSize {
+                name: name.to_string(),
+            }),
+        }
+    };
+    Ok(match typ {
+        StanType::Real(_) | StanType::Int(_) => Shaped::Scalar,
+        StanType::Vector(n, _)
+        | StanType::Simplex(n)
+        | StanType::Ordered(n)
+        | StanType::PositiveOrdered(n)
+        | StanType::UnitVector(n) => Shaped::Vector(size(n)?),
+        StanType::Matrix(r, c) => Shaped::Matrix(size(r)?, size(c)?),
+        StanType::CholeskyFactorCorr(k)
+        | StanType::CholeskyFactorCov(k)
+        | StanType::CovMatrix(k)
+        | StanType::CorrMatrix(k) => {
+            let kk = size(k)?;
+            Shaped::Matrix(kk, kk)
+        }
+        StanType::Array(n, elem) => Shaped::Array(size(n)?, Box::new(shape_of(name, elem, env)?)),
+    })
+}
+
+/// Element constraint carried by a declared type, if any.
+fn elem_constraint(typ: &StanType) -> &Constraint {
+    match typ {
+        StanType::Real(c) | StanType::Int(c) | StanType::Vector(_, c) => c,
+        StanType::Array(_, elem) => elem_constraint(elem),
+        _ => &Constraint::None,
+    }
+}
+
+/// Walk a supplied value against the resolved shape, checking lengths and —
+/// at the leaves — integrality and declared bounds.
+fn check_value(
+    name: &str,
+    at: &str,
+    val: &Val,
+    shape: &Shaped,
+    is_int: bool,
+    bounds: (Option<f64>, Option<f64>),
+) -> Result<(), DataMismatch> {
+    let mismatch = || DataMismatch::Shape {
+        name: name.to_string(),
+        expected: shape.to_string(),
+        got: describe(val),
+    };
+    match shape {
+        Shaped::Scalar => {
+            let Val::Num(x) = val else {
+                return Err(mismatch());
+            };
+            if is_int && x.fract() != 0.0 {
+                return Err(DataMismatch::NotInteger {
+                    name: name.to_string(),
+                    at: at.to_string(),
+                    value: *x,
+                });
+            }
+            if let Some(lo) = bounds.0 {
+                if *x < lo {
+                    return Err(DataMismatch::Constraint {
+                        name: name.to_string(),
+                        at: at.to_string(),
+                        value: *x,
+                        bound: format!("lower={lo}"),
+                    });
+                }
+            }
+            if let Some(hi) = bounds.1 {
+                if *x > hi {
+                    return Err(DataMismatch::Constraint {
+                        name: name.to_string(),
+                        at: at.to_string(),
+                        value: *x,
+                        bound: format!("upper={hi}"),
+                    });
+                }
+            }
+            Ok(())
+        }
+        Shaped::Vector(n) => {
+            let Val::Vec(xs) = val else {
+                return Err(mismatch());
+            };
+            if xs.len() != *n {
+                return Err(mismatch());
+            }
+            for (i, x) in xs.iter().enumerate() {
+                let at = format!("{at}[{}]", i + 1);
+                check_value(name, &at, x, &Shaped::Scalar, is_int, bounds)?;
+            }
+            Ok(())
+        }
+        Shaped::Matrix(r, c) => {
+            let Val::Vec(rows) = val else {
+                return Err(mismatch());
+            };
+            if rows.len() != *r {
+                return Err(mismatch());
+            }
+            for (i, row) in rows.iter().enumerate() {
+                let at = format!("{at}[{}]", i + 1);
+                check_value(name, &at, row, &Shaped::Vector(*c), is_int, bounds)?;
+            }
+            Ok(())
+        }
+        Shaped::Array(n, elem) => {
+            let Val::Vec(xs) = val else {
+                return Err(mismatch());
+            };
+            if xs.len() != *n {
+                return Err(mismatch());
+            }
+            for (i, x) in xs.iter().enumerate() {
+                let at = format!("{at}[{}]", i + 1);
+                check_value(name, &at, x, elem, is_int, bounds)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Check every `data` declaration against the supplied values, and record
+/// which bindings are int-typed (Stan's `/` is integer division on two ints).
+fn validate_data(prog: &StanProgram, env: &mut Env) -> Result<(), DataMismatch> {
+    for decl in &prog.data {
+        let Some(val) = env.get(&decl.name).cloned() else {
+            return Err(DataMismatch::Missing {
+                name: decl.name.clone(),
+            });
+        };
+        let shape = shape_of(&decl.name, &decl.typ, env)?;
+        let is_int = stan_type_is_int(&decl.typ);
+        let bounds = {
+            let mut t = Tape::new();
+            let mut resolve = |e: &stan_ast::Expr| match eval_expr(&mut t, e, env) {
+                Ok(Val::Num(v)) => Some(v),
+                _ => None,
+            };
+            match elem_constraint(&decl.typ) {
+                Constraint::None => (None, None),
+                Constraint::Lower(lo) => (resolve(lo), None),
+                Constraint::Upper(hi) => (None, resolve(hi)),
+                Constraint::LowerUpper(lo, hi) => (resolve(lo), resolve(hi)),
+            }
+        };
+        check_value(&decl.name, "", &val, &shape, is_int, bounds)?;
+        if is_int {
+            env.set_int_typed(&decl.name, val);
+        }
+    }
+    Ok(())
 }
 
 pub struct Model {
@@ -92,8 +324,9 @@ impl Model {
         }
     }
 
-    pub fn parse_and_load(stan_src: &str, data_env: Env) -> Result<Self, ModelError> {
+    pub fn parse_and_load(stan_src: &str, mut data_env: Env) -> Result<Self, ModelError> {
         let prog = stan_parser::parse(stan_src)?;
+        validate_data(&prog, &mut data_env)?;
         Ok(Self::new(prog, data_env))
     }
 
@@ -168,13 +401,13 @@ impl Model {
             let v = env
                 .get(&decl.name)
                 .unwrap_or_else(|| panic!("internal: missing parameter {}", decl.name));
-            flatten_val(&tape, v, &mut out);
+            flatten_val(&tape, v, &mut out)?;
         }
         for decl in &self.prog.transformed_params {
             let v = env
                 .get(&decl.name)
                 .unwrap_or_else(|| panic!("internal: missing transformed parameter {}", decl.name));
-            flatten_val(&tape, v, &mut out);
+            flatten_val(&tape, v, &mut out)?;
         }
         Ok(out)
     }
@@ -201,7 +434,7 @@ impl Model {
                 let v = env
                     .get(name)
                     .unwrap_or_else(|| panic!("internal: missing generated quantity {name}"));
-                flatten_val(&tape, v, &mut out);
+                flatten_val(&tape, v, &mut out)?;
             }
         }
         Ok(out)
@@ -276,6 +509,6 @@ impl Model {
             lp = v_add(tape, &lp, &r);
         }
 
-        Ok(lp.to_tape(tape))
+        lp.to_tape(tape)
     }
 }

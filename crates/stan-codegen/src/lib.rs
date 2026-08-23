@@ -34,9 +34,24 @@ pub enum CodegenError {
     EmptyTape,
     #[error("internal: {0}")]
     Internal(String),
+    #[error(
+        "model too large for the AOT path: the forward trace has {tape_len} \
+         nodes, which needs {locals} wasm locals — over the {limit} a browser \
+         engine accepts per function. Sample this model with `sample()` \
+         (tape replay), which has no such limit, or reduce N"
+    )]
+    TooManyLocals {
+        tape_len: usize,
+        locals: usize,
+        limit: usize,
+    },
     #[error(transparent)]
     Eval(#[from] stan_runtime::EvalError),
 }
+
+/// V8's per-function local limit. Other engines allow more, but the browser is
+/// the target, so this is the binding constraint.
+pub const MAX_WASM_LOCALS: usize = 50_000;
 
 #[derive(Debug, Clone)]
 pub struct Compiled {
@@ -60,6 +75,19 @@ pub fn compile(model: &Model, dummy_params: &[f64]) -> Result<Compiled, CodegenE
     let root = model.trace_forward(&mut tape, &leaves, true)?;
     if tape.is_empty() {
         return Err(CodegenError::EmptyTape);
+    }
+    // `build_log_prob_grad` declares one primal and one adjoint local per tape
+    // node. V8 rejects a function with more than 50,000 locals, so past this
+    // point the emitted module fails to *instantiate* in the browser with an
+    // opaque `CompileError: local count too large`. Fail here, where the
+    // message can say what to do instead.
+    let locals = 2 * tape.len();
+    if locals > MAX_WASM_LOCALS {
+        return Err(CodegenError::TooManyLocals {
+            tape_len: tape.len(),
+            locals,
+            limit: MAX_WASM_LOCALS,
+        });
     }
     let wasm = emit(&tape, dummy_params.len(), root);
     Ok(Compiled {

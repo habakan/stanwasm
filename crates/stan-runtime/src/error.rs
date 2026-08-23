@@ -29,6 +29,49 @@ pub enum EvalError {
     #[error("index {index} out of bounds for a length-{len} array/vector")]
     IndexOutOfBounds { index: i32, len: usize },
     #[error(
+        "expected a scalar but got a vector/matrix — this operation is not \
+         vectorized. Common causes: comparing containers with `==`, or a \
+         matrix product (`X * beta`), which this runtime does not implement \
+         yet; write the loop form (`for (n in 1:N) ... X[n] * beta`) instead"
+    )]
+    NotAScalar,
+    #[error("shape mismatch: cannot apply `{op}` to {lhs} and {rhs}")]
+    ShapeMismatch {
+        op: String,
+        lhs: String,
+        rhs: String,
+    },
+    #[error("{name} expects {expected} argument(s) after the variate, got {got}")]
+    DistributionArity {
+        name: String,
+        expected: usize,
+        got: usize,
+    },
+    #[error(
+        "{name}: distribution argument has length {arg_len} but the variate \
+         has length {var_len} — vectorized arguments must match element-wise"
+    )]
+    DistributionArgLength {
+        name: String,
+        arg_len: usize,
+        var_len: usize,
+    },
+    #[error("{name} expects {expected} — got {got}")]
+    DistributionArgType {
+        name: String,
+        expected: String,
+        got: String,
+    },
+    #[error("integer division by zero")]
+    IntDivisionByZero,
+    #[error(
+        "constraint type `{0}` is declared but has no transform in this \
+         runtime yet — it would otherwise be sampled unconstrained, giving a \
+         silently wrong posterior. See the \"Not yet supported\" list in the \
+         README"
+    )]
+    UnsupportedConstraint(String),
+    #[error(
         "if/while condition in `model`/`transformed parameters` depends on a \
          sampled parameter — not supported. NUTS traces this block once and \
          replays the same computation graph for every draw, so which branch \

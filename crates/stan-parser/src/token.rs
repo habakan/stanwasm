@@ -3,6 +3,8 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Num(f64),
+    /// Integer literal — no `.` and no exponent (see `Expr::IntNum`).
+    IntNum(i64),
     Id(String),
     Kw(String),
     // Two-char operators

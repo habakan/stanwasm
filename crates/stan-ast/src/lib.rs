@@ -18,7 +18,7 @@ pub enum Constraint {
 #[derive(Debug, Clone, PartialEq)]
 pub enum StanType {
     Real(Constraint),
-    Int,
+    Int(Constraint),
     /// vector[size] with optional element constraint
     Vector(Expr, Constraint),
     /// matrix[rows, cols]
@@ -39,6 +39,10 @@ pub enum StanType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Num(f64),
+    /// Integer literal (`3`, not `3.0`). Kept distinct from `Num` because Stan
+    /// is statically typed and `/` on two ints is *integer* division: `3 / 2`
+    /// is `1`, while `3.0 / 2` is `1.5`.
+    IntNum(i64),
     Var(String),
     /// op, left, right
     BinOp(String, Box<Expr>, Box<Expr>),

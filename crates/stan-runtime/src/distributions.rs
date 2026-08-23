@@ -9,10 +9,13 @@
 //! cannot prove that two nested `v_add(t, ...)` calls don't alias the tape
 //! borrow.
 
+use crate::error::EvalError;
 use crate::matrix::{mat_mdiv_ltri_low, vec_dot_self};
 use crate::ops::{v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub};
 use crate::value::Val;
 use stan_autodiff::Tape;
+
+type Result<T> = std::result::Result<T, EvalError>;
 
 const LOG_SQRT_2PI: f64 = 0.918_938_533_204_672_8;
 const LN_2: f64 = std::f64::consts::LN_2;
@@ -255,39 +258,100 @@ fn is_multivariate(name: &str) -> bool {
     )
 }
 
-/// Dispatch: dist_name → lpdf/lpmf computation. Returns None if the
-/// distribution is not yet supported in the Rust port.
-pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Option<Val> {
-    match name {
-        "normal" => Some(normal_lpdf(t, x, &args[0], &args[1])),
-        "std_normal" => Some(normal_lpdf(t, x, &Val::Num(0.0), &Val::Num(1.0))),
-        "exponential" => Some(exponential_lpdf(t, x, &args[0])),
-        "half_normal" => Some(half_normal_lpdf(t, x, &args[0])),
-        "cauchy" => Some(cauchy_lpdf(t, x, &args[0], &args[1])),
-        "student_t" => Some(student_t_lpdf(t, x, &args[0], &args[1], &args[2])),
-        "lognormal" => Some(lognormal_lpdf(t, x, &args[0], &args[1])),
-        "gamma" => Some(gamma_lpdf(t, x, &args[0], &args[1])),
-        "beta" => Some(beta_lpdf(t, x, &args[0], &args[1])),
-        "bernoulli" => Some(bernoulli_lpmf(t, x, &args[0])),
-        "bernoulli_logit" => Some(bernoulli_logit_lpmf(t, x, &args[0])),
-        "poisson" => Some(poisson_lpmf(t, x, &args[0])),
-        "neg_binomial_2" => Some(neg_binomial_2_lpmf(t, x, &args[0], &args[1])),
+/// How many arguments each supported distribution takes after the variate.
+/// Checked before dispatch so `a ~ normal(0);` is a clean error instead of the
+/// out-of-bounds `args[1]` panic (a wasm trap in the browser) it used to be.
+fn arity(name: &str) -> Option<usize> {
+    Some(match name {
+        "std_normal" => 0,
+        "exponential" | "half_normal" | "bernoulli" | "bernoulli_logit" | "poisson"
+        | "dirichlet" | "lkj_corr_cholesky" => 1,
+        "normal"
+        | "cauchy"
+        | "lognormal"
+        | "gamma"
+        | "beta"
+        | "neg_binomial_2"
+        | "multi_normal_cholesky" => 2,
+        "student_t" => 3,
+        _ => return None,
+    })
+}
+
+fn wrong_type(name: &str, expected: &str, got: &Val) -> EvalError {
+    EvalError::DistributionArgType {
+        name: name.to_string(),
+        expected: expected.to_string(),
+        got: got.shape().to_string(),
+    }
+}
+
+/// Dispatch: dist_name → lpdf/lpmf computation.
+pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val> {
+    let expected = arity(name).ok_or_else(|| EvalError::UnknownDistribution(name.to_string()))?;
+    if args.len() != expected {
+        return Err(EvalError::DistributionArity {
+            name: name.to_string(),
+            expected,
+            got: args.len(),
+        });
+    }
+    Ok(match name {
+        "normal" => normal_lpdf(t, x, &args[0], &args[1]),
+        "std_normal" => normal_lpdf(t, x, &Val::Num(0.0), &Val::Num(1.0)),
+        "exponential" => exponential_lpdf(t, x, &args[0]),
+        "half_normal" => half_normal_lpdf(t, x, &args[0]),
+        "cauchy" => cauchy_lpdf(t, x, &args[0], &args[1]),
+        "student_t" => student_t_lpdf(t, x, &args[0], &args[1], &args[2]),
+        "lognormal" => lognormal_lpdf(t, x, &args[0], &args[1]),
+        "gamma" => gamma_lpdf(t, x, &args[0], &args[1]),
+        "beta" => beta_lpdf(t, x, &args[0], &args[1]),
+        "bernoulli" => bernoulli_lpmf(t, x, &args[0]),
+        "bernoulli_logit" => bernoulli_logit_lpmf(t, x, &args[0]),
+        "poisson" => poisson_lpmf(t, x, &args[0]),
+        "neg_binomial_2" => neg_binomial_2_lpmf(t, x, &args[0], &args[1]),
+        // The multivariate forms below used to fall back to `Val::Num(0.0)` on
+        // a shape they didn't recognize, i.e. contribute nothing to the log
+        // density and silently return a wrong posterior. They are errors now.
         "multi_normal_cholesky" => match (x, &args[0], &args[1]) {
             (Val::Vec(y), Val::Vec(mu), Val::Vec(l_rows)) => {
-                Some(multi_normal_cholesky_lpdf(t, y, mu, l_rows))
+                if y.len() != mu.len() || l_rows.len() != y.len() {
+                    return Err(wrong_type(
+                        name,
+                        &format!("mu and L sized to match the variate (length {})", y.len()),
+                        &args[0],
+                    ));
+                }
+                multi_normal_cholesky_lpdf(t, y, mu, l_rows)
             }
-            _ => Some(Val::Num(0.0)),
+            _ => {
+                return Err(wrong_type(
+                    name,
+                    "a vector variate, a vector mu and a Cholesky factor L",
+                    x,
+                ))
+            }
         },
         "lkj_corr_cholesky" => match x {
-            Val::Vec(l_rows) => Some(lkj_corr_cholesky_lpdf(t, l_rows, &args[0])),
-            _ => Some(Val::Num(0.0)),
+            Val::Vec(l_rows) => lkj_corr_cholesky_lpdf(t, l_rows, &args[0]),
+            _ => return Err(wrong_type(name, "a cholesky_factor_corr variate", x)),
         },
         "dirichlet" => match (x, &args[0]) {
-            (Val::Vec(theta), Val::Vec(alpha)) => Some(dirichlet_lpdf(t, theta, alpha)),
-            _ => Some(Val::Num(0.0)),
+            (Val::Vec(theta), Val::Vec(alpha)) => {
+                if theta.len() != alpha.len() {
+                    return Err(EvalError::DistributionArgLength {
+                        name: name.to_string(),
+                        arg_len: alpha.len(),
+                        var_len: theta.len(),
+                    });
+                }
+                dirichlet_lpdf(t, theta, alpha)
+            }
+            _ => return Err(wrong_type(name, "a simplex variate and a vector alpha", x)),
         },
-        _ => None,
-    }
+        // `arity` already rejected anything not listed above.
+        _ => unreachable!("arity() and eval_dist() must cover the same names"),
+    })
 }
 
 /// Sample statement (`y ~ dist(...)`) on a vector observation. Behaviour:
@@ -295,9 +359,23 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Option<Val>
 ///   observation and we delegate to `eval_dist` once with `x = Val::Vec(xs)`.
 /// - For scalar distributions, sums the scalar lpdf over each element with
 ///   element-wise argument broadcast.
-pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Option<Val> {
+pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Result<Val> {
     if is_multivariate(name) {
         return eval_dist(t, name, &Val::Vec(xs.to_vec()), args);
+    }
+    // Every vectorized argument must line up with the variate element-wise.
+    // Indexing without this check panicked (wasm trap) on a short argument and
+    // silently ignored the tail of a long one.
+    for a in args {
+        if let Val::Vec(av) = a {
+            if av.len() != xs.len() {
+                return Err(EvalError::DistributionArgLength {
+                    name: name.to_string(),
+                    arg_len: av.len(),
+                    var_len: xs.len(),
+                });
+            }
+        }
     }
     let mut acc = Val::Num(0.0);
     let mut elem_args: Vec<Val> = Vec::with_capacity(args.len());
@@ -309,11 +387,12 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Op
         let term = eval_dist(t, name, x, &elem_args)?;
         acc = v_add(t, &acc, &term);
     }
-    Some(acc)
+    Ok(acc)
 }
 
 fn broadcast_elem(v: &Val, i: usize) -> Val {
     match v {
+        // Length already verified by the caller.
         Val::Vec(xs) => xs[i].clone(),
         other => other.clone(),
     }
@@ -341,7 +420,7 @@ mod tests {
                 ];
                 let lp = lkj_corr_cholesky_lpdf(&mut t, &l_rows, &Val::Num(eta));
                 let expected = (2.0 * eta - 2.0) * l11.ln();
-                let got = lp.to_f64(&t);
+                let got = lp.to_f64(&t).unwrap();
                 assert!(
                     (got - expected).abs() < 1e-9,
                     "rho={rho}, eta={eta}: got {got}, expected {expected}"
