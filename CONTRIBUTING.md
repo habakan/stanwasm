@@ -8,7 +8,7 @@ stanwasm is **not** an attempt to reimplement the full Stan language. It is a de
 
 **In scope:**
 - Stan grammar / parser improvements
-- Additional distributions and constraint transforms (see `docs/en/MIGRATION.md` for what is intentionally deferred)
+- Additional distributions and constraint transforms (see `ROADMAP.md` for what is intentionally deferred)
 - Performance work (AOT codegen, replay path, smaller wasm)
 - Better diagnostics / error messages
 - Browser and Node.js examples
@@ -16,7 +16,6 @@ stanwasm is **not** an attempt to reimplement the full Stan language. It is a de
 
 **Out of scope (for now):**
 - User-defined functions block (low priority)
-- Generated quantities block (low priority — happy to take a PR)
 - ADVI / fixed_param / pathfinder samplers (NUTS only by design)
 - Anything requiring a backend server (the whole point is browser completion)
 - Forking nuts-rs (we use it as-is via Cargo)

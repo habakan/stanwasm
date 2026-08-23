@@ -2,7 +2,7 @@
 
 > **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
-Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~415 KB` wasm bundle, embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
+Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~431 KB` wasm bundle, embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
 ![stanwasm examples gallery demo](examples/gallery/demo.gif)
 
@@ -37,7 +37,7 @@ Constraint transforms:
 - Vector shape: `simplex`, `ordered`, `positive_ordered`
 - Matrix: `cholesky_factor_corr`
 
-Blocks: `data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, plus `for`/`while` loops, `if`/`else` (including parameter-dependent conditions), `break`/`continue`, comparison/logical operators, sampling statements (`y ~ dist(...)`), and `target += expr`.
+Blocks: `data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, plus `for`/`while` loops, `if`/`else`, `break`/`continue`, comparison/logical operators, sampling statements (`y ~ dist(...)`), and `target += expr`. `if`/`while` conditions that depend on a sampled parameter work in `generated quantities` (re-evaluated natively per draw) but are a compile-time error in `model`/`transformed parameters` — NUTS traces that block once and replays the same graph for every draw, so a parameter-dependent branch can't be honored there.
 
 `generated quantities` supports RNG draws for every covered distribution above (`normal_rng`, `exponential_rng`, `gamma_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng`, etc.) plus `uniform_rng`. It runs natively (tape-replay) inside the same wasm bundle — there is no separate AOT-compiled path for it (see [Architecture](#architecture)).
 

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Typos and unsupported constructs that used to silently contribute nothing
+  to the log density (or a stale value) instead of failing now raise a clean
+  error at model construction or evaluation time: an unrecognized
+  distribution/function name, an unknown top-level block name, a bare
+  expression statement (e.g. `print(...)`/`reject(...)`, not yet
+  supported), an `_rng` call outside `generated quantities`, invalid `_rng`
+  parameters (e.g. a negative `gamma_rng` shape), an unrecognized source
+  character, and — the sharpest one — an `if`/`while` in `model`/
+  `transformed parameters` whose condition depends on a sampled parameter
+  (NUTS traces that block once and replays the same graph per draw, so a
+  parameter-dependent branch can't be honored there; `generated quantities`
+  is unaffected, since it re-evaluates natively every draw).
+- `exp`/`log`/`abs`/`lgamma`/`Phi` (and `sqrt`, `pow`'s general path) now
+  broadcast element-wise over vectors, matching Stan's vectorized math
+  functions (e.g. `vector[N] y = exp(x);`) — previously these panicked on
+  a vector argument, crashing the wasm instance.
+- Assigning through an indexed or otherwise non-`name` target (e.g.
+  `arr[i] = expr;`) is now a clean error instead of silently discarding the
+  assignment; implementing it for real is tracked in `ROADMAP.md`.
+- A panic hook (`console_error_panic_hook`) is installed on wasm module
+  init, so the remaining internal-invariant panics surface a real message
+  in the console instead of an opaque `RuntimeError: unreachable`.
+
 ## [0.1.0] — 2026-08-23 (alpha)
 
 Initial alpha release: enough Stan to sample linear regression, logistic
@@ -56,7 +81,7 @@ visualization, and a tabbed examples gallery.
 
 - Seven Rust crates: `stan-ast`, `stan-parser`, `stan-autodiff`,
   `stan-runtime`, `stan-codegen`, `stan-wasm-api`, `stan-cli`
-- Single wasm bundle (~415 KB after `wasm-opt`, including `rand`/
+- Single wasm bundle (~431 KB after `wasm-opt`, including `rand`/
   `rand_distr` for `generated quantities` RNG support) shipping the
   parser, AOT codegen, tape replay, and embedded `nuts-rs` sampler
 - AOT model wasm imports memory from the host wasm-bindgen bundle —
@@ -75,9 +100,11 @@ visualization, and a tabbed examples gallery.
   `cholesky_factor_corr`
 - Blocks: `data`, `parameters`, `transformed parameters`, `model`,
   `generated quantities`
-- Control flow: `for`/`while` loops, `if`/`else` (including
-  parameter-dependent conditions), `break`/`continue`,
-  comparison/logical operators (`== != < > <= >= && ||`)
+- Control flow: `for`/`while` loops, `if`/`else`, `break`/`continue`,
+  comparison/logical operators (`== != < > <= >= && ||`). A
+  parameter-dependent `if`/`while` condition works in `generated quantities`
+  but is a compile-time error in `model`/`transformed parameters` (see
+  `[Unreleased]`).
 - Sampling statements (`y ~ dist(...)`), `target += expr`, local declarations
 - `generated quantities` supports RNG draws for every covered distribution
   above (`normal_rng`, `exponential_rng`, `gamma_rng`, `dirichlet_rng`,
