@@ -1,4 +1,4 @@
-// Node.js integration smoke test for stan-wasm-rs.
+// Node.js integration smoke test for stanwasm.
 //
 // Builds via `npm run build:wasm` first (or run from the repo root). The
 // wasm-bindgen output uses `target = "web"`, so we read the .wasm file
@@ -42,7 +42,7 @@ const data = {
 const wasmBytes = await readFile(wasmPath);
 await init({ module_or_path: wasmBytes });
 
-console.log(`stan-wasm-rs v${version()}`);
+console.log(`stanwasm v${version()}`);
 const model = new StanModel(stanCode, JSON.stringify(data));
 console.log(`n_params = ${model.n_params}`);
 console.log(`param_names = ${model.paramNames().join(", ")}`);

@@ -1,4 +1,4 @@
-# gallery — stan-wasm-rs examples
+# gallery — stanwasm examples
 
 One Vite + React app, four tabs, each showing a different reason sampling
 entirely in the browser is worth having.

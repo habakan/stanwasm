@@ -1,5 +1,5 @@
 {
-  "name": "stan-wasm-rs-gallery",
+  "name": "stanwasm-gallery",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "better-react-mathjax": "^3.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "stan-wasm-rs": "file:../../ts"
+    "stanwasm": "file:../../ts"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

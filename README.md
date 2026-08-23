@@ -1,10 +1,10 @@
-# stan-wasm-rs
+# stanwasm
 
 > **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
 Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~415 KB` wasm bundle, embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
-![stan-wasm-rs examples gallery demo](examples/gallery/demo.gif)
+![stanwasm examples gallery demo](examples/gallery/demo.gif)
 
 ## When to use this (and when not)
 
@@ -18,7 +18,7 @@ Stan probabilistic models compiled and sampled entirely inside the browser. Pure
 | Research / publication-grade workflows | | ✓ |
 | `functions { ... }` block, full multivariate suite | | ✓ |
 
-[Stan Playground](https://stan-playground.flatironinstitute.org) is the official Stan-recommended browser interface; it uses a compile server and supports the full Stan language. stan-wasm-rs is **complementary**: smaller surface, no server, embeddable.
+[Stan Playground](https://stan-playground.flatironinstitute.org) is the official Stan-recommended browser interface; it uses a compile server and supports the full Stan language. stanwasm is **complementary**: smaller surface, no server, embeddable.
 
 ## Validated end-to-end
 
@@ -92,7 +92,7 @@ node --experimental-strip-types tests/smoke.ts
 ```
 
 ```ts
-import init, { StanModel } from "stan-wasm-rs";
+import init, { StanModel } from "stanwasm";
 
 await init();
 

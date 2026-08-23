@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { StanModel } from "stan-wasm-rs";
+import { StanModel } from "stanwasm";
 import { GraphicalModel } from "../graphicalModel";
 
 // Classic partial-pooling model (the "eight schools" structure, non-centered

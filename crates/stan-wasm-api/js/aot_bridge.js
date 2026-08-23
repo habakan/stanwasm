@@ -1,11 +1,11 @@
-// Bridge between stan-wasm-rs.wasm and a per-model AOT-compiled wasm.
+// Bridge between stanwasm.wasm and a per-model AOT-compiled wasm.
 //
-// The AOT module imports memory from stan-wasm-rs (zero-copy) and exports
+// The AOT module imports memory from stanwasm (zero-copy) and exports
 // `log_prob_grad(params_ptr, grads_ptr, n_params)`. This snippet stores the
 // active AOT exports in a module-local variable and forwards calls.
 //
 // Usage from app code:
-//   import init, { StanModel, setAotExports } from "stan-wasm-rs";
+//   import init, { StanModel, setAotExports } from "stanwasm";
 //   await init();
 //   const model = new StanModel(src, data);
 //   const wasmBytes = model.compileToWasm();

@@ -1,5 +1,5 @@
 {
-  "name": "stan-wasm-rs",
+  "name": "stanwasm",
   "version": "0.1.0",
   "description": "Stan inference engine for WebAssembly (Rust port).",
   "type": "module",

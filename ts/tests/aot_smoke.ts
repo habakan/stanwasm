@@ -1,5 +1,5 @@
 // Smoke test for the AOT-via-V8 sampling path.
-// Loads stan-wasm-rs.wasm, instantiates a per-model AOT wasm sharing its
+// Loads stanwasm.wasm, instantiates a per-model AOT wasm sharing its
 // memory, binds the bridge, and samples — verifying samples agree with the
 // in-process tape replay path.
 

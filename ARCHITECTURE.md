@@ -1,6 +1,6 @@
 # Architecture
 
-A contributor-facing tour of `stan-wasm-rs` internals: workspace layout, data flow, key design choices, and the boundary between native and wasm builds. Pairs with [`README.md`](README.md) (user-facing).
+A contributor-facing tour of `stanwasm` internals: workspace layout, data flow, key design choices, and the boundary between native and wasm builds. Pairs with [`README.md`](README.md) (user-facing).
 
 ## Goals
 
@@ -14,7 +14,7 @@ A contributor-facing tour of `stan-wasm-rs` internals: workspace layout, data fl
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Application code (browser / Node.js)                            │
-│    import init, { StanModel } from "stan-wasm-rs"                │
+│    import init, { StanModel } from "stanwasm"                    │
 └──────────┬──────────────────────────────────────────────────────┘
            │
            ▼
@@ -123,10 +123,10 @@ Per-leapfrog step:
 
 ## Memory model
 
-Default: each wasm-pack-built bundle has one linear memory exported as `memory`. `stan-wasm-rs` exports this via `sharedMemory()` so the host JS can pass it as an import to the AOT model.
+Default: each wasm-pack-built bundle has one linear memory exported as `memory`. `stanwasm` exports this via `sharedMemory()` so the host JS can pass it as an import to the AOT model.
 
 ```js
-const stanMemory = sharedMemory();             // WebAssembly.Memory of stan-wasm-rs
+const stanMemory = sharedMemory();             // WebAssembly.Memory of stanwasm
 const aot = await WebAssembly.instantiate(model.compileToWasm(), {
   stan: { memory: stanMemory },                 // AOT imports stan's memory
   Math: { exp, log, sin, cos, pow, lgamma, digamma, phi },
@@ -136,7 +136,7 @@ const samples = model.sampleViaAot(init, 1000, 1000, 42n);
 ```
 
 Inside the wasm:
-- `nuts-rs` allocates its `position` and `gradient` buffers in `stan-wasm-rs`'s linear memory (Rust `Vec<f64>`)
+- `nuts-rs` allocates its `position` and `gradient` buffers in `stanwasm`'s linear memory (Rust `Vec<f64>`)
 - It calls `aot_logp` with the raw pointers
 - The AOT wasm reads from and writes to those same byte offsets
 - nuts-rs reads the gradients back as if it owned them, because it does

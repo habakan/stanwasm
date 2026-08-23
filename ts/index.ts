@@ -1,7 +1,7 @@
-// Public TS facade for stan-wasm-rs.
+// Public TS facade for stanwasm.
 //
 // Re-exports the wasm-bindgen-generated bindings under a stable name so
-// downstream callers can `import { StanModel } from "stan-wasm-rs"` without
+// downstream callers can `import { StanModel } from "stanwasm"` without
 // poking into `pkg/`.
 
 import init from "./pkg/stan_wasm_api.js";

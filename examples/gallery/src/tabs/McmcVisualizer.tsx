@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { StanModel } from "stan-wasm-rs";
+import { StanModel } from "stanwasm";
 import { GraphicalModel } from "../graphicalModel";
 
 // Neal's funnel: a hard 2D posterior with no closed form and a notoriously

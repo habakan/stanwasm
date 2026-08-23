@@ -10,7 +10,7 @@ Two harnesses available:
 The Node bench compares **two sampling paths** end-to-end:
 
 - `sample` — tape replay inside the same wasm bundle. Walks the recorded autodiff tape per leapfrog step.
-- `sampleViaAot` — calls into a per-model AOT-compiled wasm bound via `setAotExports`. The AOT module shares stan-wasm-rs's linear memory (zero-copy), and V8 JITs its fully-unrolled forward+backward pass.
+- `sampleViaAot` — calls into a per-model AOT-compiled wasm bound via `setAotExports`. The AOT module shares stanwasm's linear memory (zero-copy), and V8 JITs its fully-unrolled forward+backward pass.
 
 ## Apple Silicon, 2026-05-10
 

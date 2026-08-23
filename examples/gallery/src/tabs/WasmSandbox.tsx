@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { StanModel } from "stan-wasm-rs";
+import { StanModel } from "stanwasm";
 import { PRESETS, type Preset } from "../models";
 import { Histogram } from "../Histogram";
 import { DataTable } from "../DataTable";

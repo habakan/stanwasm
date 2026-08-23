@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import init from "stan-wasm-rs";
+import init from "stanwasm";
 import { WasmSandbox } from "./tabs/WasmSandbox";
 import { LiveRegression } from "./tabs/LiveRegression";
 import { HierarchicalShrinkage } from "./tabs/HierarchicalShrinkage";
@@ -71,10 +71,10 @@ export function App() {
         </div>
       ) : (
         <div className="app-header">
-          <h1>stan-wasm-rs — examples</h1>
+          <h1>stanwasm — examples</h1>
           <p className="tagline">
             Stan probabilistic models sampling entirely in your browser. No server, no network round trip.{" "}
-            <a href="https://github.com/habakan/stan-wasm-rs" target="_blank" rel="noreferrer">
+            <a href="https://github.com/habakan/stanwasm" target="_blank" rel="noreferrer">
               GitHub
             </a>
             .
@@ -102,7 +102,7 @@ export function App() {
 
       {!isSandbox && (
         <footer>
-          stan-wasm-rs · alpha · Apache-2.0 · embedded{" "}
+          stanwasm · alpha · Apache-2.0 · embedded{" "}
           <a href="https://github.com/pymc-devs/nuts-rs" target="_blank" rel="noreferrer">
             nuts-rs
           </a>{" "}

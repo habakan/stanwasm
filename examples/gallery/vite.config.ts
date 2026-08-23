@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     fs: {
-      // The `stan-wasm-rs` package lives at ../../ts via a file: dep, and the
+      // The `stanwasm` package lives at ../../ts via a file: dep, and the
       // wasm-pack output (ts/pkg/) sits outside this Vite project root.
       // Vite blocks serving files outside the root by default — allow the
       // repo root explicitly so wasm fetch works during `npm run dev`.
@@ -15,7 +15,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     // Don't pre-bundle the wasm-pack output; let Vite serve the .wasm verbatim.
-    exclude: ["stan-wasm-rs"],
+    exclude: ["stanwasm"],
   },
   build: {
     target: "esnext",

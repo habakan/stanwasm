@@ -117,5 +117,5 @@ Comparable to the `nuts-rs` direct-call benchmark. See `docs/en/BENCHMARKS.md`.
   `sample()` behavior and correctly restores `logProbGrad`/`sample`
   afterward
 
-[Unreleased]: https://github.com/habakan/stan-wasm-rs/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/habakan/stan-wasm-rs/releases/tag/v0.1.0
+[Unreleased]: https://github.com/habakan/stanwasm/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/habakan/stanwasm/releases/tag/v0.1.0

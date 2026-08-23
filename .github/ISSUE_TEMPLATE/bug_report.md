@@ -20,7 +20,7 @@ cargo test -p stan-runtime --test log_prob
 or, for browser / Node:
 
 ```ts
-import init, { StanModel } from "stan-wasm-rs";
+import init, { StanModel } from "stanwasm";
 await init();
 // ...
 ```
@@ -31,7 +31,7 @@ await init();
 
 ## Environment
 
-- stan-wasm-rs version / commit:
+- stanwasm version / commit:
 - Rust version (`rustc --version`):
 - Browser / Node.js version (if applicable):
 - OS:

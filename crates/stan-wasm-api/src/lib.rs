@@ -1,4 +1,4 @@
-//! Public wasm-bindgen API for stan-wasm-rs.
+//! Public wasm-bindgen API for stanwasm.
 //!
 //! Single-wasm browser API: parse Stan source, trace once, then run the
 //! nuts-rs sampler in-process by replaying the recorded autodiff tape.
@@ -7,7 +7,7 @@
 //!
 //! Also exposes `compile_to_wasm` which returns the AOT model wasm bytes
 //! (for callers that want to use the AOT module independently, e.g. in
-//! a Web Worker or a non-stan-wasm-rs runtime).
+//! a Web Worker or a non-stanwasm runtime).
 
 #![forbid(unsafe_code)]
 
@@ -392,7 +392,7 @@ pub fn version() -> String {
 // `sample_via_aot` runs the same NUTS sampling driver as `sample`, but
 // substitutes the in-process tape replay (`Compiled::log_prob_grad`) with a
 // call out to a host-provided AOT-compiled model wasm. The AOT module shares
-// `stan-wasm-rs`'s linear memory (imported, not its own), so handing it a
+// `stanwasm`'s linear memory (imported, not its own), so handing it a
 // (params_ptr, grads_ptr) is zero-copy.
 //
 // The host is responsible for instantiating the AOT wasm and binding it via

@@ -1,10 +1,10 @@
-# Contributing to stan-wasm-rs
+# Contributing to stanwasm
 
-Thanks for your interest. stan-wasm-rs is currently in **alpha**, maintained by one person on evenings and weekends. Contributions are welcome but please read this document first — it will save you and me time.
+Thanks for your interest. stanwasm is currently in **alpha**, maintained by one person on evenings and weekends. Contributions are welcome but please read this document first — it will save you and me time.
 
 ## Scope
 
-stan-wasm-rs is **not** an attempt to reimplement the full Stan language. It is a deliberately scoped subset of Stan that runs end-to-end inside the browser, with an embedded NUTS sampler from [nuts-rs](https://github.com/pymc-devs/nuts-rs). The full Stan compiler / cmdstan / PyStan / RStan toolchain remains the canonical implementation; this project is complementary, not a replacement.
+stanwasm is **not** an attempt to reimplement the full Stan language. It is a deliberately scoped subset of Stan that runs end-to-end inside the browser, with an embedded NUTS sampler from [nuts-rs](https://github.com/pymc-devs/nuts-rs). The full Stan compiler / cmdstan / PyStan / RStan toolchain remains the canonical implementation; this project is complementary, not a replacement.
 
 **In scope:**
 - Stan grammar / parser improvements
@@ -27,15 +27,15 @@ If you are not sure whether something is in scope, open a discussion or draft is
 
 - **Stan official org**: [stan-dev](https://github.com/stan-dev) — canonical Stan, cmdstan, stanc3, Stan math, etc.
 - **Stan Playground (Flatiron Institute)**: [flatironinstitute/stan-playground](https://github.com/flatironinstitute/stan-playground) — full-Stan, server-compile, browser-sample. The official browser playground.
-- **stan-wasm-rs**: subset of Stan, browser-only, embedded sampler. **Complementary** to Stan Playground.
+- **stanwasm**: subset of Stan, browser-only, embedded sampler. **Complementary** to Stan Playground.
 
 If you have a Stan problem that needs full language support, you almost certainly want Stan Playground or cmdstan, not this project.
 
 ## Development setup
 
 ```bash
-git clone https://github.com/habakan/stan-wasm-rs
-cd stan-wasm-rs
+git clone https://github.com/habakan/stanwasm
+cd stanwasm
 
 # Native build + tests (all crates)
 cargo build --workspace --release

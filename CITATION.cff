@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: stan-wasm-rs
+title: stanwasm
 message: >-
   If you use this software, please cite it as below.
 type: software
@@ -18,5 +18,5 @@ keywords:
   - rust
   - probabilistic-programming
 license: Apache-2.0
-repository-code: 'https://github.com/habakan/stan-wasm-rs'
+repository-code: 'https://github.com/habakan/stanwasm'
 version: 0.1.0-alpha

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build stan-wasm-api as wasm32 + run wasm-bindgen via wasm-pack.
-# Output goes to ts/pkg/, ready for `import { StanModel } from "stan-wasm-rs"`.
+# Output goes to ts/pkg/, ready for `import { StanModel } from "stanwasm"`.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

@@ -32,7 +32,7 @@ model {
 - [ ] Parses but `log_prob_grad` returns NaN / Inf
 - [ ] Other:
 
-## What stan-wasm-rs does
+## What stanwasm does
 
 <!-- error message, stack trace, or numeric output -->
 
@@ -46,4 +46,4 @@ Is the model using a feature listed under "Not yet supported" in the README? If 
 
 ## Environment
 
-- stan-wasm-rs version / commit:
+- stanwasm version / commit:
