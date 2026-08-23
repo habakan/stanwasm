@@ -25,7 +25,7 @@ const TABS = [
     key: "hierarchical-shrinkage",
     label: "Hierarchical Shrinkage",
     description:
-      "Drag a group's observed value and watch its partially-pooled estimate resist by an amount that depends on how noisy that group is.",
+      "Six A/B tests' CTR lift — drag a small-sample pilot's observed value and watch how little it moves the partially-pooled estimate next to it.",
     Component: HierarchicalShrinkage,
   },
   {

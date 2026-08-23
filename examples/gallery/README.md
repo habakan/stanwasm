@@ -41,12 +41,17 @@ Open `http://localhost:5173`.
   animation frame, over the same data. Drag one point into outlier
   territory and watch them diverge — the normal fit gets dragged toward it,
   the robust fit barely moves. `src/tabs/LiveRegression.tsx`.
-- **Hierarchical Shrinkage** — six groups, three confident (small known
-  noise) and three noisy (large known noise), fit with a partial-pooling
-  model (the classic "eight schools" structure). Drag a group's observed
+- **Hierarchical Shrinkage** — six marketing campaigns' observed A/B test
+  CTR lift: three ran at full traffic (small standard error), three were
+  small-sample pilots (large standard error), fit with a partial-pooling
+  model (the classic "eight schools" structure). Drag a campaign's observed
   value and watch its posterior estimate resist by an amount that depends
-  on the group's own noise, not a hand-tuned rule — that's what falls out
-  of the joint posterior. `src/tabs/HierarchicalShrinkage.tsx`.
+  on that campaign's own sample size, not a hand-tuned rule — that's what
+  falls out of the joint posterior, and it's exactly the real-world
+  argument for not trusting a dramatic small-sample result at face value.
+  Also shows the population distribution N(μ, τ) (band or density-curve
+  toggle) and, per campaign, a KDE over its own real posterior draws.
+  `src/tabs/HierarchicalShrinkage.tsx`.
 - **Get Started** — a fuller API tour: CSV upload, editable Stan source,
   multiple model presets, posterior summary table with histograms.
   `src/tabs/GetStarted.tsx`. Sample CSVs for its presets live under

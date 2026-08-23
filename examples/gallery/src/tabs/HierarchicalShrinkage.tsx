@@ -3,11 +3,15 @@ import { StanModel } from "stan-wasm-rs";
 import { GraphicalModel } from "../graphicalModel";
 
 // Classic partial-pooling model (the "eight schools" structure, non-centered
-// parameterization). Each group has an observed value y_j with known noise
-// sigma_j; theta_j is the partially-pooled estimate, shrunk toward the
-// population mean mu by an amount that grows with sigma_j relative to tau
-// (the between-group SD) — groups you're less sure about individually
-// borrow more strength from the rest. No closed form; this is what NUTS is
+// parameterization), framed here as six marketing campaigns' observed CTR
+// lift (y_j) with known standard error (sigma_j, driven by each campaign's
+// sample size — a handful of visitors gives a noisy estimate, tens of
+// thousands gives a tight one). theta_j is the partially-pooled estimate,
+// shrunk toward the population mean mu by an amount that grows with
+// sigma_j relative to tau (the between-campaign SD) — this is the concrete
+// business case for partial pooling: a flashy lift number from a
+// small-sample pilot shouldn't be trusted at face value the way a
+// well-powered campaign's number is. No closed form; this is what NUTS is
 // for.
 const STAN_CODE = `data {
   int<lower=0> J;
@@ -31,20 +35,27 @@ model {
 
 interface Group {
   label: string;
+  /** Descriptive-only sample-size hint shown under the label — not fed to
+   *  the model, `sigma` is; this just explains where that sigma comes from. */
+  n: string;
+  /** Observed CTR lift, percentage points. */
   y: number;
-  /** Known observation noise — fixed per group, not draggable. Three groups
-   *  are "confident" (small sigma), three are "noisy" (large sigma), so the
-   *  contrast in how hard each shrinks is visible without any interaction. */
+  /** Known standard error — fixed per group, not draggable. Three campaigns
+   *  are well-powered (small sigma), three are small pilots (large sigma),
+   *  so the contrast in how hard each shrinks is visible without any
+   *  interaction. */
   sigma: number;
 }
 
+// Chart labels are kept short enough to fit their slot without overlapping
+// neighbors; see the hint text below for each one's full campaign name.
 const INITIAL_GROUPS: Group[] = [
-  { label: "A", y: 8, sigma: 3 },
-  { label: "B", y: 5, sigma: 3 },
-  { label: "C", y: -2, sigma: 3 },
-  { label: "D", y: 6, sigma: 12 },
-  { label: "E", y: 10, sigma: 12 },
-  { label: "F", y: 2, sigma: 12 },
+  { label: "Homepage", n: "n ≈ 48,000", y: 7, sigma: 3 },
+  { label: "Email Subj.", n: "n ≈ 61,000", y: 4, sigma: 3 },
+  { label: "Checkout", n: "n ≈ 35,000", y: -3, sigma: 3 },
+  { label: "Landing Pg", n: "n ≈ 300", y: 22, sigma: 12 },
+  { label: "Influencer", n: "n ≈ 450", y: -8, sigma: 12 },
+  { label: "Referral", n: "n ≈ 260", y: 14, sigma: 12 },
 ];
 
 const Y_DOMAIN: [number, number] = [-30, 35];
@@ -261,9 +272,11 @@ export function HierarchicalShrinkage() {
 
       <div className="demo-interactive">
       <p className="hint">
-        Drag a group's open circle (its observed value). Groups A–C are confident (σ=3); D–F are noisy
-        (σ=12). Drag one far from the rest and compare how much its orange estimate follows versus how
-        much it gets pulled back toward the dashed population mean.
+        Six A/B tests' observed CTR lift. Homepage Banner, Email Subject Line, and Checkout Redesign ran
+        at full traffic (tens of thousands of visitors each), so their numbers are trustworthy as-is. New
+        Landing Page, Influencer Partnership, and Referral Program Pilot were small-sample pilots (a few
+        hundred visitors) — drag one's open circle and watch how little its flashy-looking number actually
+        moves the partially-pooled estimate next to it.
       </p>
 
       <div className="controls">
@@ -278,6 +291,7 @@ export function HierarchicalShrinkage() {
 
       <svg ref={svgRef} className="plot-wrap" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
         <rect x={0} y={0} width={W} height={H} fill="white" />
+        <text x={PAD} y={PAD - 14} fontSize={11} fill="#888">CTR lift (%)</text>
         <line x1={PAD} y1={yToPx(0)} x2={W - PAD} y2={yToPx(0)} stroke="#eee" pointerEvents="none" />
 
         {fit && popView === "band" && (
@@ -375,8 +389,11 @@ export function HierarchicalShrinkage() {
                 onPointerMove={onPointerMove(i)}
                 onPointerUp={onPointerUp}
               />
-              <text x={cx} y={H - PAD + 20} textAnchor="middle" fontSize={12} fill="#888">
-                {g.label} (σ={g.sigma})
+              <text x={cx} y={H - PAD + 16} textAnchor="middle" fontSize={11} fill="#888">
+                {g.label}
+              </text>
+              <text x={cx} y={H - PAD + 28} textAnchor="middle" fontSize={9} fill="#aaa">
+                {g.n}
               </text>
             </g>
           );
@@ -384,36 +401,37 @@ export function HierarchicalShrinkage() {
       </svg>
 
       <div className="legend">
-        <span><i className="dot raw" /> observed yⱼ ± σⱼ</span>
-        <span><i className="dot shrunk" /> partially-pooled θⱼ (posterior mean)</span>
-        <span><i className="dot raw" style={{ background: "#c2410c", opacity: 0.4, border: "none" }} /> θⱼ's actual posterior (KDE over its own draws)</span>
-        <span><i className="swatch dashed" /> population mean μ</span>
-        <span><i className="dot raw" style={{ background: "#c2410c", opacity: 0.2, border: "none" }} /> population N(μ, τ) — where every θⱼ is pooled toward</span>
+        <span><i className="dot raw" /> observed CTR lift ± standard error</span>
+        <span><i className="dot shrunk" /> partially-pooled estimate (posterior mean)</span>
+        <span><i className="dot raw" style={{ background: "#c2410c", opacity: 0.4, border: "none" }} /> that campaign's actual posterior (KDE over its own draws)</span>
+        <span><i className="swatch dashed" /> population mean lift μ</span>
+        <span><i className="dot raw" style={{ background: "#c2410c", opacity: 0.2, border: "none" }} /> population N(μ, τ) — what every campaign is pooled toward</span>
       </div>
 
       <div className="readout">
         <span className="stat">
-          μ = <b>{fit ? fit.mu.toFixed(2) : "…"}</b>
+          population mean lift μ = <b>{fit ? fit.mu.toFixed(2) : "…"}%</b>
         </span>
         <span className="stat">
-          τ = <b>{fit ? fit.tau.toFixed(2) : "…"}</b>
+          between-campaign SD τ = <b>{fit ? fit.tau.toFixed(2) : "…"}%</b>
         </span>
         {fit && <span className="timing">resampled in {fit.elapsedMs.toFixed(1)}ms</span>}
       </div>
 
-      <button onClick={() => setGroups(INITIAL_GROUPS)}>Reset groups</button>
+      <button onClick={() => setGroups(INITIAL_GROUPS)}>Reset campaigns</button>
 
       <div className="note">
         Every drag frame recompiles the model and runs {N_WARMUP} warmup + {N_DRAWS} NUTS draws — all
-        inside WebAssembly, in this tab. The amount of shrinkage (how far the orange estimate sits from
-        the gray observed value) isn't a fixed rule someone hand-tuned — it falls out of the posterior,
-        different for every group, every frame. The wide shaded curve is the population distribution
-        N(μ, τ) — what every θⱼ is actually being pulled toward — and its width (τ) is itself estimated
-        from how much the groups agree with each other: make the six values more consistent and watch it
-        narrow; spread them out and watch it widen. The small violin at each group is that group's own
-        θⱼ posterior specifically — a kernel density estimate over its real 200 NUTS draws from this
-        resample, not a mean±sd stand-in — so you can compare an individual group's actual uncertainty
-        against the population it's being shrunk toward.
+        inside WebAssembly, in this tab. Notice that Landing Pg's, Influencer's, and Referral's flashy
+        small-sample numbers (+22%, −8%, +14%) all sit much closer to each other's partially-pooled
+        estimate than their raw observed values do — a hierarchical model automatically discounts a
+        dramatic result that came from a few hundred visitors, without anyone hand-writing a "small
+        sample size" rule. The wide shaded curve is the population distribution N(μ, τ), and its width
+        (τ) is itself estimated from how much the six campaigns agree with each other: make them more
+        consistent and watch it narrow; spread them out and watch it widen. The small violin at each
+        campaign is that campaign's own posterior specifically — a kernel density estimate over its real
+        200 NUTS draws from this resample, not a mean±sd stand-in — so you can compare an individual
+        campaign's actual uncertainty against the population it's being shrunk toward.
       </div>
       </div>
     </div>
