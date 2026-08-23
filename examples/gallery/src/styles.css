@@ -416,8 +416,8 @@ footer a {
 
 .diagram-overlay.expanded {
   opacity: 1;
-  width: min(680px, 92%);
-  height: min(600px, 85%);
+  width: clamp(400px, 50%, 820px);
+  height: clamp(350px, 55%, 720px);
 }
 
 .diagram-overlay-label {
