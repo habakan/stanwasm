@@ -60,6 +60,20 @@ export function WasmSandbox() {
   const [compileError, setCompileError] = useState<string | null>(null);
   const [lastCompiledKey, setLastCompiledKey] = useState<string | null>(null);
   const [compiling, setCompiling] = useState(false);
+  const [editorFullscreen, setEditorFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!editorFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setEditorFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [editorFullscreen]);
 
   const preset: Preset = PRESETS[presetKey];
   const effectiveData = customData ?? preset.data;
@@ -197,10 +211,32 @@ export function WasmSandbox() {
 
       <div className="row">
         <label>Data:</label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 400 }}>
+          <input
+            type="radio"
+            name="data-source"
+            checked={customData === null}
+            onChange={resetCsv}
+          />
+          Use preset
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 400 }}>
+          <input
+            type="radio"
+            name="data-source"
+            checked={customData !== null}
+            onChange={() => fileInputRef.current?.click()}
+          />
+          Upload CSV
+        </label>
+        <button className="secondary" onClick={() => fileInputRef.current?.click()}>
+          Choose File
+        </button>
         <input
           ref={fileInputRef}
           type="file"
           accept=".csv,text/csv"
+          style={{ display: "none" }}
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) onCsvFile(f);
@@ -216,9 +252,6 @@ export function WasmSandbox() {
                 skipped non-numeric column(s): {csvSkipped.join(", ")}
               </span>
             )}
-            <button className="secondary" onClick={resetCsv}>
-              Reset to preset
-            </button>
           </>
         ) : (
           <span style={{ fontSize: 13, color: "#666" }}>
@@ -290,7 +323,7 @@ export function WasmSandbox() {
         </div>
       )}
 
-      <div className="stan-editor-row">
+      <div className={`stan-editor-row${editorFullscreen ? " fullscreen" : ""}`}>
         <div className="code-section stan-editor-col">
           <h3>
             Stan program
@@ -310,12 +343,21 @@ export function WasmSandbox() {
                 </button>
               </>
             )}
+            {" "}
+            <button
+              className="secondary"
+              style={{ padding: "1px 8px", fontSize: 12 }}
+              onClick={() => setEditorFullscreen((f) => !f)}
+            >
+              {editorFullscreen ? "✕ Exit fullscreen" : "⛶ Fullscreen"}
+            </button>
           </h3>
           <textarea
             className="stan-editor"
             value={effectiveStan}
             onChange={(e) => setCustomStan(e.target.value)}
             spellCheck={false}
+            autoFocus={editorFullscreen}
           />
         </div>
 

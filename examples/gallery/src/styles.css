@@ -188,6 +188,32 @@ footer a {
   overflow-x: auto;
 }
 
+.stan-editor-row.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  margin: 0;
+  padding: 20px 24px;
+  background: white;
+  overflow: auto;
+  align-items: stretch;
+}
+
+.stan-editor-row.fullscreen .stan-editor-col {
+  flex: 1 1 55%;
+  display: flex;
+  flex-direction: column;
+}
+
+.stan-editor-row.fullscreen .stan-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.stan-editor-row.fullscreen .graph-col {
+  flex: 1 1 40%;
+}
+
 .results {
   margin-top: 24px;
 }
