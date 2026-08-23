@@ -241,16 +241,13 @@ footer a {
 
 .sandbox-preset-bar {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #eee;
 }
 
-.sandbox-preset-bar label {
-  font-size: 13px;
-  color: #555;
+.sandbox-preset-bar .row:last-child {
+  margin-bottom: 0;
 }
 
 .sandbox-side {
@@ -498,12 +495,28 @@ footer a {
   max-width: 340px;
 }
 
+/* Used only inside Wasm Sandbox's collapsible "Graphical model" panel,
+   whose height varies with how many other panels are open — shrink the
+   diagram to fit whatever space that leaves rather than ever clipping it,
+   since seeing the whole diagram matters more here than seeing it at a
+   fixed size the way the other tabs' fixed-height cards do. */
 .model-diagram-card {
   padding: 16px;
   background: white;
   border: 1px solid #e5e5e5;
   border-radius: 6px;
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.model-diagram-card .graphical-model {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .graphical-model {

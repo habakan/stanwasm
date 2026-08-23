@@ -39,28 +39,33 @@ function summarize(name: string, samples: number[]): ParamSummary {
 }
 
 /** A right-column panel that can collapse to just its header. Open panels
- *  share the column's height equally (flex: 1 1 0) by default, so however
- *  many are open, they always fit without the column itself needing to
- *  scroll; only an individual panel's own body scrolls, if its content
- *  outgrows the share it's been given. `fixed` opts a panel out of that
- *  sharing — sized to its own content instead (for controls like Compile/
- *  Run that must never be the thing squeezed out and hidden behind a
- *  scroll); the remaining panels split whatever height is left. */
+ *  share the column's height by `grow` weight (default 1, so equal shares)
+ *  so however many are open, they always fit without the column itself
+ *  needing to scroll; only an individual panel's own body scrolls, if its
+ *  content outgrows the share it's been given. `fixed` opts a panel out of
+ *  sharing entirely — sized to its own content instead (for controls like
+ *  Compile/Run that must never be the thing squeezed out and hidden behind
+ *  a scroll); the remaining panels split whatever height is left. */
 function CollapsibleSection({
   title,
   open,
   onToggle,
   fixed,
+  grow,
   children,
 }: {
   title: ReactNode;
   open: boolean;
   onToggle: () => void;
   fixed?: boolean;
+  grow?: number;
   children: React.ReactNode;
 }) {
   return (
-    <div className={`sandbox-section${fixed ? " fixed" : ""}${open ? "" : " collapsed"}`}>
+    <div
+      className={`sandbox-section${fixed ? " fixed" : ""}${open ? "" : " collapsed"}`}
+      style={open && !fixed && grow ? { flex: `${grow} 1 0` } : undefined}
+    >
       <button className="sandbox-section-header" onClick={onToggle}>
         {open ? "▾" : "▸"} {title}
       </button>
@@ -93,7 +98,6 @@ export function WasmSandbox() {
   const [compiling, setCompiling] = useState(false);
   // Right-column panels — independently collapsible so the whole tab fits
   // one viewport without ever needing to scroll the page itself.
-  const [showSettings, setShowSettings] = useState(true);
   const [showGraph, setShowGraph] = useState(true);
   const [showData, setShowData] = useState(true);
   const [showResults, setShowResults] = useState(false);
@@ -221,48 +225,21 @@ export function WasmSandbox() {
       <div className="stan-editor-row">
         <div className="code-section stan-editor-col">
           <div className="sandbox-preset-bar">
-            <label>Model:</label>
-            <select
-              value={presetKey}
-              onChange={(e) => onPresetChange(e.target.value as keyof typeof PRESETS)}
-            >
-              {Object.entries(PRESETS).map(([k, p]) => (
-                <option key={k} value={k}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <span style={{ color: "#666", fontSize: 13 }}>{preset.description}</span>
-          </div>
-          <h3>
-            Stan program
-            {customStan !== null && (
-              <>
-                {" "}
-                <span style={{ fontSize: 12, color: "#047857", fontWeight: 400 }}>
-                  (edited)
-                </span>
-                {" "}
-                <button
-                  className="secondary"
-                  style={{ padding: "1px 8px", fontSize: 12 }}
-                  onClick={resetStan}
-                >
-                  Reset to preset
-                </button>
-              </>
-            )}
-          </h3>
-          <textarea
-            className="stan-editor"
-            value={effectiveStan}
-            onChange={(e) => setCustomStan(e.target.value)}
-            spellCheck={false}
-          />
-        </div>
+            <div className="row">
+              <label>Model:</label>
+              <select
+                value={presetKey}
+                onChange={(e) => onPresetChange(e.target.value as keyof typeof PRESETS)}
+              >
+                {Object.entries(PRESETS).map(([k, p]) => (
+                  <option key={k} value={k}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <span style={{ color: "#666", fontSize: 13 }}>{preset.description}</span>
+            </div>
 
-        <div className="sandbox-side">
-          <CollapsibleSection title="Data & run" open={showSettings} onToggle={() => setShowSettings((o) => !o)} fixed>
             <div className="row">
               <label>Data:</label>
               <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 400 }}>
@@ -296,23 +273,17 @@ export function WasmSandbox() {
                   if (f) onCsvFile(f);
                 }}
               />
+              {customData && (
+                <span style={{ fontSize: 13, color: "#047857" }}>
+                  ✓ {csvFilename}
+                  {csvSkipped.length > 0 && (
+                    <span style={{ fontSize: 12, color: "#b45309", marginLeft: 8 }}>
+                      skipped non-numeric column(s): {csvSkipped.join(", ")}
+                    </span>
+                  )}
+                </span>
+              )}
             </div>
-            {customData ? (
-              <p style={{ fontSize: 13, color: "#047857", margin: "-4px 0 12px" }}>
-                ✓ {csvFilename}
-                {csvSkipped.length > 0 && (
-                  <span style={{ fontSize: 12, color: "#b45309", marginLeft: 8 }}>
-                    skipped non-numeric column(s): {csvSkipped.join(", ")}
-                  </span>
-                )}
-              </p>
-            ) : (
-              <p style={{ fontSize: 12, color: "#666", margin: "-4px 0 12px" }}>
-                any CSV — columns become Stan vectors; row count exposed as{" "}
-                <code>N</code> / <code>J</code> / <code>K</code>. Edit the Stan
-                program if your columns differ from the preset.
-              </p>
-            )}
 
             {csvError && (
               <div className="note" style={{ borderLeftColor: "#b91c1c", background: "#fee2e2" }}>
@@ -343,8 +314,6 @@ export function WasmSandbox() {
                 value={seed}
                 onChange={(e) => setSeed(Number(e.target.value))}
               />
-            </div>
-            <div className="row">
               <button className="secondary" onClick={compile} disabled={compiling}>
                 {compiling ? "Compiling…" : compiledModel && !stale ? "Recompile" : "Compile"}
               </button>
@@ -376,9 +345,41 @@ export function WasmSandbox() {
                 </pre>
               </div>
             )}
-          </CollapsibleSection>
+          </div>
+          <h3>
+            Stan program
+            {customStan !== null && (
+              <>
+                {" "}
+                <span style={{ fontSize: 12, color: "#047857", fontWeight: 400 }}>
+                  (edited)
+                </span>
+                {" "}
+                <button
+                  className="secondary"
+                  style={{ padding: "1px 8px", fontSize: 12 }}
+                  onClick={resetStan}
+                >
+                  Reset to preset
+                </button>
+              </>
+            )}
+          </h3>
+          <textarea
+            className="stan-editor"
+            value={effectiveStan}
+            onChange={(e) => setCustomStan(e.target.value)}
+            spellCheck={false}
+          />
+        </div>
 
-          <CollapsibleSection title="Graphical model" open={showGraph} onToggle={() => setShowGraph((o) => !o)}>
+        <div className="sandbox-side">
+          <CollapsibleSection
+            title="Graphical model"
+            open={showGraph}
+            onToggle={() => setShowGraph((o) => !o)}
+            grow={2}
+          >
             <div className="model-diagram-card">
               <GraphicalModel stanCode={debouncedStan} />
             </div>
