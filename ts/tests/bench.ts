@@ -1,6 +1,4 @@
-// Node.js benchmark — runs the Rust wasm32 build under V8 to give a
-// like-for-like comparison with MoonBit `tests/results/benchmark_nutsrs_aot.json`
-// (which is also Node.js + V8).
+// Node.js benchmark — runs the Rust wasm32 build under V8.
 //
 // Times two sampling paths:
 //   - StanModel.sample (tape replay; in-wasm)

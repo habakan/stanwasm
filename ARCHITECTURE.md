@@ -1,6 +1,6 @@
 # Architecture
 
-A contributor-facing tour of `stan-wasm-rs` internals: workspace layout, data flow, key design choices, and the boundary between native and wasm builds. Pairs with [`README.md`](README.md) (user-facing) and [`docs/en/MIGRATION.md`](docs/en/MIGRATION.md) (history of the rewrite from the MoonBit predecessor).
+A contributor-facing tour of `stan-wasm-rs` internals: workspace layout, data flow, key design choices, and the boundary between native and wasm builds. Pairs with [`README.md`](README.md) (user-facing).
 
 ## Goals
 
@@ -141,7 +141,7 @@ Inside the wasm:
 - The AOT wasm reads from and writes to those same byte offsets
 - nuts-rs reads the gradients back as if it owned them, because it does
 
-The MoonBit predecessor used two wasm modules with separate memories, so each `log_prob_grad` call paid `2 × n_params × 8` bytes of JS-side `memcpy`. The Rust port eliminates that.
+This shared-memory design avoids any per-call JS-side `memcpy` between the two wasm modules.
 
 ## Autodiff tape design
 
@@ -259,7 +259,7 @@ End-to-end sampling is exercised by `stan-wasm-api/tests/sampling.rs`: it runs t
 ## Why wasm32, not wasm-gc
 
 - Stable Rust does not target wasm-gc. The wasm-gc Rust backend is experimental and currently produces larger / slower binaries than `wasm32-unknown-unknown` + `dlmalloc`.
-- The bottleneck for sampling is the per-leapfrog `log_prob_grad` call, and in both the MoonBit predecessor and this project the AOT model wasm is emitted as plain wasm32 with no `struct.new` / `array.new` — there is nothing to GC.
+- The bottleneck for sampling is the per-leapfrog `log_prob_grad` call, and the AOT model wasm is emitted as plain wasm32 with no `struct.new` / `array.new` — there is nothing to GC.
 - Skipping wasm-gc keeps the runtime predictable across all current browser versions and avoids the `wasm-gc` feature negotiation that some embedders still gate.
 
 The `crates/stan-codegen/tests/no_wasm_gc.rs` test enforces this invariant: the validator is run with `WasmFeatures::default() - WasmFeatures::GC` and must accept the artifact.
@@ -268,7 +268,5 @@ The `crates/stan-codegen/tests/no_wasm_gc.rs` test enforces this invariant: the 
 
 - [`README.md`](README.md) — user-facing intro and quick start
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to propose changes
-- [`docs/en/MIGRATION.md`](docs/en/MIGRATION.md) — phase-by-phase rewrite history from `stan-wasm` (MoonBit)
 - [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md) — performance methodology and current numbers
-- [`docs/ja/MOONBIT_VS_RUST.md`](docs/ja/MOONBIT_VS_RUST.md) — Japanese tech note on the rewrite trade-offs ([English summary](docs/en/MOONBIT_VS_RUST.md))
 - [`crates/stan-codegen/tests/no_wasm_gc.rs`](crates/stan-codegen/tests/no_wasm_gc.rs) — wasm-gc absence invariant

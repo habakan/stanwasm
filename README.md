@@ -4,6 +4,8 @@
 
 Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~415 KB` wasm bundle, embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
+![stan-wasm-rs examples gallery demo](examples/gallery/demo.gif)
+
 ## When to use this (and when not)
 
 | Need | Use this | Use cmdstan / Stan Playground instead |
@@ -41,7 +43,7 @@ Blocks: `data`, `parameters`, `transformed parameters`, `model`, `generated quan
 
 **Not yet supported**: `multi_normal` (full covariance), `multinomial`, `categorical`, `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`, `lkj_corr_cholesky_rng`, `functions { ... }` block (user-defined functions).
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for an internals tour, [`docs/en/MIGRATION.md`](docs/en/MIGRATION.md) for the per-phase plan, [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md) for performance numbers, and [`docs/ja/MOONBIT_VS_RUST.md`](docs/ja/MOONBIT_VS_RUST.md) (Japanese, [English summary](docs/en/MOONBIT_VS_RUST.md)) for a tech-note on the rewrite history. Documentation is organized by language under `docs/en/` and `docs/ja/`.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for an internals tour and [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md) for performance numbers. Documentation is organized by language under `docs/en/` and `docs/ja/`.
 
 ## Architecture
 
@@ -147,7 +149,7 @@ const draw = model.stepDraw();
 
 ```bash
 cargo build --release
-cargo test                    # ~30 tests across all crates
+cargo test                    # ~45 tests across all crates
 cargo run --release -p stan-cli -- bench all
 ```
 

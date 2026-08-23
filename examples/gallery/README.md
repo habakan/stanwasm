@@ -3,6 +3,8 @@
 One Vite + React app, four tabs, each showing a different reason sampling
 entirely in the browser is worth having.
 
+![demo](demo.gif)
+
 ## Run locally
 
 ```bash

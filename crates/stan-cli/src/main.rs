@@ -7,10 +7,6 @@
 //!   B) Compiled::log_prob_grad   — recorded-tape replay (fast Rust path)
 //!   C) AOT wasm via wasmi        — emitted by stan-codegen
 //!   D) StanModel::sample         — full NUTS sampling end-to-end
-//!
-//! Results compared loosely to MoonBit `tests/results/benchmark_nutsrs_aot.json`
-//! at the bottom of the run; this gives a quick sense of whether the Rust
-//! port has hit performance parity.
 
 use std::time::{Duration, Instant};
 

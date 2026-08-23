@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-08-23 (alpha)
+
+Initial alpha release: enough Stan to sample linear regression, logistic
+regression, Poisson regression, eight schools (non-centered), and
+multivariate-LKJ-style models end-to-end in the browser — plus a
+`generated quantities` block, step-by-step sampling for live
+visualization, and a tabbed examples gallery.
+
 ### Added
 
 - `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`
@@ -30,35 +38,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already-finished chain. `.stepDraw()` also returns nuts-rs's own
   `step_size`/`num_steps` for that draw (its live dual-averaging adaptation
   and trajectory-length search), not values this crate computes.
-- `examples/gallery`: new "MCMC Visualizer" tab using the step-by-step API to
-  race NUTS against Random-Walk Metropolis on Neal's funnel, chain count
-  adjustable, with a live "fog of war" veil (clears wherever a draw lands,
-  revealing the true density underneath) showing each method's coverage,
-  and a live `step_size`/leapfrog-step readout on the NUTS panel sourced
-  straight from nuts-rs's own adaptation state.
+- `examples/gallery`: a tabbed demo app — MCMC Visualizer (NUTS vs
+  Random-Walk Metropolis racing live on Neal's funnel via the step-by-step
+  API, adjustable chain count, a "fog of war" coverage veil, and a
+  per-chain live wasm log), Live Regression (drag-to-refit robust vs
+  conjugate regression), Hierarchical Shrinkage (partial-pooling shrinkage
+  on marketing-campaign A/B test data), and Wasm Sandbox (a fuller,
+  IDE-style API tour: CSV upload, editable Stan source, multiple presets,
+  posterior summary table).
 - `examples/gallery`: graphical-model diagrams (node-and-plate plots next
-  to each Stan code block) are now parsed directly from the Stan source
-  instead of hand-drawn per tab, including a live one in Wasm Sandbox that
+  to each Stan code block) parsed directly from the Stan source rather
+  than hand-drawn per tab, including a live one in Wasm Sandbox that
   follows the editor. Distribution formulas render via MathJax, served
   from a locally-copied bundle rather than a CDN.
-
-### Changed
-
-- wasm bundle grew from ~365 KB to ~415 KB after `wasm-opt` (added `rand`/
-  `rand_distr` for `generated quantities` RNG support).
-
-## [0.1.0] — TBD (alpha)
-
-Initial alpha release covering enough Stan to sample linear regression,
-logistic regression, Poisson regression, eight schools (non-centered),
-and multivariate-LKJ-style models end-to-end in the browser.
 
 ### Architecture
 
 - Seven Rust crates: `stan-ast`, `stan-parser`, `stan-autodiff`,
   `stan-runtime`, `stan-codegen`, `stan-wasm-api`, `stan-cli`
-- Single wasm bundle (~365 KB after `wasm-opt`) shipping the parser,
-  AOT codegen, tape replay, and embedded `nuts-rs` sampler
+- Single wasm bundle (~415 KB after `wasm-opt`, including `rand`/
+  `rand_distr` for `generated quantities` RNG support) shipping the
+  parser, AOT codegen, tape replay, and embedded `nuts-rs` sampler
 - AOT model wasm imports memory from the host wasm-bindgen bundle —
   zero-copy bridge between sampler and per-model log_prob_grad
 - AOT path emits wasm binary directly via `wasm-encoder`; no browser
@@ -73,17 +73,24 @@ and multivariate-LKJ-style models end-to-end in the browser.
 - Constraints (scalar and vector): `lower`, `upper`, `lower_upper`
 - Higher-order constraints: `simplex`, `ordered`, `positive_ordered`,
   `cholesky_factor_corr`
-- Blocks: `data`, `parameters`, `transformed parameters`, `model`
-- Control flow: `for` loops (parameter-independent bounds)
+- Blocks: `data`, `parameters`, `transformed parameters`, `model`,
+  `generated quantities`
+- Control flow: `for`/`while` loops, `if`/`else` (including
+  parameter-dependent conditions), `break`/`continue`,
+  comparison/logical operators (`== != < > <= >= && ||`)
 - Sampling statements (`y ~ dist(...)`), `target += expr`, local declarations
+- `generated quantities` supports RNG draws for every covered distribution
+  above (`normal_rng`, `exponential_rng`, `gamma_rng`, `dirichlet_rng`,
+  `multi_normal_cholesky_rng`, etc.) plus `uniform_rng`. It runs natively
+  (tape-replay) inside the same wasm bundle — there is no separate
+  AOT-compiled path for it.
 
 ### Not yet supported
 
 - `functions { ... }` block (user-defined functions)
-- `generated quantities { ... }` block
 - `multi_normal` (full covariance), `multinomial`, `categorical`,
-  `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`
-- Parameter-dependent control flow (`if (alpha > 0) { ... }`)
+  `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`,
+  `lkj_corr_cholesky_rng`
 - Stan profiling / `print()` / `reject()`
 - Pathfinder, ADVI, or fixed_param samplers (NUTS only by design)
 
@@ -94,17 +101,21 @@ and multivariate-LKJ-style models end-to-end in the browser.
 | poisson_regression (2 params) | 10 ms | 5 ms |
 | eight_schools_ncp (10 params) | 16 ms | 6 ms |
 
-Comparable to the MoonBit-based predecessor `stan-wasm` and the `nuts-rs`
-direct-call benchmark. See `docs/en/BENCHMARKS.md`.
+Comparable to the `nuts-rs` direct-call benchmark. See `docs/en/BENCHMARKS.md`.
 
 ### Validation
 
-34 tests across the workspace, including:
+~45 tests across the workspace, including:
 - Per-distribution finite-difference gradient checks
 - AOT-output-vs-AST-oracle log_prob/grad agreement to 1e-12
 - End-to-end posterior recovery (linear regression slope β within ±0.3
   of truth on N=30 synthetic data, seed=42)
 - `wasmparser` validation confirming the artifact uses no wasm-gc opcodes
+- `generated quantities` RNG output checked against each distribution's
+  support/range (property-based, not exact-value, since it's random)
+- Step-by-step sampling (`startStepSampling`/`stepDraw`) matches full
+  `sample()` behavior and correctly restores `logProbGrad`/`sample`
+  afterward
 
 [Unreleased]: https://github.com/habakan/stan-wasm-rs/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/habakan/stan-wasm-rs/releases/tag/v0.1.0

@@ -1,4 +1,4 @@
-//! Stan AST. Mirrors `compiler/stan/ast.mbt` from the MoonBit reference.
+//! Stan AST types shared across the workspace.
 
 #![forbid(unsafe_code)]
 

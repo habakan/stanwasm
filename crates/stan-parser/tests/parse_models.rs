@@ -1,9 +1,8 @@
 //! Integration test: parse every .stan file under tests/models/ and assert
 //! the resulting AST has at least one parameter or model statement.
 //!
-//! These models come from the MoonBit reference implementation
-//! (`stan-wasm/tests/models/`). If any of them stops parsing here, that
-//! is a regression vs the reference.
+//! These are curated Stan model fixtures covering the language surface this
+//! project supports. If any of them stops parsing here, that's a regression.
 
 use stan_parser::parse;
 use std::fs;

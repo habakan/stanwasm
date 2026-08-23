@@ -555,7 +555,6 @@ pub fn erf(x: f64) -> f64 {
 }
 
 /// Convenience: trace `f` on a fresh tape, return (value, gradient).
-/// Mirrors the MoonBit `log_prob_grad` shim.
 pub fn log_prob_grad<F>(params: &[f64], f: F) -> (f64, Vec<f64>)
 where
     F: FnOnce(&mut Tape, &[u32]) -> u32,

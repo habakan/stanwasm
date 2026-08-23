@@ -2,11 +2,8 @@
 //! stan-wasm-api wasm bundle) do NOT use any wasm-gc opcodes — i.e. they
 //! pass `wasmparser` validation with the `GC` feature explicitly disabled.
 //!
-//! Why this matters: an earlier discussion in the migration plan considered
-//! whether MoonBit's wasm-gc backend gave it a structural advantage. We
-//! decided it didn't matter for our hot path, and this test pins that
-//! decision: the artifacts we ship are plain wasm32 (linear memory + manual
-//! heap), the same instruction subset MoonBit's WAT AOT emitted.
+//! This pins a deliberate choice: the artifacts we ship are plain wasm32
+//! (linear memory + manual heap), not wasm-gc — see ARCHITECTURE.md for why.
 
 use stan_codegen::compile;
 use stan_runtime::{Env, Model};

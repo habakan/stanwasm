@@ -1,4 +1,4 @@
-//! Distribution log-pdfs / log-pmfs. Mirrors `interp.mbt`.
+//! Distribution log-pdfs / log-pmfs.
 //!
 //! Subset implemented in Phase 3: scalar continuous and discrete distributions
 //! that cover the linear_regression / eight_schools / logistic_regression /
@@ -7,7 +7,7 @@
 //!
 //! Note: every intermediate is bound to a `let` because Rust's borrow checker
 //! cannot prove that two nested `v_add(t, ...)` calls don't alias the tape
-//! borrow. Equivalent to MoonBit's evaluation order, just more verbose.
+//! borrow.
 
 use crate::matrix::{mat_mdiv_ltri_low, vec_dot_self};
 use crate::ops::{v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub};

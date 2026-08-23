@@ -16,15 +16,13 @@ The Node bench compares **two sampling paths** end-to-end:
 
 ### Node.js V8 + wasm32 (the path users see)
 
-| case                 | replay ms | **AOT ms** | speedup | MoonBit ref |
-|----------------------|----------:|-----------:|--------:|------------:|
-| poisson_regression (2 p)   |       9.9 |    **5.2** |   1.91× | 6.0 ms (logistic, 2 p) |
-| eight_schools_ncp (10 p)   |      16.0 |    **5.5** |   2.90× |     5.5 ms |
-| linear_regression (3 p)†   |     248.8 |   **44.3** |   5.62× |          — |
+| case                 | replay ms | **AOT ms** | speedup |
+|----------------------|----------:|-----------:|--------:|
+| poisson_regression (2 p)   |       9.9 |    **5.2** |   1.91× |
+| eight_schools_ncp (10 p)   |      16.0 |    **5.5** |   2.90× |
+| linear_regression (3 p)†   |     248.8 |   **44.3** |   5.62× |
 
 † `linear_regression` posterior is sharp (σ ≈ 0.1 on N=30 synthetic data); NUTS adapts to a small step and takes many leapfrog steps. Not representative.
-
-The AOT path matches or beats the MoonBit reference (`stan-wasm/tests/results/benchmark_nutsrs_aot.json`, also Node.js V8). Same algorithm in both — `nuts-rs` Rust crate inside wasm calling into a fully-unrolled AOT model wasm. The Rust unification's only architectural difference is **shared linear memory**, which removes the inter-wasm `memcpy` MoonBit's bridge had to do per logp call.
 
 ### Native Rust release
 
