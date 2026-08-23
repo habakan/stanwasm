@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   straight from nuts-rs's own adaptation state.
 - `examples/gallery`: graphical-model diagrams (node-and-plate plots next
   to each Stan code block) are now parsed directly from the Stan source
-  instead of hand-drawn per tab, including a live one in Get Started that
+  instead of hand-drawn per tab, including a live one in Wasm Sandbox that
   follows the editor. Distribution formulas render via MathJax, served
   from a locally-copied bundle rather than a CDN.
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import init from "stan-wasm-rs";
-import { GetStarted } from "./tabs/GetStarted";
+import { WasmSandbox } from "./tabs/WasmSandbox";
 import { LiveRegression } from "./tabs/LiveRegression";
 import { HierarchicalShrinkage } from "./tabs/HierarchicalShrinkage";
 import { McmcVisualizer } from "./tabs/McmcVisualizer";
@@ -29,10 +29,10 @@ const TABS = [
     Component: HierarchicalShrinkage,
   },
   {
-    key: "get-started",
-    label: "Get Started",
+    key: "wasm-sandbox",
+    label: "Wasm Sandbox",
     description: "A fuller API tour: CSV upload, editable Stan source, multiple presets, posterior summary table.",
-    Component: GetStarted,
+    Component: WasmSandbox,
   },
 ] as const;
 

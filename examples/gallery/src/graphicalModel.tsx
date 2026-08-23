@@ -22,7 +22,7 @@ export function MathJaxProvider({ children }: { children: ReactNode }) {
 
 // ============================================================================
 // Stan source -> graphical-model graph. Every diagram in this app (including
-// Get Started's live editor) is derived from this parser rather than
+// Wasm Sandbox's live editor) is derived from this parser rather than
 // hand-drawn, so the diagram can never drift out of sync with the actual
 // model being sampled.
 // ============================================================================
@@ -291,7 +291,7 @@ interface PlateCtx { plateBound: string | null; loopVar: string | null; members:
  *  statement's (or deterministic transform's) arguments reference. Returns
  *  `null` for anything that doesn't parse as a plausible Stan program —
  *  callers should treat that as "no diagram to show" rather than an error,
- *  since e.g. Get Started's editor is mid-edit most of the time. */
+ *  since e.g. Wasm Sandbox's editor is mid-edit most of the time. */
 export function parseStanGraph(src: string): Graph | null {
   try {
     const clean = stripComments(src);

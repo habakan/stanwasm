@@ -38,7 +38,7 @@ function summarize(name: string, samples: number[]): ParamSummary {
   };
 }
 
-export function GetStarted() {
+export function WasmSandbox() {
   const [presetKey, setPresetKey] = useState<keyof typeof PRESETS>("linear_regression");
   const [nWarmup, setNWarmup] = useState(500);
   const [nDraws, setNDraws] = useState(1000);

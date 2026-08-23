@@ -52,9 +52,9 @@ Open `http://localhost:5173`.
   Also shows the population distribution N(μ, τ) (band or density-curve
   toggle) and, per campaign, a KDE over its own real posterior draws.
   `src/tabs/HierarchicalShrinkage.tsx`.
-- **Get Started** — a fuller API tour: CSV upload, editable Stan source,
+- **Wasm Sandbox** — a fuller API tour: CSV upload, editable Stan source,
   multiple model presets, posterior summary table with histograms.
-  `src/tabs/GetStarted.tsx`. Sample CSVs for its presets live under
+  `src/tabs/WasmSandbox.tsx`. Sample CSVs for its presets live under
   `sample-csv/`.
 
 Every drag frame reconstructs the relevant `StanModel`(s) and runs NUTS
@@ -66,11 +66,11 @@ mounted, so switching tabs frees the inactive one's compiled model.
 ## Graphical models
 
 Every "graphical model" diagram (the node-and-plate plot next to each Stan
-code block, including a live one in Get Started that follows the editor) is
+code block, including a live one in Wasm Sandbox that follows the editor) is
 parsed straight out of the Stan source in `src/graphicalModel.tsx` — nodes
 from `data`/`parameters`/`transformed parameters` declarations, edges and
 distribution formulas from `model`-block sampling statements — rather than
 hand-drawn per tab. Distribution formulas render via MathJax, served from a
 locally-copied bundle (`copy-mathjax` in `package.json`, output to
-`public/mathjax-tex-mml-chtml.js`) rather than a CDN, so the "runs fully
+`public/mathjax-tex-svg.js`) rather than a CDN, so the "runs fully
 offline" story holds for this too.
