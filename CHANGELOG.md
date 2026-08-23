@@ -31,6 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A panic hook (`console_error_panic_hook`) is installed on wasm module
   init, so the remaining internal-invariant panics surface a real message
   in the console instead of an opaque `RuntimeError: unreachable`.
+- An out-of-bounds index (e.g. `v[5]` on a length-2 vector) is now a clean
+  error instead of silently reading `0`.
+- `lkj_corr_cholesky_lpdf` computed the wrong density: it applied the
+  `(2η-2)` LKJ term as a single factor multiplied across the whole
+  Cholesky-Jacobian-weighted sum, rather than adding it to each row's own
+  weight before that row's `log(L_kk)` term — for K=2 this made the
+  density exactly 0 for any input. Fixed and covered by a regression test
+  against the K=2 closed-form density.
+- `sample()` and `startStepSampling()` left the model permanently unable
+  to sample or evaluate `logProbGrad` after a nuts-rs init failure (e.g. a
+  rejected `init` with zero gradient) — the internal `Compiled` was taken
+  out before nuts-rs ran and only restored on success. Now restored
+  regardless of outcome.
 
 ## [0.1.0] — 2026-08-23 (alpha)
 

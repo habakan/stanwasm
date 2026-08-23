@@ -210,25 +210,39 @@ pub fn dirichlet_lpdf(t: &mut Tape, theta: &[Val], alpha: &[Val]) -> Val {
 
 /// `lkj_corr_cholesky_lpdf(L | η)` — L is the Cholesky factor of a K×K
 /// correlation matrix.
-/// log p = (2η − 2) · Σ_{k=0..K-1} (K − 1 − k) · log Lₖₖ
+///
+/// log p = Σ_{k=0..K-1} [(K − 1 − k) + (2η − 2)] · log Lₖₖ
+///
+/// The `(K-1-k)` term is the Jacobian of Σ=LLᵀ restricted to the
+/// correlation-Cholesky manifold (why `lkj_corr_cholesky` is a distinct
+/// distribution from `lkj_corr`, not just a change of variables); `(2η-2)`
+/// is the LKJ density's own `det(Σ)^(η-1)` term, since det(Σ) = Π Lₖₖ².
+/// These combine additively per row (same base, summed exponents), NOT as
+/// a single `(2η-2)` factor applied to the whole weighted sum — that former
+/// structure is wrong: for K=2 it always evaluates to exactly 0, since the
+/// only row with a free diagonal (row 1) has `(K-1-k) = 0`, so multiplying
+/// by `(2η-2)` afterward can't undo that. Row 0's diagonal is always the
+/// fixed constant 1 (`log(1) = 0`), so including it in the sum is harmless
+/// regardless of its weight. Omits the η,K-only normalizing constant
+/// (doesn't affect gradients w.r.t. `L`; would matter only if `eta` itself
+/// were a sampled parameter).
 pub fn lkj_corr_cholesky_lpdf(t: &mut Tape, l_rows: &[Val], eta: &Val) -> Val {
     let kk = l_rows.len();
     let two_eta = v_mul(t, &Val::Num(2.0), eta);
     let two_eta_minus_2 = v_sub(t, &two_eta, &Val::Num(2.0));
-    let mut weighted_sum = Val::Num(0.0);
+    let mut lp = Val::Num(0.0);
     for (k, row_v) in l_rows.iter().enumerate() {
-        let wt = (kk - 1 - k) as f64;
-        if wt > 0.0 {
-            if let Val::Vec(row) = row_v {
-                if k < row.len() {
-                    let lr = v_log(t, &row[k]);
-                    let term = v_mul(t, &Val::Num(wt), &lr);
-                    weighted_sum = v_add(t, &weighted_sum, &term);
-                }
+        let base_wt = (kk - 1 - k) as f64;
+        if let Val::Vec(row) = row_v {
+            if k < row.len() {
+                let weight = v_add(t, &Val::Num(base_wt), &two_eta_minus_2);
+                let lr = v_log(t, &row[k]);
+                let term = v_mul(t, &weight, &lr);
+                lp = v_add(t, &lp, &term);
             }
         }
     }
-    v_mul(t, &two_eta_minus_2, &weighted_sum)
+    lp
 }
 
 /// Distributions whose first argument is a *whole* vector / matrix (not a
@@ -302,5 +316,37 @@ fn broadcast_elem(v: &Val, i: usize) -> Val {
     match v {
         Val::Vec(xs) => xs[i].clone(),
         other => other.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// For K=2, a correlation matrix has one free parameter ρ; its Cholesky
+    /// factor is `L = [[1, 0], [ρ, sqrt(1-ρ²)]]`. The LKJ(η) density is
+    /// `p(Σ|η) ∝ det(Σ)^(η-1) = (1-ρ²)^(η-1) = L[1][1]^(2η-2)`, so
+    /// `log p(L|η) = (2η-2)·log(L[1][1])` exactly (K=2 has no Cholesky
+    /// Jacobian contribution beyond this). Regression test for the
+    /// structural bug where this always evaluated to exactly 0.
+    #[test]
+    fn lkj_corr_cholesky_k2_matches_analytic_formula() {
+        let mut t = Tape::new();
+        for &rho in &[0.0_f64, 0.3, -0.6, 0.9] {
+            for &eta in &[1.0_f64, 2.0, 0.5, 3.5] {
+                let l11 = (1.0 - rho * rho).sqrt();
+                let l_rows = vec![
+                    Val::Vec(vec![Val::Num(1.0), Val::Num(0.0)]),
+                    Val::Vec(vec![Val::Num(rho), Val::Num(l11)]),
+                ];
+                let lp = lkj_corr_cholesky_lpdf(&mut t, &l_rows, &Val::Num(eta));
+                let expected = (2.0 * eta - 2.0) * l11.ln();
+                let got = lp.to_f64(&t);
+                assert!(
+                    (got - expected).abs() < 1e-9,
+                    "rho={rho}, eta={eta}: got {got}, expected {expected}"
+                );
+            }
+        }
     }
 }

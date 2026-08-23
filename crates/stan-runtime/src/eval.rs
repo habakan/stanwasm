@@ -67,12 +67,23 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
             })
         }
         Expr::Index(arr_e, idx_e) => {
-            let idx = eval_expr(t, idx_e, env)?.to_i32(t) - 1;
+            let one_based = eval_expr(t, idx_e, env)?.to_i32(t);
+            let idx = one_based - 1;
             let arr = eval_expr(t, arr_e, env)?;
-            Ok(match arr {
-                Val::Vec(xs) => xs.get(idx as usize).cloned().unwrap_or(Val::Num(0.0)),
-                other => other,
-            })
+            match arr {
+                Val::Vec(xs) => {
+                    if idx >= 0 {
+                        if let Some(v) = xs.get(idx as usize) {
+                            return Ok(v.clone());
+                        }
+                    }
+                    Err(EvalError::IndexOutOfBounds {
+                        index: one_based,
+                        len: xs.len(),
+                    })
+                }
+                other => Ok(other),
+            }
         }
         Expr::Call(name, args) => eval_call(t, name, args, env),
     }

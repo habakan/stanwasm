@@ -182,27 +182,35 @@ impl StanModel {
             .compiled
             .take()
             .ok_or_else(|| JsError::new("internal: compiled missing — call StanModel anew"))?;
-        let math = CpuMath::new(LogpAdapter { compiled });
 
-        let settings = DiagNutsSettings {
-            num_tune: num_warmup as u64,
-            num_draws: num_draws as u64,
-            ..Default::default()
-        };
+        // Run sampling in a closure so we can restore `self.compiled` on
+        // *any* exit path below, not just success — a rejected `init` (a
+        // common nuts-rs failure: it refuses a zero initial gradient) used
+        // to return early and leave the model unable to sample or evaluate
+        // logProbGrad ever again.
+        let result: Result<Vec<f64>, JsError> = (|| {
+            let math = CpuMath::new(LogpAdapter { compiled });
+            let settings = DiagNutsSettings {
+                num_tune: num_warmup as u64,
+                num_draws: num_draws as u64,
+                ..Default::default()
+            };
+            let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            let iter = sample_sequentially(math, settings, init, total, 0, &mut rng)
+                .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
 
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let iter = sample_sequentially(math, settings, init, total, 0, &mut rng)
-            .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
-
-        let mut out = vec![0.0_f64; n * total as usize];
-        for (i, draw) in iter.enumerate() {
-            let (pos, _progress) = draw.map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
-            out[i * n..(i + 1) * n].copy_from_slice(pos.as_ref());
-        }
+            let mut out = vec![0.0_f64; n * total as usize];
+            for (i, draw) in iter.enumerate() {
+                let (pos, _progress) =
+                    draw.map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
+                out[i * n..(i + 1) * n].copy_from_slice(pos.as_ref());
+            }
+            Ok(out)
+        })();
 
         // Restore by re-tracing. Cheap relative to the sampling itself.
         self.compiled = Some(trace(&self.model).map_err(jserr)?);
-        Ok(out)
+        result
     }
 
     /// Constrained values of `parameters` + `transformed parameters` for one
@@ -303,9 +311,12 @@ impl StanModel {
         };
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let mut chain = settings.new_chain(0, math, &mut rng);
-        chain
-            .set_position(init)
-            .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
+        if let Err(e) = chain.set_position(init) {
+            // Same reasoning as `sample()`: restore `compiled` before
+            // returning so a rejected `init` doesn't strand the model.
+            self.compiled = Some(trace(&self.model).map_err(jserr)?);
+            return Err(JsError::new(&format!("nuts-rs init: {e}")));
+        }
         self.step = Some(StepSampler {
             chain,
             total: num_warmup + num_draws,

@@ -26,6 +26,8 @@ pub enum EvalError {
     WhileLoopOverflow(u64),
     #[error("invalid parameters: {0}")]
     InvalidRngParams(String),
+    #[error("index {index} out of bounds for a length-{len} array/vector")]
+    IndexOutOfBounds { index: i32, len: usize },
     #[error(
         "if/while condition in `model`/`transformed parameters` depends on a \
          sampled parameter — not supported. NUTS traces this block once and \
