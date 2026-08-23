@@ -54,46 +54,61 @@ export function App() {
   }, []);
 
   const active = TABS.find((t) => t.key === tab)!;
+  // Wasm Sandbox is a full IDE-style tool in its own right — the gallery
+  // chrome above it (title, tagline, tab bar, description) just eats into
+  // its already-tight one-viewport layout for no benefit once you're
+  // actually using it. Collapse to a single "back" affordance instead.
+  const isSandbox = tab === "wasm-sandbox";
 
   return (
     <MathJaxProvider>
     <div className="app">
-      <div className="app-header">
-        <h1>stan-wasm-rs — examples</h1>
-        <p className="tagline">
-          Stan probabilistic models sampling entirely in your browser. No server, no network round trip.{" "}
-          <a href="https://github.com/habakan/stan-wasm-rs" target="_blank" rel="noreferrer">
-            GitHub
-          </a>
-          .
-        </p>
-
-        <div className="tabs">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              className={`tab-btn${t.key === tab ? " active" : ""}`}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
+      {isSandbox ? (
+        <div className="app-header app-header-minimal">
+          <button className="secondary" onClick={() => setTab(TABS[0].key)}>
+            ← Back to gallery
+          </button>
         </div>
-        <p className="tab-desc">{active.description}</p>
-      </div>
+      ) : (
+        <div className="app-header">
+          <h1>stan-wasm-rs — examples</h1>
+          <p className="tagline">
+            Stan probabilistic models sampling entirely in your browser. No server, no network round trip.{" "}
+            <a href="https://github.com/habakan/stan-wasm-rs" target="_blank" rel="noreferrer">
+              GitHub
+            </a>
+            .
+          </p>
+
+          <div className="tabs">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                className={`tab-btn${t.key === tab ? " active" : ""}`}
+                onClick={() => setTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <p className="tab-desc">{active.description}</p>
+        </div>
+      )}
 
       <div className="tab-body">
         {!loaded && <p>Loading WebAssembly bundle…</p>}
         {loaded && <active.Component />}
       </div>
 
-      <footer>
-        stan-wasm-rs · alpha · Apache-2.0 · embedded{" "}
-        <a href="https://github.com/pymc-devs/nuts-rs" target="_blank" rel="noreferrer">
-          nuts-rs
-        </a>{" "}
-        sampler
-      </footer>
+      {!isSandbox && (
+        <footer>
+          stan-wasm-rs · alpha · Apache-2.0 · embedded{" "}
+          <a href="https://github.com/pymc-devs/nuts-rs" target="_blank" rel="noreferrer">
+            nuts-rs
+          </a>{" "}
+          sampler
+        </footer>
+      )}
     </div>
     </MathJaxProvider>
   );

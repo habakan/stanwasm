@@ -37,6 +37,10 @@ body {
   flex-shrink: 0;
 }
 
+.app-header-minimal {
+  padding-bottom: 8px;
+}
+
 .tab-body {
   flex: 1;
   min-height: 0;
