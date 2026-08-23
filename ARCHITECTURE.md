@@ -204,6 +204,12 @@ fn log_prob_grad(params_ptr: i32, grads_ptr: i32, n_params: i32) -> f64
 
 Imports are emitted only for math functions the recorded tape actually used (`scan_imports` walks the tape ahead of section emission). Memory is imported, never defined, so the AOT module can share linear memory with the host.
 
+### Size limit on the AOT path
+
+The emitted function declares one primal and one adjoint local per tape node, so a trace of *n* nodes needs *2n* wasm locals. V8 accepts at most **50,000 locals per function**, which caps the AOT path at a tape of ~25,000 nodes. Because the trace is fully unrolled, tape length grows with the data: a vectorized `y ~ normal(alpha + beta * x, sigma)` uses roughly a dozen nodes per observation, so the ceiling lands somewhere around `N ≈ 2,000` for that model and lower for models that do more work per observation.
+
+`stan-codegen::compile` checks this before emitting and returns `CodegenError::TooManyLocals` rather than producing a module that fails to instantiate in the browser with an opaque `CompileError: local count too large`. The tape-replay path (`StanModel::sample`) has no such limit — it interprets the same tape and is the fallback for large models.
+
 The output validates without the `GC` feature in `wasmparser` — see `crates/stan-codegen/tests/no_wasm_gc.rs`.
 
 ## Native vs wasm builds
@@ -212,7 +218,7 @@ Same source tree, different feature surfaces:
 
 | Concern | Native (`cargo test`) | wasm32 (`wasm-pack build`) |
 |---|---|---|
-| AST evaluator (`stan-runtime::eval`) | Compiled in, used as golden oracle | Not reached at runtime; tree-shaken |
+| AST evaluator (`stan-runtime::eval`) | Compiled in, used as golden oracle | Compiled in and used at runtime: it produces the trace `sample` replays, and evaluates `generated quantities` natively per draw |
 | Parser + tape + codegen | Compiled in | Compiled in |
 | `nuts-rs` | Used via `Compiled` adapter | Same, via `wasm-bindgen` types |
 | AOT execution | Verified by spawning `wasmi` in tests | Done by V8 in the browser |

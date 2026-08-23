@@ -72,3 +72,4 @@ The JS bridge between the two modules is a 5-line snippet (`crates/stan-wasm-api
 - `sample ms` includes warmup adaptation. For longer chains the per-draw rate stabilizes lower.
 - Math import shims (lgamma, digamma, phi) are JS-side polynomial approximations; precision matches `stan_autodiff` Rust functions.
 - AOT path requires the host to provide math imports; missing imports throw at instantiate time.
+- The AOT path has a size ceiling: the emitted function needs two wasm locals per tape node and V8 caps a function at 50,000 locals, so a fully-unrolled trace above ~25,000 nodes cannot be compiled. For a vectorized linear regression that is roughly `N ≈ 2,000`. `compile()` reports this as `CodegenError::TooManyLocals`; use `sample()` (tape replay), which has no such limit. See [ARCHITECTURE.md](../../ARCHITECTURE.md#size-limit-on-the-aot-path).

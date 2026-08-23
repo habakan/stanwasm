@@ -9,7 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import init, { StanModel, version } from "../index.ts";
+import init, { StanModel, version } from "../index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wasmPath = resolve(here, "..", "pkg", "stan_wasm_api_bg.wasm");

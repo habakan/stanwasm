@@ -3,13 +3,29 @@
   "version": "0.1.0",
   "description": "Stan inference engine for WebAssembly (Rust port).",
   "type": "module",
-  "main": "index.ts",
-  "files": ["index.ts", "pkg/"],
+  "main": "./index.js",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./pkg/*": "./pkg/*"
+  },
+  "files": ["index.js", "index.d.ts", "pkg/"],
   "scripts": {
     "build:wasm": "../scripts/build-wasm.sh",
     "test": "node --import tsx/esm tests/smoke.ts",
+    "test:aot": "node --import tsx/esm tests/aot_smoke.ts",
     "bench": "node --import tsx/esm tests/bench.ts"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/habakan/stanwasm.git"
+  },
+  "homepage": "https://github.com/habakan/stanwasm#readme",
+  "keywords": ["stan", "bayesian", "mcmc", "nuts", "webassembly", "wasm"],
   "license": "Apache-2.0",
   "devDependencies": {
     "tsx": "^4.21.0"

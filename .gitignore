@@ -11,6 +11,9 @@ node_modules
 dist
 .vite
 
+# maintainer-only planning notes; kept on disk, never published
+/docs/internal/
+
 # editor
 .idea
 .vscode

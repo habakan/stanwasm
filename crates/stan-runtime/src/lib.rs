@@ -6,8 +6,11 @@
 //! - `stan-codegen` to perform the one-shot forward trace that produces
 //!   the wasm-emit input
 //!
-//! Intentionally NOT re-exported by `stan-wasm-api`: production wasm
-//! ships only the AOT path.
+//! `stan-wasm-api` does not re-export this crate's types, but it does embed
+//! the evaluator: `StanModel::sample` traces the AST and replays the recorded
+//! tape inside the shipped wasm, and `generated quantities` is evaluated here
+//! natively per draw. The AOT path is the optional fast lane on top
+//! (`sampleViaAot`), not a replacement.
 
 #![forbid(unsafe_code)]
 

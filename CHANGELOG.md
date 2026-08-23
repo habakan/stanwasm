@@ -44,6 +44,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejected `init` with zero gradient) — the internal `Compiled` was taken
   out before nuts-rs ran and only restored on success. Now restored
   regardless of outcome.
+- `-a^2` parsed as `(-a)^2`, flipping the sign of a common prior/likelihood
+  idiom, and `^` was left-associative (`2^3^2` gave 64 instead of 512). `^`
+  now binds tighter than unary minus and associates right, as in Stan.
+- `int / int` did real division, so `N / 2` with `int N = 3` gave `1.5`
+  instead of `1`. Integer literals are a distinct token and AST node now,
+  and `Env` records which bindings are int-typed (`int` data, `array[...]
+  int`, loop counters, `int` locals), so `/` truncates exactly where Stan
+  says it does.
+- `array[N] real<lower=0>` (and every other array-of-constrained-element
+  declaration) was sampled with no transform and no Jacobian, accepting
+  negative values as if they were positive. Array element constraints are
+  applied recursively now.
+- `cov_matrix`, `corr_matrix`, `cholesky_factor_cov` and `unit_vector`
+  parsed and then sampled unconstrained with a zero Jacobian, despite the
+  README listing them as unsupported. They are now
+  `EvalError::UnsupportedConstraint`.
+- A `matrix[R, C]` parameter arrived as one flat vector, so `M[i, j]` read
+  the wrong element. It is reshaped into rows.
+- Element-wise arithmetic `zip`ped its operands, so `vector[3] + vector[2]`
+  quietly returned a length-2 vector and `X * beta` (matrix × vector)
+  returned the matrix with each row scaled by one element of `beta`.
+  Operand shapes are checked; a matrix product is a clean "not implemented"
+  error rather than a plausible wrong number.
+- A range index past the end (`y[2:5]` on a length-3 vector) silently
+  returned a short vector instead of a bounds error.
+- The `data` block was never checked against the supplied JSON. A missing
+  field, a wrong length or shape, a non-integral value for an `int`, and a
+  violated `<lower=...>`/`<upper=...>` bound (`{"N": -5}` for
+  `int<lower=0> N`) all loaded and sampled. `Model::parse_and_load`
+  validates every declaration once, up front.
+- `a ~ normal(0);` indexed past the argument list and panicked — a wasm
+  trap, which kills the module instance and forces a page reload in the
+  browser. Distribution arity is checked before dispatch, and the
+  multivariate forms that used to fall back to a zero log-density
+  contribution on an unexpected shape now report the shape they wanted.
+- A vectorized distribution argument shorter than the variate
+  (`y ~ normal(mu, s)` with `mu` shorter than `y`) panicked; a longer one
+  had its tail silently ignored. Both are errors.
+- `Val::to_f64`/`to_tape` panicked on a container, so comparing two vectors
+  with `==` or feeding a matrix product to a scalar lpdf trapped the wasm
+  instance. They return `EvalError` instead.
+- `stan-codegen` emitted AOT modules with two wasm locals per tape node and
+  no ceiling, so a model whose trace exceeds ~25,000 nodes (roughly
+  `N ≈ 2,000` for a vectorized regression) produced a module the browser
+  rejects with `CompileError: local count too large`. `compile()` now
+  returns `CodegenError::TooManyLocals` up front, and the limit is
+  documented in `ARCHITECTURE.md` and `docs/en/BENCHMARKS.md`.
+- `num_warmup + num_draws` was summed as `u32` before widening to `u64`, so
+  a large pair wrapped to a different run length.
+
+### Changed
+
+- The npm entry point is `ts/index.js` with a hand-written `ts/index.d.ts`,
+  and `package.json` declares `types`/`exports`. It was `index.ts`, which
+  broke plain-JS consumers, bundlers, and Node without
+  `--experimental-strip-types`.
+- Declared MSRV: Rust 1.88 (`rust-version` in the workspace `Cargo.toml`),
+  set by `nuts-rs` 0.18's edition-2024 + let-chains usage and verified with
+  `cargo +1.88 test --workspace`. `CONTRIBUTING.md` previously said 1.80,
+  which does not build.
+
+### Removed
+
+- `docs/internal/DELIVERY.md` (maintainer-only release-planning notes) is no
+  longer tracked; `docs/internal/` is gitignored.
 
 ## [0.1.0] — 2026-08-23 (alpha)
 

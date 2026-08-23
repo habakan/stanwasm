@@ -12,7 +12,7 @@ import init, {
   setAotExports,
   clearAotExports,
   sharedMemory,
-} from "../index.ts";
+} from "../index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wasmPath = resolve(here, "..", "pkg", "stan_wasm_api_bg.wasm");

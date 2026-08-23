@@ -45,7 +45,7 @@ cargo test --workspace
 ```
 
 Required tools:
-- Rust 1.80+ (stable channel, see `rust-toolchain.toml`)
+- Rust 1.88+ (the MSRV declared in the workspace `Cargo.toml`; `rust-toolchain.toml` pins the stable channel for development)
 - `wasm-pack` (`cargo install wasm-pack`) for browser builds
 - Node.js 22+ for Node integration tests (optional)
 

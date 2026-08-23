@@ -1,9 +1,10 @@
 //! Distribution log-pdfs / log-pmfs.
 //!
-//! Subset implemented in Phase 3: scalar continuous and discrete distributions
-//! that cover the linear_regression / eight_schools / logistic_regression /
-//! poisson_regression / gamma_regression / lognormal_regression test models.
-//! Multivariate (multi_normal, lkj_*) deferred.
+//! Covered: the scalar continuous and discrete distributions listed in the
+//! README, plus the multivariate `multi_normal_cholesky`, `lkj_corr_cholesky`
+//! and `dirichlet`. `arity()` is the authoritative list — anything absent from
+//! it is an `UnknownDistribution` error, never a zero contribution to the log
+//! density.
 //!
 //! Note: every intermediate is bound to a `let` because Rust's borrow checker
 //! cannot prove that two nested `v_add(t, ...)` calls don't alias the tape

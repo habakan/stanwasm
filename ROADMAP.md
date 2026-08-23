@@ -62,39 +62,62 @@ full language coverage for its own sake.
 ## Correctness follow-ups from the pre-launch review
 
 A pre-launch review (external, via another agent) surfaced several
-correctness bugs, verified independently and fixed across two rounds — see
-`[Unreleased]` in `CHANGELOG.md` for the full list (the "silently wrong
-instead of erroring" family, an out-of-bounds index silently reading 0,
-`lkj_corr_cholesky_lpdf`'s wrong formula, and `sample()`/
-`startStepSampling()` stranding the model after a rejected `init`). Still
-open:
+correctness bugs, verified independently and fixed across three rounds — see
+`[Unreleased]` in `CHANGELOG.md` for the full list. The last round closed the
+"silently wrong instead of erroring" family: `^` precedence/associativity,
+integer division, array element constraints, unhandled constraint types,
+matrix parameter shape, mismatched operand lengths, and `data`-block
+validation. Still open:
 
 - **Indexed assignment is a no-op.** `mu[i] = expr;` doesn't write into the
-  vector — it now errors cleanly (`EvalError::UnsupportedAssignmentTarget`)
+  vector — it errors cleanly (`EvalError::UnsupportedAssignmentTarget`)
   instead of silently discarding the write, but the feature itself isn't
   implemented. Needs an lvalue-resolution helper that walks `Expr::Index`
   chains down to the root `Env` binding and writes back through them.
-- **Constraint Jacobians silently pass through for unhandled types.**
-  `constraints.rs`'s fallback arm returns a zero Jacobian for any
-  `StanType` not explicitly matched (e.g. nested `array[N] real<lower=..>`
-  in some shapes). Needs auditing which type/constraint combinations
-  actually reach that fallback and either implementing them or rejecting
-  them explicitly.
-- **`Val::Vec` is used for both math vectors and matrices, and `*` is
-  always element-wise.** Writing `X * beta` (matrix-vector product, a
-  standard Stan idiom) with the generic `*` operator does not do a real
-  matrix multiply — internal distributions that need real matrix ops
-  (`multi_normal_cholesky`, etc.) route around this via dedicated helpers
-  in `matrix.rs`, but user-written model code has no way to ask for real
-  matrix multiplication. Needs a type-aware dispatch (or a distinct
-  operator) once matrices are meant to support general linear algebra
-  syntax, not just Cholesky-factor plumbing.
+  This is the main thing blocking the standard posterior-predictive idiom
+  in `generated quantities`.
+
+- **Scalar `_rng` functions don't vectorize.** `normal_rng(mu, sigma)` with a
+  vector `mu` is an error rather than a vector of draws. Together with the
+  item above, `vector[N] y_rep = normal_rng(mu, sigma);` — the reason most
+  people write a `generated quantities` block at all — doesn't work. Both
+  are small next to the payoff: broadcasting in `rng::dispatch` plus lvalue
+  resolution in `eval::eval_stmt`.
+
+- **`Val::Vec` is used for both math vectors and matrices, and `*` is always
+  element-wise.** `X * beta` (matrix-vector product, a standard Stan idiom)
+  is now a clean `ShapeMismatch` error rather than a wrong answer, but real
+  matrix multiplication still isn't available to user-written model code —
+  the internal distributions that need it (`multi_normal_cholesky`, etc.)
+  route around it via dedicated helpers in `matrix.rs`. Needs a type-aware
+  dispatch (or a distinct operator) before matrices support general linear
+  algebra syntax.
+
+- **`transformed data { ... }` is folded into `model`.** Its statements are
+  appended to the model block, so they re-run on every trace instead of once
+  at load, and the variables they define aren't visible from `generated
+  quantities` (`undefined variable`). Needs its own `StanProgram` field,
+  evaluated once into `data_env` during `Model::parse_and_load`.
+
 - **`sampleViaAot` doesn't check the AOT module's `n_params` against the
   current model's.** Passing an AOT module compiled for a different model
   shape reads/writes past the shared buffer. Needs a dimension check before
   the first `aot_logp` call.
-- Smaller items not yet triaged: parser operator-precedence edge cases
-  (`^` associativity, unary-minus precedence interacting with it), the
-  `logProbGrad`/`sample` API mixing `n_params` (snake_case) with everything
-  else camelCase, and `num_warmup`/`num_draws` not being validated against
-  negative/huge values before allocating.
+
+- **The AOT path has a hard size ceiling.** Two wasm locals per tape node
+  against V8's 50,000-local limit caps it at ~25,000 tape nodes (`N ≈ 2,000`
+  for a vectorized regression). `compile()` reports this cleanly now and
+  callers can fall back to `sample()`, but lifting it means spilling
+  intermediates to linear memory instead of locals, or splitting the
+  emitted function.
+
+- **Loop-form model building is slow.** `for (i in 1:N) y[i] ~ ...` clones
+  the whole vector per element (`Val::Vec` + `.get(n).cloned()`), so tracing
+  is O(N²): ~1.6 s at N = 20,000 where the vectorized form takes ~5 ms.
+  Needs indexing that borrows instead of cloning.
+
+- Smaller items not yet triaged: the `logProbGrad`/`sample` API mixes
+  `n_params` (snake_case) with otherwise-camelCase names; `UnknownChar`
+  renders a non-ASCII byte as mojibake because it casts a byte to `char`;
+  and calling `logProbGrad`/`sample` mid-step-sampling reports
+  `internal: compiled missing` instead of pointing at `finishStepSampling`.

@@ -22,7 +22,7 @@ Stan probabilistic models compiled and sampled entirely inside the browser. Pure
 
 ## Validated end-to-end
 
-Linear regression posterior recovers the true slope to ±0.3 in 1000 post-warmup draws (seed=42). AOT codegen output agrees with the AST oracle to 1e-12 on log_prob and gradients across all covered distributions.
+Linear regression posterior recovers the true slope to ±0.3 in 1000 post-warmup draws (seed=42). AOT codegen output agrees with the AST oracle to 1e-12 on log_prob and gradients, checked on `normal`, `exponential`, `poisson`, `multi_normal_cholesky` and `lkj_corr_cholesky` (`crates/stan-codegen/tests/aot_vs_oracle.rs`); the remaining distributions are covered by hand-computed log-density tests against the AST evaluator only.
 
 ## Stan language coverage
 
@@ -41,7 +41,29 @@ Blocks: `data`, `parameters`, `transformed parameters`, `model`, `generated quan
 
 `generated quantities` supports RNG draws for every covered distribution above (`normal_rng`, `exponential_rng`, `gamma_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng`, etc.) plus `uniform_rng`. It runs natively (tape-replay) inside the same wasm bundle — there is no separate AOT-compiled path for it (see [Architecture](#architecture)).
 
-**Not yet supported**: `multi_normal` (full covariance), `multinomial`, `categorical`, `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`, `lkj_corr_cholesky_rng`, `functions { ... }` block (user-defined functions).
+**The scalar `_rng` functions are scalar-only.** `real y = normal_rng(mu, sigma);` works; `normal_rng` applied to a vector argument is an error, not a vectorized draw. Combined with indexed assignment not being implemented (`y_rep[n] = ...` is a clean error), that rules out the usual posterior-predictive idiom:
+
+```stan
+generated quantities {
+  vector[N] y_rep;
+  for (n in 1:N) y_rep[n] = normal_rng(alpha + beta * x[n], sigma);  // NOT supported
+}
+```
+
+Only `dirichlet_rng` and `multi_normal_cholesky_rng` return containers, because their draw *is* a vector. Vectorized scalar RNG and indexed assignment are both tracked in [`ROADMAP.md`](ROADMAP.md).
+
+**Not yet supported** — each of these is a clean load-time or evaluation error, never a silently different answer:
+
+- Distributions: `multi_normal` (full covariance), `multinomial`, `categorical`, and `lkj_corr_cholesky_rng`
+- Constraint types: `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`
+- `functions { ... }` (user-defined functions)
+- Matrix algebra with the generic operators: `X * beta` (matrix × vector) is not a matrix product. Write the loop form, `for (n in 1:N) ... X[n] * beta`, or use `multi_normal_cholesky`, whose matrix work is done internally.
+- Indexed assignment: `y_rep[n] = ...;` and vectorized scalar `_rng`
+- `transformed data { ... }` parses, but its statements are folded into the `model` block, so they re-run every trace and the variables they define are not visible from `generated quantities`.
+
+Stan's static typing is honored where it changes results: `int / int` is integer division (`N / 2` with `N = 3` is `1`), and `^` binds tighter than unary minus and associates right (`-a^2` is `-(a^2)`, `2^3^2` is `512`).
+
+The `data` block is checked against the supplied JSON when the model loads — a missing field, a wrong length, a non-integral `int`, or a violated `<lower=...>`/`<upper=...>` bound is an error rather than a model that samples the wrong thing.
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for an internals tour and [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md) for performance numbers. Documentation is organized by language under `docs/en/` and `docs/ja/`.
 
@@ -82,14 +104,18 @@ A single `stan_wasm_api_bg.wasm` is shipped to the browser (replaces the previou
 
 ## Quick start (browser / Node.js)
 
+**Not published to npm or crates.io yet** — build from source for now. `ts/` is the package that will be published, so the import path below is what it will be either way.
+
 ```bash
-# Build the wasm bundle
+# Build the wasm bundle into ts/pkg/
 ./scripts/build-wasm.sh
 
-# Run smoke test
+# Run the smoke test
 cd ts
 node --experimental-strip-types tests/smoke.ts
 ```
+
+To use it from another project before it is on npm, point at the checkout: `npm install /path/to/stanwasm/ts` (or `npm pack` in `ts/` and install the tarball). The entry point is plain `.js` with a `.d.ts` alongside, so bundlers and plain-JS consumers work without a TypeScript step.
 
 ```ts
 import init, { StanModel } from "stanwasm";
@@ -147,9 +173,11 @@ const draw = model.stepDraw();
 
 ## Native development
 
+Requires Rust 1.88+ (the workspace MSRV; `nuts-rs` needs edition 2024).
+
 ```bash
 cargo build --release
-cargo test                    # ~45 tests across all crates
+cargo test                    # ~67 tests across all crates
 cargo run --release -p stan-cli -- bench all
 ```
 
