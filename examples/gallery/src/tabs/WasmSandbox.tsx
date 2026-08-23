@@ -98,9 +98,14 @@ export function WasmSandbox() {
   const [compiling, setCompiling] = useState(false);
   // Right-column panels — independently collapsible so the whole tab fits
   // one viewport without ever needing to scroll the page itself.
-  const [showGraph, setShowGraph] = useState(true);
   const [showData, setShowData] = useState(true);
   const [showResults, setShowResults] = useState(false);
+  // The graphical model lives as a floating, semi-transparent overlay in
+  // the editor's top-right corner instead of a sidebar panel — it doesn't
+  // have to compete with Data/Posterior summary for height that way. Click
+  // to expand it large and opaque for a proper look; click again to shrink
+  // it back down out of the way of the code underneath.
+  const [diagramExpanded, setDiagramExpanded] = useState(false);
 
   const preset: Preset = PRESETS[presetKey];
   const effectiveData = customData ?? preset.data;
@@ -365,25 +370,27 @@ export function WasmSandbox() {
               </>
             )}
           </h3>
-          <textarea
-            className="stan-editor"
-            value={effectiveStan}
-            onChange={(e) => setCustomStan(e.target.value)}
-            spellCheck={false}
-          />
+          <div className="stan-editor-wrap">
+            <textarea
+              className="stan-editor"
+              value={effectiveStan}
+              onChange={(e) => setCustomStan(e.target.value)}
+              spellCheck={false}
+            />
+            <div
+              className={`diagram-overlay${diagramExpanded ? " expanded" : ""}`}
+              onClick={() => setDiagramExpanded((o) => !o)}
+              title={diagramExpanded ? "Click to shrink" : "Click to expand"}
+            >
+              <div className="diagram-overlay-label">Graphical model</div>
+              <div className="model-diagram-card">
+                <GraphicalModel stanCode={debouncedStan} />
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="sandbox-side">
-          <CollapsibleSection
-            title="Graphical model"
-            open={showGraph}
-            onToggle={() => setShowGraph((o) => !o)}
-            grow={2}
-          >
-            <div className="model-diagram-card">
-              <GraphicalModel stanCode={debouncedStan} />
-            </div>
-          </CollapsibleSection>
 
           <CollapsibleSection
             title={`Data${customData ? " (custom CSV)" : ""}`}
