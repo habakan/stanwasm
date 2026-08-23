@@ -16,6 +16,15 @@ wasm-pack build crates/stan-wasm-api \
   --out-dir "$ROOT/ts/pkg" \
   --release
 
+# wasm-pack drops its own `.gitignore` (just `*`) into ts/pkg/. That's
+# redundant here — the repo root .gitignore already excludes /ts/pkg — and
+# actively harmful: npm's ignore-file resolution honors a nested .gitignore
+# with no matching .npmignore, so `npm publish`/`npm pack` from ts/ would
+# silently ship an empty pkg/ (no wasm, no glue JS) despite package.json's
+# `"files": ["pkg/"]` saying to include it. Remove it so the package we'd
+# actually publish is the one we tested.
+rm -f "$ROOT/ts/pkg/.gitignore"
+
 echo
 echo "build ok:"
 ls -la ts/pkg/
