@@ -1,8 +1,10 @@
 [package]
 name = "stan-ast"
+description = "Shared AST types for the Stan probabilistic programming language, used by stanwasm."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 serde = { workspace = true, optional = true }

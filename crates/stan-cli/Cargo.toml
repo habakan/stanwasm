@@ -1,8 +1,11 @@
 [package]
 name = "stan-cli"
+description = "Local development CLI for stanwasm: golden-value tests and benchmarks. Not published."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+publish = false
 
 [[bin]]
 name = "stan-cli"

@@ -1,8 +1,10 @@
 [package]
 name = "stan-parser"
+description = "Hand-written recursive-descent parser for a subset of the Stan language, used by stanwasm."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 stan-ast.workspace = true

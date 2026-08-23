@@ -1,8 +1,10 @@
 [package]
 name = "stan-codegen"
+description = "AOT-compiles a traced Stan model to a standalone wasm module via wasm-encoder."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 stan-ast.workspace = true

@@ -1,8 +1,10 @@
 [package]
 name = "stan-wasm-api"
+description = "wasm-bindgen API for compiling and sampling Stan models entirely in the browser, embedding nuts-rs."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -1,8 +1,10 @@
 [package]
 name = "stan-runtime"
+description = "Stan distributions, constraint transforms, and AST evaluator — the native golden-oracle behind stanwasm."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 stan-ast.workspace = true
