@@ -9,15 +9,38 @@
   box-sizing: border-box;
 }
 
+html, body, #root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   padding: 0;
 }
 
+/* The page itself never scrolls — .tab-body is the one scrollable region
+   shared by every tab, so the header/tab bar stay pinned and visible. Tabs
+   that want a genuinely non-scrolling experience (Wasm Sandbox) size their
+   own content to fit height:100% instead of relying on this; for the
+   others, this is just "the content area scrolls, not the whole page." */
 .app {
   max-width: 1320px;
   margin: 0 auto;
-  padding: 32px 24px 96px;
+  height: 100vh;
+  padding: 32px 24px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-header {
+  flex-shrink: 0;
+}
+
+.tab-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 h1 {
@@ -139,7 +162,8 @@ pre {
 }
 
 footer {
-  margin-top: 40px;
+  flex-shrink: 0;
+  margin-top: 16px;
   font-size: 12px;
   color: #888;
   border-top: 1px solid #eee;
@@ -169,13 +193,36 @@ footer a {
   margin-left: 4px;
 }
 
-/* IDE-style by default — code on the left, spacious, no separate
-   "fullscreen" mode to opt into. */
+/* IDE-style: the whole tab fits one viewport, no page scrolling — see
+   .app/.tab-body in the base rules above. .sandbox is the tab's own fixed-
+   height flex column; only .sandbox-panel-body scrolls internally, and
+   only when its content (e.g. a many-parameter posterior summary) actually
+   outgrows the space the collapsible panel is given. */
+.sandbox {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sandbox-toolbar {
+  flex-shrink: 0;
+}
+
+.sandbox-footnote {
+  flex-shrink: 0;
+  margin: 0;
+}
+
 .stan-editor-row {
   display: flex;
   gap: 20px;
   flex-wrap: wrap;
   align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .stan-editor-col {
@@ -194,6 +241,63 @@ footer a {
   min-width: 260px;
   max-width: 100%;
   overflow: auto;
+}
+
+.sandbox-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  background: white;
+}
+
+.sandbox-panel:not(.collapsed) {
+  flex: 0 0 32vh;
+  min-height: 0;
+}
+
+.sandbox-panel-tabs {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.sandbox-panel-tab {
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+}
+
+.sandbox-panel-tab:hover {
+  color: #c2410c;
+}
+
+.sandbox-panel-tab.active {
+  color: #c2410c;
+  background: #fef3c7;
+}
+
+.sandbox-panel-toggle {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.sandbox-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
 }
 
 .results {

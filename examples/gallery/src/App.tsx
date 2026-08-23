@@ -58,30 +58,34 @@ export function App() {
   return (
     <MathJaxProvider>
     <div className="app">
-      <h1>stan-wasm-rs — examples</h1>
-      <p className="tagline">
-        Stan probabilistic models sampling entirely in your browser. No server, no network round trip.{" "}
-        <a href="https://github.com/habakan/stan-wasm-rs" target="_blank" rel="noreferrer">
-          GitHub
-        </a>
-        .
-      </p>
+      <div className="app-header">
+        <h1>stan-wasm-rs — examples</h1>
+        <p className="tagline">
+          Stan probabilistic models sampling entirely in your browser. No server, no network round trip.{" "}
+          <a href="https://github.com/habakan/stan-wasm-rs" target="_blank" rel="noreferrer">
+            GitHub
+          </a>
+          .
+        </p>
 
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`tab-btn${t.key === tab ? " active" : ""}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
+        <div className="tabs">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              className={`tab-btn${t.key === tab ? " active" : ""}`}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <p className="tab-desc">{active.description}</p>
       </div>
-      <p className="tab-desc">{active.description}</p>
 
-      {!loaded && <p>Loading WebAssembly bundle…</p>}
-      {loaded && <active.Component />}
+      <div className="tab-body">
+        {!loaded && <p>Loading WebAssembly bundle…</p>}
+        {loaded && <active.Component />}
+      </div>
 
       <footer>
         stan-wasm-rs · alpha · Apache-2.0 · embedded{" "}
