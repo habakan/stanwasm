@@ -38,7 +38,7 @@ fn linear_regression_logp_at_known_point() {
 
     // Unconstrained params: alpha=0, beta=1, log_sigma=0 (so sigma=1).
     let params = vec![0.0, 1.0, 0.0];
-    let (lp, grads) = model.log_prob_grad(&params);
+    let (lp, grads) = model.log_prob_grad(&params).unwrap();
 
     // Hand-computed components:
     //   prior: normal_lpdf(0; 0, 10)
@@ -113,7 +113,7 @@ fn eight_schools_logp_finite_at_origin() {
 
     // Initial point: all 0.1 (avoids tau=0 zero-grad pathology)
     let params = vec![0.1; 10];
-    let (lp, grads) = model.log_prob_grad(&params);
+    let (lp, grads) = model.log_prob_grad(&params).unwrap();
     assert!(lp.is_finite(), "lp = {lp}");
     assert!(grads.iter().all(|g| g.is_finite()), "grads = {grads:?}");
     assert_eq!(grads.len(), 10);
@@ -147,7 +147,7 @@ fn poisson_regression_logp_finite() {
     assert_eq!(model.n_params(), 2);
 
     let params = vec![0.0, 1.0];
-    let (lp, grads) = model.log_prob_grad(&params);
+    let (lp, grads) = model.log_prob_grad(&params).unwrap();
     assert!(lp.is_finite(), "lp = {lp}");
     assert_eq!(grads.len(), 2);
     assert!(grads.iter().all(|g| g.is_finite()));
@@ -180,7 +180,7 @@ fn multivariate_lkj_sampling_reasonable() {
 
     // Smoke: lp + grads finite at small init
     let init = vec![0.1; 3];
-    let (lp, grads) = model.log_prob_grad(&init);
+    let (lp, grads) = model.log_prob_grad(&init).unwrap();
     assert!(lp.is_finite(), "lp = {lp}");
     assert!(grads.iter().all(|g| g.is_finite()), "grads = {grads:?}");
 
@@ -191,8 +191,8 @@ fn multivariate_lkj_sampling_reasonable() {
         let mut p_minus = init.clone();
         p_plus[i] += h;
         p_minus[i] -= h;
-        let (lp_plus, _) = model.log_prob_grad(&p_plus);
-        let (lp_minus, _) = model.log_prob_grad(&p_minus);
+        let (lp_plus, _) = model.log_prob_grad(&p_plus).unwrap();
+        let (lp_minus, _) = model.log_prob_grad(&p_minus).unwrap();
         let fd = (lp_plus - lp_minus) / (2.0 * h);
         assert!(
             (fd - grads[i]).abs() < 1e-4,
@@ -233,7 +233,7 @@ fn simplex_dirichlet_finite_diff() {
     assert_eq!(model.n_params(), 2);
 
     let init = vec![0.2, -0.3];
-    let (lp, grads) = model.log_prob_grad(&init);
+    let (lp, grads) = model.log_prob_grad(&init).unwrap();
     assert!(lp.is_finite(), "lp = {lp}");
 
     let h = 1e-5;
@@ -242,8 +242,8 @@ fn simplex_dirichlet_finite_diff() {
         let mut p_minus = init.clone();
         p_plus[i] += h;
         p_minus[i] -= h;
-        let (lp_plus, _) = model.log_prob_grad(&p_plus);
-        let (lp_minus, _) = model.log_prob_grad(&p_minus);
+        let (lp_plus, _) = model.log_prob_grad(&p_plus).unwrap();
+        let (lp_minus, _) = model.log_prob_grad(&p_minus).unwrap();
         let fd = (lp_plus - lp_minus) / (2.0 * h);
         assert!(
             (fd - grads[i]).abs() < 1e-4,
@@ -274,7 +274,7 @@ fn ordered_means_finite_diff() {
     assert_eq!(model.n_params(), 4);
 
     let init = vec![0.1, -0.2, 0.3, 0.0];
-    let (lp, grads) = model.log_prob_grad(&init);
+    let (lp, grads) = model.log_prob_grad(&init).unwrap();
     assert!(lp.is_finite(), "lp = {lp}");
 
     let h = 1e-5;
@@ -283,8 +283,8 @@ fn ordered_means_finite_diff() {
         let mut p_minus = init.clone();
         p_plus[i] += h;
         p_minus[i] -= h;
-        let (lp_plus, _) = model.log_prob_grad(&p_plus);
-        let (lp_minus, _) = model.log_prob_grad(&p_minus);
+        let (lp_plus, _) = model.log_prob_grad(&p_plus).unwrap();
+        let (lp_minus, _) = model.log_prob_grad(&p_minus).unwrap();
         let fd = (lp_plus - lp_minus) / (2.0 * h);
         assert!(
             (fd - grads[i]).abs() < 1e-4,
@@ -305,7 +305,7 @@ fn finite_difference_check_linear_regression() {
     let model = Model::parse_and_load(LINEAR_REGRESSION, data).unwrap();
 
     let params = vec![0.5, 1.5, -0.2]; // alpha, beta, log_sigma
-    let (_lp0, grads) = model.log_prob_grad(&params);
+    let (_lp0, grads) = model.log_prob_grad(&params).unwrap();
 
     let h = 1e-5;
     for i in 0..params.len() {
@@ -313,8 +313,8 @@ fn finite_difference_check_linear_regression() {
         let mut p_minus = params.clone();
         p_plus[i] += h;
         p_minus[i] -= h;
-        let (lp_plus, _) = model.log_prob_grad(&p_plus);
-        let (lp_minus, _) = model.log_prob_grad(&p_minus);
+        let (lp_plus, _) = model.log_prob_grad(&p_plus).unwrap();
+        let (lp_minus, _) = model.log_prob_grad(&p_minus).unwrap();
         let fd = (lp_plus - lp_minus) / (2.0 * h);
         assert!(
             (fd - grads[i]).abs() < 1e-5,

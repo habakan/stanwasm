@@ -1,10 +1,11 @@
-//! Constraint transforms with Jacobian. Mirrors `interp.mbt::constrain`.
+//! Constraint transforms with Jacobian.
 //!
 //! Phase 3 covers the scalar real cases (none, lower, upper, lower_upper)
 //! plus vectors with element-wise constraints. Multivariate transforms
 //! (simplex, ordered, cholesky_factor_*) are not yet ported.
 
 use crate::env::Env;
+use crate::error::EvalError;
 use crate::eval::eval_plain;
 use crate::ops::{v_add, v_exp, v_inv_logit, v_log, v_mul, v_sqrt, v_sub, v_tanh};
 use crate::value::Val;
@@ -36,40 +37,47 @@ pub fn param_dims(typ: &StanType, env: &Env) -> usize {
     }
 }
 
+/// Used only for sizing (`vector[N]`, etc.) — falls back to 0 on any
+/// evaluation error rather than propagating one, since a bad size surfaces
+/// clearly downstream (wrong param count, empty vector) rather than as a
+/// silently-wrong log density.
 fn eval_plain_int(expr: &stan_ast::Expr, env: &Env) -> usize {
     let mut tape = Tape::new();
-    let v = eval_plain(&mut tape, expr, env);
-    match v {
-        Val::Num(x) => x as usize,
+    match eval_plain(&mut tape, expr, env) {
+        Ok(Val::Num(x)) => x as usize,
         _ => 0,
     }
 }
 
 /// Apply the constraint transform to a slice of unconstrained tape leaves.
 /// Returns `(constrained_value, log_jacobian)`.
-pub fn constrain(t: &mut Tape, typ: &StanType, raw: &[Val], env: &Env) -> (Val, Val) {
-    match typ {
+pub fn constrain(
+    t: &mut Tape,
+    typ: &StanType,
+    raw: &[Val],
+    env: &Env,
+) -> Result<(Val, Val), EvalError> {
+    Ok(match typ {
         StanType::Real(Constraint::None) => (raw[0].clone(), Val::Num(0.0)),
         StanType::Real(Constraint::Lower(lo_e)) => {
-            let lo = eval_plain(t, lo_e, env);
+            let lo = eval_plain(t, lo_e, env)?;
             let exp_r = v_exp(t, &raw[0]);
             let c = v_add(t, &lo, &exp_r);
             // log|dc/draw| = raw
             (c, raw[0].clone())
         }
         StanType::Real(Constraint::Upper(hi_e)) => {
-            let hi = eval_plain(t, hi_e, env);
-            let (c, j) = apply_upper(t, &raw[0], &hi);
-            (c, j)
+            let hi = eval_plain(t, hi_e, env)?;
+            apply_upper(t, &raw[0], &hi)
         }
         StanType::Real(Constraint::LowerUpper(lo_e, hi_e)) => {
-            let lo = eval_plain(t, lo_e, env);
-            let hi = eval_plain(t, hi_e, env);
+            let lo = eval_plain(t, lo_e, env)?;
+            let hi = eval_plain(t, hi_e, env)?;
             apply_lower_upper(t, &raw[0], &lo, &hi)
         }
         StanType::Vector(_, Constraint::None) => (Val::Vec(raw.to_vec()), Val::Num(0.0)),
         StanType::Vector(_, Constraint::Lower(lo_e)) => {
-            let lo = eval_plain(t, lo_e, env);
+            let lo = eval_plain(t, lo_e, env)?;
             let mut jac = Val::Num(0.0);
             let mut cs = Vec::with_capacity(raw.len());
             for r in raw {
@@ -81,7 +89,7 @@ pub fn constrain(t: &mut Tape, typ: &StanType, raw: &[Val], env: &Env) -> (Val, 
             (Val::Vec(cs), jac)
         }
         StanType::Vector(_, Constraint::Upper(hi_e)) => {
-            let hi = eval_plain(t, hi_e, env);
+            let hi = eval_plain(t, hi_e, env)?;
             let mut jac = Val::Num(0.0);
             let mut cs = Vec::with_capacity(raw.len());
             for r in raw {
@@ -92,8 +100,8 @@ pub fn constrain(t: &mut Tape, typ: &StanType, raw: &[Val], env: &Env) -> (Val, 
             (Val::Vec(cs), jac)
         }
         StanType::Vector(_, Constraint::LowerUpper(lo_e, hi_e)) => {
-            let lo = eval_plain(t, lo_e, env);
-            let hi = eval_plain(t, hi_e, env);
+            let lo = eval_plain(t, lo_e, env)?;
+            let hi = eval_plain(t, hi_e, env)?;
             let mut jac = Val::Num(0.0);
             let mut cs = Vec::with_capacity(raw.len());
             for r in raw {
@@ -165,8 +173,7 @@ pub fn constrain(t: &mut Tape, typ: &StanType, raw: &[Val], env: &Env) -> (Val, 
         //     rem *= (1 - z²)
         //   L[i][i] = sqrt(rem). Row 0: L[0][0] = 1.
         StanType::CholeskyFactorCorr(k_e) => {
-            let kk = eval_plain(t, k_e, env);
-            let kk = match kk {
+            let kk = match eval_plain(t, k_e, env)? {
                 Val::Num(v) => v as usize,
                 _ => 0,
             };
@@ -202,7 +209,7 @@ pub fn constrain(t: &mut Tape, typ: &StanType, raw: &[Val], env: &Env) -> (Val, 
         }
         // Phase 3 fallback: pass-through. Higher-order constraints port later.
         _ => (Val::Vec(raw.to_vec()), Val::Num(0.0)),
-    }
+    })
 }
 
 fn apply_upper(t: &mut Tape, raw: &Val, upper: &Val) -> (Val, Val) {

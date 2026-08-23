@@ -1,8 +1,24 @@
-//! Stan tokenizer. Mirrors `compiler/stan/lexer.mbt`.
+//! Stan tokenizer.
 
 use crate::token::{is_keyword, Token};
 
-pub fn tokenize(src: &str) -> Vec<Token> {
+/// A byte the tokenizer doesn't recognize as the start of any token, comment,
+/// or whitespace. Previously silently dropped — which meant, notably, that
+/// `.` in `.*`/`./`/`.^` (Stan's elementwise operators, not yet implemented)
+/// vanished and left the following `*`/`/`/`^` looking like a normal,
+/// valid — but silently wrong — matrix operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnknownChar(pub char);
+
+impl std::fmt::Display for UnknownChar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for UnknownChar {}
+
+pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
     let bytes = src.as_bytes();
     let n = bytes.len();
     let mut tokens = Vec::new();
@@ -122,12 +138,13 @@ pub fn tokenize(src: &str) -> Vec<Token> {
             b'!' => Some(Token::Bang),
             _ => None,
         };
-        if let Some(t) = tok {
-            tokens.push(t);
+        match tok {
+            Some(t) => tokens.push(t),
+            None => return Err(UnknownChar(c as char)),
         }
         i += 1;
     }
 
     tokens.push(Token::Eof);
-    tokens
+    Ok(tokens)
 }

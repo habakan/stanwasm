@@ -1,7 +1,10 @@
-//! Arithmetic and transcendental operations on `Val`. Mirrors `interp.mbt::v_*`.
+//! Arithmetic and transcendental operations on `Val`.
 //!
 //! Each function takes a `&mut Tape` to push autodiff nodes when needed.
-//! Plain-number paths short-circuit without touching the tape.
+//! Plain-number paths short-circuit without touching the tape. Unary math
+//! functions (`exp`, `log`, `abs`, `lgamma`, `Phi`) broadcast element-wise
+//! over `Val::Vec` — Stan's built-in math functions are vectorized over
+//! containers (e.g. `vector[N] y = exp(x);` is standard Stan).
 
 use crate::value::Val;
 use stan_autodiff::{lgamma as lgamma_double, phi_cdf as phi_cdf_double, Tape};
@@ -93,11 +96,15 @@ pub fn v_neg(t: &mut Tape, a: &Val) -> Val {
     }
 }
 
+fn map_unary(t: &mut Tape, xs: &[Val], op: fn(&mut Tape, &Val) -> Val) -> Vec<Val> {
+    xs.iter().map(|x| op(t, x)).collect()
+}
+
 pub fn v_abs(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(x.abs()),
         Val::Tape(i) => Val::Tape(t.abs(*i)),
-        Val::Vec(_) => panic!("abs of vector not supported"),
+        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_abs)),
     }
 }
 
@@ -105,7 +112,7 @@ pub fn v_exp(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(x.exp()),
         Val::Tape(i) => Val::Tape(t.exp(*i)),
-        Val::Vec(_) => panic!("exp of vector not supported"),
+        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_exp)),
     }
 }
 
@@ -113,7 +120,7 @@ pub fn v_log(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(x.ln()),
         Val::Tape(i) => Val::Tape(t.log(*i)),
-        Val::Vec(_) => panic!("log of vector not supported"),
+        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_log)),
     }
 }
 
@@ -137,7 +144,7 @@ pub fn v_lgamma(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(lgamma_double(*x)),
         Val::Tape(i) => Val::Tape(t.lgamma(*i)),
-        Val::Vec(_) => panic!("lgamma of vector not supported"),
+        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_lgamma)),
     }
 }
 
@@ -145,7 +152,7 @@ pub fn v_phi(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(phi_cdf_double(*x)),
         Val::Tape(i) => Val::Tape(t.phi(*i)),
-        Val::Vec(_) => panic!("phi of vector not supported"),
+        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_phi)),
     }
 }
 

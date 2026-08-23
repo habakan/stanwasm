@@ -1,5 +1,4 @@
 //! Reverse-mode autodiff with a flat (struct-of-arrays) tape.
-//! Ported from `compiler/autodiff/autodiff.mbt`.
 //!
 //! The tape is owned by a `Tape` struct rather than living in module-global
 //! state. Callers (stan-runtime, stan-codegen) instantiate one tape per

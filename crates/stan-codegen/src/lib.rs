@@ -1,9 +1,8 @@
 //! AOT compilation: trace a Stan model on the autodiff tape, then emit a
 //! self-contained wasm module that computes log_prob and gradients in one call.
 //!
-//! Replaces `compiler/stan/codegen.mbt` (which emitted WAT text). This crate
-//! emits wasm binary directly via `wasm-encoder`, removing the browser-side
-//! `wabt` dependency.
+//! Emits wasm binary directly via `wasm-encoder`, with no WAT step and no
+//! browser-side `wabt` dependency.
 //!
 //! Generated module ABI (zero-copy variant: memory is imported, not exported,
 //! so the AOT module shares the host's linear memory for parameter and
@@ -35,6 +34,8 @@ pub enum CodegenError {
     EmptyTape,
     #[error("internal: {0}")]
     Internal(String),
+    #[error(transparent)]
+    Eval(#[from] stan_runtime::EvalError),
 }
 
 #[derive(Debug, Clone)]
@@ -56,7 +57,7 @@ pub fn compile(model: &Model, dummy_params: &[f64]) -> Result<Compiled, CodegenE
     }
     let mut tape = Tape::new();
     let leaves: Vec<u32> = dummy_params.iter().map(|p| tape.new_var(*p)).collect();
-    let root = model.trace_forward(&mut tape, &leaves);
+    let root = model.trace_forward(&mut tape, &leaves, true)?;
     if tape.is_empty() {
         return Err(CodegenError::EmptyTape);
     }

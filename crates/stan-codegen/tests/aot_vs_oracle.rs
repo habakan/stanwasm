@@ -124,7 +124,7 @@ fn linear_regression_aot_matches_oracle() {
     let compiled = compile(&model, &dummy).unwrap();
 
     let test_params = vec![0.5, 1.5, -0.2];
-    let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params);
+    let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params).unwrap();
     let (aot_lp, aot_grads) =
         run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
 
@@ -172,7 +172,7 @@ fn poisson_regression_aot_matches_oracle() {
     let compiled = compile(&model, &dummy).unwrap();
 
     let test_params = vec![0.0, 1.0];
-    let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params);
+    let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params).unwrap();
     let (aot_lp, aot_grads) =
         run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
 
@@ -212,7 +212,7 @@ fn multivariate_lkj_aot_matches_oracle() {
     let compiled = compile(&model, &dummy).unwrap();
 
     let test_params = vec![0.5, 1.5, 0.3];
-    let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params);
+    let (oracle_lp, oracle_grads) = model.log_prob_grad(&test_params).unwrap();
     let (aot_lp, aot_grads) =
         run_aot_log_prob_grad(&compiled.wasm, compiled.n_params, &test_params);
 

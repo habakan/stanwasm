@@ -1,4 +1,4 @@
-//! Stan tokens. Mirrors `compiler/stan/token.mbt`.
+//! Stan tokens.
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {

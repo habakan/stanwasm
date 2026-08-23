@@ -57,7 +57,9 @@ fn generated_quantities_respect_distribution_support() {
     let rng = Rc::new(RefCell::new(ChaCha8Rng::seed_from_u64(42)));
 
     for _ in 0..20 {
-        let gq = model.generated_quantities(&unconstrained, rng.clone());
+        let gq = model
+            .generated_quantities(&unconstrained, rng.clone())
+            .unwrap();
         assert_eq!(gq.len(), 4);
         let [y_ln, y_exp, y_unif, y_gam] = [gq[0], gq[1], gq[2], gq[3]];
         assert!(y_ln > 0.0, "lognormal_rng must be positive, got {y_ln}");
@@ -79,8 +81,12 @@ fn generated_quantities_rng_stream_advances_across_draws() {
     let unconstrained = vec![0.5, 0.0];
     let rng = Rc::new(RefCell::new(ChaCha8Rng::seed_from_u64(7)));
 
-    let first = model.generated_quantities(&unconstrained, rng.clone());
-    let second = model.generated_quantities(&unconstrained, rng.clone());
+    let first = model
+        .generated_quantities(&unconstrained, rng.clone())
+        .unwrap();
+    let second = model
+        .generated_quantities(&unconstrained, rng.clone())
+        .unwrap();
     assert_ne!(first, second, "shared rng must not repeat the same draw");
 }
 
@@ -88,7 +94,7 @@ fn generated_quantities_rng_stream_advances_across_draws() {
 fn constrained_draw_applies_lower_bound_transform() {
     let model = gq_rng_model();
     // mu=0.5 (unconstrained == constrained, no bound), log_sigma=0 -> sigma=exp(0)=1.
-    let constrained = model.constrained_draw(&[0.5, 0.0]);
+    let constrained = model.constrained_draw(&[0.5, 0.0]).unwrap();
     assert_eq!(constrained.len(), 2);
     assert!((constrained[0] - 0.5).abs() < 1e-12);
     assert!((constrained[1] - 1.0).abs() < 1e-12);
@@ -96,7 +102,7 @@ fn constrained_draw_applies_lower_bound_transform() {
 
 fn logp_of(src: &str, params: &[f64]) -> f64 {
     let model = Model::parse_and_load(src, Env::new()).unwrap();
-    let (lp, _grads) = model.log_prob_grad(params);
+    let (lp, _grads) = model.log_prob_grad(params).unwrap();
     lp
 }
 

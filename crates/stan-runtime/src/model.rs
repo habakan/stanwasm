@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use crate::constraints::{constrain, param_dims};
 use crate::env::Env;
+use crate::error::EvalError;
 use crate::eval::{eval_expr, eval_stmt};
 use crate::ops::v_add;
 use crate::value::Val;
@@ -54,11 +55,13 @@ fn push_names_for(out: &mut Vec<String>, name: &str, typ: &StanType, env: &Env) 
     }
 }
 
+/// Used only for generating display names (`param_names`/`gen_quantity_names`);
+/// falls back to 0 on any evaluation error rather than propagating one, since
+/// a wrong label here is a display-only affect, not an incorrect posterior.
 fn eval_int(expr: &stan_ast::Expr, env: &Env) -> usize {
     let mut t = Tape::new();
-    let v = eval_expr(&mut t, expr, env);
-    match v {
-        Val::Num(x) => x as usize,
+    match eval_expr(&mut t, expr, env) {
+        Ok(Val::Num(x)) => x as usize,
         _ => 0,
     }
 }
@@ -130,36 +133,36 @@ impl Model {
     /// by `constrained_draw` and `generated_quantities`, which — unlike
     /// `trace_forward` — don't need the constraint Jacobian (no log_prob is
     /// being computed).
-    fn build_env(&self, tape: &mut Tape, leaves: &[u32]) -> Env {
+    fn build_env(&self, tape: &mut Tape, leaves: &[u32]) -> Result<Env, EvalError> {
         let mut env = self.data_env.clone();
         let mut leaf_idx = 0usize;
         for decl in &self.prog.parameters {
             let k = param_dims(&decl.typ, &self.data_env);
             let raw: Vec<Val> = (0..k).map(|i| Val::Tape(leaves[leaf_idx + i])).collect();
             leaf_idx += k;
-            let (constrained, _log_jac) = constrain(tape, &decl.typ, &raw, &self.data_env);
+            let (constrained, _log_jac) = constrain(tape, &decl.typ, &raw, &self.data_env)?;
             env.set(&decl.name, constrained);
         }
         for decl in &self.prog.transformed_params {
             let init = match &decl.init {
-                Some(e) => eval_expr(tape, e, &env),
+                Some(e) => eval_expr(tape, e, &env)?,
                 None => Val::Num(0.0),
             };
             env.set(&decl.name, init);
         }
         for stmt in &self.prog.transformed_stmts {
-            eval_stmt(tape, stmt, &mut env).into_val();
+            eval_stmt(tape, stmt, &mut env)?.into_val();
         }
-        env
+        Ok(env)
     }
 
     /// Constrained values of `parameters` + `transformed parameters` for one
     /// unconstrained draw, flattened in the same order as `param_names()`.
     /// No gradient is computed — the tape here is a disposable value scratchpad.
-    pub fn constrained_draw(&self, unconstrained: &[f64]) -> Vec<f64> {
+    pub fn constrained_draw(&self, unconstrained: &[f64]) -> Result<Vec<f64>, EvalError> {
         let mut tape = Tape::new();
         let leaves: Vec<u32> = unconstrained.iter().map(|p| tape.new_var(*p)).collect();
-        let env = self.build_env(&mut tape, &leaves);
+        let env = self.build_env(&mut tape, &leaves)?;
         let mut out = Vec::new();
         for decl in &self.prog.parameters {
             let v = env
@@ -173,7 +176,7 @@ impl Model {
                 .unwrap_or_else(|| panic!("internal: missing transformed parameter {}", decl.name));
             flatten_val(&tape, v, &mut out);
         }
-        out
+        Ok(out)
     }
 
     /// Evaluate the `generated quantities` block for one unconstrained draw.
@@ -184,13 +187,13 @@ impl Model {
         &self,
         unconstrained: &[f64],
         rng: Rc<RefCell<ChaCha8Rng>>,
-    ) -> Vec<f64> {
+    ) -> Result<Vec<f64>, EvalError> {
         let mut tape = Tape::new();
         let leaves: Vec<u32> = unconstrained.iter().map(|p| tape.new_var(*p)).collect();
-        let mut env = self.build_env(&mut tape, &leaves);
+        let mut env = self.build_env(&mut tape, &leaves)?;
         env.set_rng(rng);
         for stmt in &self.prog.gen_quantities {
-            eval_stmt(&mut tape, stmt, &mut env).into_val();
+            eval_stmt(&mut tape, stmt, &mut env)?.into_val();
         }
         let mut out = Vec::new();
         for stmt in &self.prog.gen_quantities {
@@ -201,24 +204,46 @@ impl Model {
                 flatten_val(&tape, v, &mut out);
             }
         }
-        out
+        Ok(out)
     }
 
     /// Compute log_prob and gradient at the given unconstrained parameters.
-    pub fn log_prob_grad(&self, params: &[f64]) -> (f64, Vec<f64>) {
+    /// Traces fresh every call (the native "golden oracle" / AST-eval path),
+    /// so — unlike `Compiled`/AOT, which trace once and replay — a
+    /// parameter-dependent `if`/`while` is evaluated correctly here every
+    /// time and doesn't need the `strict` check `trace_forward` applies for
+    /// those other callers.
+    pub fn log_prob_grad(&self, params: &[f64]) -> Result<(f64, Vec<f64>), EvalError> {
         let mut tape = Tape::new();
         let leaves: Vec<u32> = params.iter().map(|p| tape.new_var(*p)).collect();
-        let root = self.trace_forward(&mut tape, &leaves);
+        let root = self.trace_forward(&mut tape, &leaves, false)?;
         tape.backward(root);
         let lp = tape.value(root);
         let grads: Vec<f64> = leaves.iter().map(|i| tape.grad_at(*i)).collect();
-        (lp, grads)
+        Ok((lp, grads))
     }
 
     /// One-shot forward trace on the supplied tape; returns the root tape index
     /// so codegen can walk the recorded ops. Caller controls tape lifetime.
-    pub fn trace_forward(&self, tape: &mut Tape, leaves: &[u32]) -> u32 {
+    ///
+    /// Set `strict` when this ONE trace will be recorded and then replayed
+    /// (or, for AOT, compiled to wasm and called) for many later parameter
+    /// values without re-running this evaluator — `Compiled::from` and
+    /// `stan-codegen::compile` both do this. In that mode, an `if`/`while`
+    /// in `model`/`transformed parameters` whose condition depends on a
+    /// parameter is rejected with `EvalError::ParamDependentBranch` rather
+    /// than silently freezing whichever branch this one trace happened to
+    /// take. Pass `false` when tracing fresh for the actual parameter values
+    /// every call (e.g. `Model::log_prob_grad`), where branching is already
+    /// evaluated correctly and the restriction would just be noise.
+    pub fn trace_forward(
+        &self,
+        tape: &mut Tape,
+        leaves: &[u32],
+        strict: bool,
+    ) -> Result<u32, EvalError> {
         let mut env = self.data_env.clone();
+        env.set_strict_no_param_branch(strict);
 
         // Apply constraint transforms; accumulate Jacobian into lp.
         let mut leaf_idx = 0usize;
@@ -227,7 +252,7 @@ impl Model {
             let k = param_dims(&decl.typ, &self.data_env);
             let raw: Vec<Val> = (0..k).map(|i| Val::Tape(leaves[leaf_idx + i])).collect();
             leaf_idx += k;
-            let (constrained, log_jac) = constrain(tape, &decl.typ, &raw, &self.data_env);
+            let (constrained, log_jac) = constrain(tape, &decl.typ, &raw, &self.data_env)?;
             env.set(&decl.name, constrained);
             lp = v_add(tape, &lp, &log_jac);
         }
@@ -235,22 +260,22 @@ impl Model {
         // transformed_params are declared then the transformed_stmts run.
         for decl in &self.prog.transformed_params {
             let init = match &decl.init {
-                Some(e) => crate::eval::eval_expr(tape, e, &env),
+                Some(e) => crate::eval::eval_expr(tape, e, &env)?,
                 None => Val::Num(0.0),
             };
             env.set(&decl.name, init);
         }
         for stmt in &self.prog.transformed_stmts {
-            let r = eval_stmt(tape, stmt, &mut env).into_val();
+            let r = eval_stmt(tape, stmt, &mut env)?.into_val();
             lp = v_add(tape, &lp, &r);
         }
 
         // model block: each statement may add to log_prob.
         for stmt in &self.prog.model {
-            let r = eval_stmt(tape, stmt, &mut env).into_val();
+            let r = eval_stmt(tape, stmt, &mut env)?.into_val();
             lp = v_add(tape, &lp, &r);
         }
 
-        lp.to_tape(tape)
+        Ok(lp.to_tape(tape))
     }
 }

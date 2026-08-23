@@ -164,7 +164,7 @@ fn bench_case(case: &Case) -> anyhow::Result<Row> {
     });
 
     // B) Tape replay
-    let mut compiled = Compiled::from(&model, &vec![0.1; n]);
+    let mut compiled = Compiled::from(&model, &vec![0.1; n])?;
     let mut grads = vec![0.0; n];
     let replay_us = mean_us(N_LPG_ITERS, || {
         let _ = compiled.log_prob_grad(case.init, &mut grads);

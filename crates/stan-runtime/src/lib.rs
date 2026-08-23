@@ -15,6 +15,7 @@ mod compiled;
 mod constraints;
 mod distributions;
 mod env;
+mod error;
 mod eval;
 mod matrix;
 mod model;
@@ -27,6 +28,7 @@ mod data_json;
 
 pub use compiled::Compiled;
 pub use env::Env;
+pub use error::EvalError;
 pub use model::{Model, ModelError};
 pub use value::Val;
 

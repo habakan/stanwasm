@@ -20,7 +20,7 @@ use nuts_rs::{
     LogpError, Settings,
 };
 use rand::{rngs::ChaCha8Rng, SeedableRng};
-use stan_runtime::{data_from_json, Compiled, Model};
+use stan_runtime::{data_from_json, Compiled, EvalError, Model};
 use thiserror::Error;
 use wasm_bindgen::prelude::*;
 
@@ -118,7 +118,7 @@ impl StanModel {
     pub fn new(stan_src: &str, data_json: &str) -> Result<StanModel, JsError> {
         let env = data_from_json(data_json).map_err(jserr)?;
         let model = Model::parse_and_load(stan_src, env).map_err(jserr)?;
-        let compiled = Some(trace(&model));
+        let compiled = Some(trace(&model).map_err(jserr)?);
         Ok(StanModel {
             model,
             compiled,
@@ -201,7 +201,7 @@ impl StanModel {
         }
 
         // Restore by re-tracing. Cheap relative to the sampling itself.
-        self.compiled = Some(trace(&self.model));
+        self.compiled = Some(trace(&self.model).map_err(jserr)?);
         Ok(out)
     }
 
@@ -217,7 +217,7 @@ impl StanModel {
                 unconstrained.len()
             )));
         }
-        Ok(self.model.constrained_draw(unconstrained))
+        self.model.constrained_draw(unconstrained).map_err(jserr)
     }
 
     /// Names of the top-level `generated quantities` declarations, flattened
@@ -259,7 +259,10 @@ impl StanModel {
         let mut out = vec![0.0_f64; n_gq * num_draws];
         for i in 0..num_draws {
             let draw = &draws[i * n..(i + 1) * n];
-            let gq = self.model.generated_quantities(draw, rng.clone());
+            let gq = self
+                .model
+                .generated_quantities(draw, rng.clone())
+                .map_err(jserr)?;
             out[i * n_gq..(i + 1) * n_gq].copy_from_slice(&gq);
         }
         Ok(out)
@@ -357,7 +360,10 @@ impl StanModel {
     #[wasm_bindgen(js_name = finishStepSampling)]
     pub fn finish_step_sampling(&mut self) {
         if self.step.take().is_some() {
-            self.compiled = Some(trace(&self.model));
+            // Re-tracing the same model definition that already traced
+            // successfully at construction time cannot fail differently.
+            self.compiled =
+                Some(trace(&self.model).expect("internal: re-trace of a valid model failed"));
         }
     }
 
@@ -373,13 +379,26 @@ impl StanModel {
     }
 }
 
-fn trace(model: &Model) -> Compiled {
+fn trace(model: &Model) -> Result<Compiled, EvalError> {
     let dummy = vec![0.1_f64; model.n_params()];
     Compiled::from(model, &dummy)
 }
 
 fn jserr<E: std::fmt::Display>(e: E) -> JsError {
     JsError::new(&e.to_string())
+}
+
+/// Runs once when the wasm module is instantiated. Forwards Rust panics
+/// (Stan-typo'd names and invalid RNG parameters are now clean `JsError`s
+/// instead, but a handful of internal-invariant panics remain, e.g. index
+/// out of bounds on a malformed AST) to `console.error` with a real message
+/// and backtrace, instead of an opaque `RuntimeError: unreachable`. The
+/// panicking call still traps the instance — this is diagnostics, not
+/// recovery — but it means a bug report can include what actually broke.
+#[wasm_bindgen(start)]
+pub fn init_panic_hook() {
+    #[cfg(target_arch = "wasm32")]
+    console_error_panic_hook::set_once();
 }
 
 #[wasm_bindgen]

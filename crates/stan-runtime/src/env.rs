@@ -13,6 +13,14 @@ pub struct Env {
     /// `generated quantities`; `Rc` sharing means a clone of `Env` still
     /// advances the same underlying stream).
     rng: Option<Rc<RefCell<ChaCha8Rng>>>,
+    /// Set while tracing `model`/`transformed parameters` for the one-shot
+    /// `Compiled` tape (see `Model::trace_forward`). That tape is recorded
+    /// once and replayed for every draw, so an `if`/`while` condition that
+    /// depends on a parameter can't be honored per-draw — it would silently
+    /// keep whichever branch the trace-time value happened to take. Not set
+    /// for `generated quantities`/`constrained_draw`, which re-evaluate the
+    /// AST fresh every call and have no such freezing issue.
+    strict_no_param_branch: bool,
 }
 
 impl Env {
@@ -70,5 +78,13 @@ impl Env {
 
     pub fn rng(&self) -> Option<Rc<RefCell<ChaCha8Rng>>> {
         self.rng.clone()
+    }
+
+    pub fn set_strict_no_param_branch(&mut self, v: bool) {
+        self.strict_no_param_branch = v;
+    }
+
+    pub fn strict_no_param_branch(&self) -> bool {
+        self.strict_no_param_branch
     }
 }

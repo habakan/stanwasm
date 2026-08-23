@@ -1,4 +1,4 @@
-//! Stan recursive-descent parser. Mirrors `compiler/stan/parser.mbt`.
+//! Stan recursive-descent parser.
 
 use crate::lexer::tokenize;
 use crate::token::Token;
@@ -21,6 +21,23 @@ pub enum ParseError {
     BadSample,
     #[error("expected block name, got {got:?}")]
     BadBlockName { got: Token },
+    #[error(
+        "unknown top-level block `{name}` — expected one of: functions, data, \
+         parameters, transformed data, transformed parameters, model, \
+         generated quantities"
+    )]
+    UnknownBlock { name: String },
+    #[error(
+        "unsupported statement: a bare expression by itself isn't a valid \
+         Stan statement here (e.g. `print(...)`/`reject(...)`/void function \
+         calls aren't supported yet) — did you mean `~`, `=`, or `+=`?"
+    )]
+    UnsupportedStatement,
+    #[error(
+        "unrecognized character `{0}` — note: elementwise operators (`.*`, \
+         `./`, `.^`) aren't supported yet"
+    )]
+    UnknownChar(#[from] crate::lexer::UnknownChar),
 }
 
 type Result<T> = std::result::Result<T, ParseError>;
@@ -31,11 +48,11 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(src: &str) -> Self {
-        Self {
-            toks: tokenize(src),
+    pub fn new(src: &str) -> Result<Self> {
+        Ok(Self {
+            toks: tokenize(src)?,
             pos: 0,
-        }
+        })
     }
 
     fn peek(&self) -> &Token {
@@ -460,10 +477,7 @@ impl Parser {
                         self.expect_tok(&Token::Semi)?;
                         Ok(Stmt::IncrAssign(lhs, rhs))
                     }
-                    _ => {
-                        self.expect_tok(&Token::Semi)?;
-                        Ok(Stmt::TargetIncr(Expr::Num(0.0)))
-                    }
+                    _ => Err(ParseError::UnsupportedStatement),
                 }
             }
         }
@@ -554,16 +568,7 @@ impl Parser {
                     }
                 }
                 _ => {
-                    // Unknown block — skip until matching brace.
-                    let mut depth = 1;
-                    while depth > 0 && !self.check_tok(&Token::Eof) {
-                        match self.consume() {
-                            Token::LBrace => depth += 1,
-                            Token::RBrace => depth -= 1,
-                            _ => (),
-                        }
-                    }
-                    continue;
+                    return Err(ParseError::UnknownBlock { name: full_name });
                 }
             }
             self.expect_tok(&Token::RBrace)?;
@@ -711,5 +716,5 @@ fn is_type_kw(tok: &Token) -> bool {
 
 /// Convenience: tokenize, parse, return AST.
 pub fn parse(src: &str) -> Result<StanProgram> {
-    Parser::new(src).parse()
+    Parser::new(src)?.parse()
 }

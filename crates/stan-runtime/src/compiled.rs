@@ -2,6 +2,7 @@
 //! `log_prob_grad` calls replay the static computation graph without re-walking
 //! the AST. Used as the inner fast path for the nuts-rs sampling loop.
 
+use crate::error::EvalError;
 use crate::model::Model;
 use stan_autodiff::Tape;
 
@@ -21,17 +22,17 @@ impl Compiled {
     ///
     /// Caller is responsible for ensuring the model has no parameter-dependent
     /// control flow — the recorded tape is reused for every subsequent call.
-    pub fn from(model: &Model, dummy_params: &[f64]) -> Self {
+    pub fn from(model: &Model, dummy_params: &[f64]) -> Result<Self, EvalError> {
         assert_eq!(dummy_params.len(), model.n_params());
         let mut tape = Tape::new();
         let leaves: Vec<u32> = dummy_params.iter().map(|p| tape.new_var(*p)).collect();
-        let root = model.trace_forward(&mut tape, &leaves);
-        Self {
+        let root = model.trace_forward(&mut tape, &leaves, true)?;
+        Ok(Self {
             tape,
             root,
             n_params: model.n_params(),
             param_names: model.param_names(),
-        }
+        })
     }
 
     pub fn n_params(&self) -> usize {
