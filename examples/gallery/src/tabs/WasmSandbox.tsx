@@ -220,6 +220,20 @@ export function WasmSandbox() {
     <div className="sandbox">
       <div className="stan-editor-row">
         <div className="code-section stan-editor-col">
+          <div className="sandbox-preset-bar">
+            <label>Model:</label>
+            <select
+              value={presetKey}
+              onChange={(e) => onPresetChange(e.target.value as keyof typeof PRESETS)}
+            >
+              {Object.entries(PRESETS).map(([k, p]) => (
+                <option key={k} value={k}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <span style={{ color: "#666", fontSize: 13 }}>{preset.description}</span>
+          </div>
           <h3>
             Stan program
             {customStan !== null && (
@@ -248,22 +262,7 @@ export function WasmSandbox() {
         </div>
 
         <div className="sandbox-side">
-          <CollapsibleSection title="Model & data" open={showSettings} onToggle={() => setShowSettings((o) => !o)} fixed>
-            <div className="row">
-              <label>Model:</label>
-              <select
-                value={presetKey}
-                onChange={(e) => onPresetChange(e.target.value as keyof typeof PRESETS)}
-              >
-                {Object.entries(PRESETS).map(([k, p]) => (
-                  <option key={k} value={k}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <p style={{ color: "#666", fontSize: 13, margin: "-4px 0 12px" }}>{preset.description}</p>
-
+          <CollapsibleSection title="Data & run" open={showSettings} onToggle={() => setShowSettings((o) => !o)} fixed>
             <div className="row">
               <label>Data:</label>
               <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 400 }}>
