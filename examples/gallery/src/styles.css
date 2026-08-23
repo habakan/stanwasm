@@ -195,19 +195,18 @@ footer a {
 
 /* IDE-style: the whole tab fits one viewport, no page scrolling — see
    .app/.tab-body in the base rules above. .sandbox is the tab's own fixed-
-   height flex column; only .sandbox-panel-body scrolls internally, and
-   only when its content (e.g. a many-parameter posterior summary) actually
-   outgrows the space the collapsible panel is given. */
+   height flex column; the Stan editor takes the full height on the left,
+   and the right column stacks independently collapsible panels (graphical
+   model / data / posterior summary) that share the column's height —
+   only an individual panel's own body scrolls, and only when its content
+   (e.g. a many-parameter posterior summary) actually outgrows the share
+   of the column it's been given. */
 .sandbox {
   height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.sandbox-toolbar {
-  flex-shrink: 0;
 }
 
 .sandbox-footnote {
@@ -228,7 +227,7 @@ footer a {
 .stan-editor-col {
   /* flex-grow ratio (3:2), not percentage basis — a percentage basis on
      both columns summing to 100% plus the row's gap overflows the
-     container under flex-wrap, which silently wraps the graph-col onto
+     container under flex-wrap, which silently wraps .sandbox-side onto
      its own row below instead of beside the editor. */
   flex: 3 1 420px;
   min-width: 320px;
@@ -236,14 +235,17 @@ footer a {
   flex-direction: column;
 }
 
-.graph-col {
-  flex: 2 1 260px;
-  min-width: 260px;
+.sandbox-side {
+  flex: 2 1 360px;
+  min-width: 340px;
   max-width: 100%;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
 }
 
-.sandbox-panel {
+.sandbox-section {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -252,52 +254,52 @@ footer a {
   background: white;
 }
 
-.sandbox-panel:not(.collapsed) {
-  flex: 0 0 32vh;
+.sandbox-section:not(.collapsed) {
+  flex: 1 1 0;
   min-height: 0;
 }
 
-.sandbox-panel-tabs {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-bottom: 1px solid #eee;
+/* Controls that must stay visible (Compile/Run) rather than get squeezed
+   into an equal share and hidden behind a scroll — sized to content,
+   remaining panels split whatever height is left over. */
+.sandbox-section.fixed:not(.collapsed) {
+  flex: 0 0 auto;
 }
 
-.sandbox-panel-tab {
+.sandbox-section.fixed .sandbox-section-body {
+  overflow: visible;
+}
+
+.sandbox-section-header {
+  flex-shrink: 0;
+  display: block;
+  width: 100%;
+  text-align: left;
   font: inherit;
   font-weight: 600;
-  font-size: 13px;
-  padding: 6px 12px;
+  font-size: 12px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
   border: none;
-  border-radius: 4px;
   background: transparent;
-  color: #888;
   cursor: pointer;
 }
 
-.sandbox-panel-tab:hover {
+.sandbox-section:not(.collapsed) .sandbox-section-header {
+  border-bottom: 1px solid #eee;
+}
+
+.sandbox-section-header:hover {
   color: #c2410c;
 }
 
-.sandbox-panel-tab.active {
-  color: #c2410c;
-  background: #fef3c7;
-}
-
-.sandbox-panel-toggle {
-  margin-left: auto;
-  padding: 4px 10px;
-  font-size: 12px;
-}
-
-.sandbox-panel-body {
+.sandbox-section-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 
 .results {

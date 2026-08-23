@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StanModel } from "stan-wasm-rs";
 import { PRESETS, type Preset } from "../models";
 import { Histogram } from "../Histogram";
@@ -38,6 +38,37 @@ function summarize(name: string, samples: number[]): ParamSummary {
   };
 }
 
+/** A right-column panel that can collapse to just its header. Open panels
+ *  share the column's height equally (flex: 1 1 0) by default, so however
+ *  many are open, they always fit without the column itself needing to
+ *  scroll; only an individual panel's own body scrolls, if its content
+ *  outgrows the share it's been given. `fixed` opts a panel out of that
+ *  sharing — sized to its own content instead (for controls like Compile/
+ *  Run that must never be the thing squeezed out and hidden behind a
+ *  scroll); the remaining panels split whatever height is left. */
+function CollapsibleSection({
+  title,
+  open,
+  onToggle,
+  fixed,
+  children,
+}: {
+  title: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  fixed?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`sandbox-section${fixed ? " fixed" : ""}${open ? "" : " collapsed"}`}>
+      <button className="sandbox-section-header" onClick={onToggle}>
+        {open ? "▾" : "▸"} {title}
+      </button>
+      {open && <div className="sandbox-section-body">{children}</div>}
+    </div>
+  );
+}
+
 export function WasmSandbox() {
   const [presetKey, setPresetKey] = useState<keyof typeof PRESETS>("linear_regression");
   const [nWarmup, setNWarmup] = useState(500);
@@ -60,11 +91,12 @@ export function WasmSandbox() {
   const [compileError, setCompileError] = useState<string | null>(null);
   const [lastCompiledKey, setLastCompiledKey] = useState<string | null>(null);
   const [compiling, setCompiling] = useState(false);
-  /** Bottom panel (Data / Posterior summary) — collapsible so the whole tab
-   *  fits one viewport without ever needing to scroll the page itself; only
-   *  this panel's own body scrolls, and only when its content outgrows it. */
-  const [panelOpen, setPanelOpen] = useState(true);
-  const [panelTab, setPanelTab] = useState<"data" | "results">("data");
+  // Right-column panels — independently collapsible so the whole tab fits
+  // one viewport without ever needing to scroll the page itself.
+  const [showSettings, setShowSettings] = useState(true);
+  const [showGraph, setShowGraph] = useState(true);
+  const [showData, setShowData] = useState(true);
+  const [showResults, setShowResults] = useState(false);
 
   const preset: Preset = PRESETS[presetKey];
   const effectiveData = customData ?? preset.data;
@@ -180,144 +212,12 @@ export function WasmSandbox() {
       setError(String(e));
     } finally {
       setRunning(false);
-      setPanelTab("results");
-      setPanelOpen(true);
+      setShowResults(true);
     }
   };
 
   return (
     <div className="sandbox">
-      <div className="sandbox-toolbar">
-        <div className="row">
-          <label>Model:</label>
-          <select
-            value={presetKey}
-            onChange={(e) => onPresetChange(e.target.value as keyof typeof PRESETS)}
-          >
-            {Object.entries(PRESETS).map(([k, p]) => (
-              <option key={k} value={k}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <span style={{ color: "#666", fontSize: 13 }}>{preset.description}</span>
-        </div>
-
-        <div className="row">
-          <label>Data:</label>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 400 }}>
-            <input
-              type="radio"
-              name="data-source"
-              checked={customData === null}
-              onChange={resetCsv}
-            />
-            Use preset
-          </label>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 400 }}>
-            <input
-              type="radio"
-              name="data-source"
-              checked={customData !== null}
-              onChange={() => fileInputRef.current?.click()}
-            />
-            Upload CSV
-          </label>
-          <button className="secondary" onClick={() => fileInputRef.current?.click()}>
-            Choose File
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onCsvFile(f);
-            }}
-          />
-          {customData ? (
-            <>
-              <span style={{ fontSize: 13, color: "#047857" }}>
-                ✓ {csvFilename}
-              </span>
-              {csvSkipped.length > 0 && (
-                <span style={{ fontSize: 12, color: "#b45309" }}>
-                  skipped non-numeric column(s): {csvSkipped.join(", ")}
-                </span>
-              )}
-            </>
-          ) : (
-            <span style={{ fontSize: 13, color: "#666" }}>
-              any CSV — columns become Stan vectors; row count exposed as{" "}
-              <code>N</code> / <code>J</code> / <code>K</code>. Edit the Stan
-              program if your columns differ from the preset.
-            </span>
-          )}
-        </div>
-
-        {csvError && (
-          <div className="note" style={{ borderLeftColor: "#b91c1c", background: "#fee2e2" }}>
-            <strong>CSV error:</strong> {csvError}
-          </div>
-        )}
-
-        <div className="row">
-          <label>Warmup:</label>
-          <input
-            type="number"
-            value={nWarmup}
-            min={0}
-            step={100}
-            onChange={(e) => setNWarmup(Number(e.target.value))}
-          />
-          <label>Draws:</label>
-          <input
-            type="number"
-            value={nDraws}
-            min={1}
-            step={100}
-            onChange={(e) => setNDraws(Number(e.target.value))}
-          />
-          <label>Seed:</label>
-          <input
-            type="number"
-            value={seed}
-            onChange={(e) => setSeed(Number(e.target.value))}
-          />
-          <button className="secondary" onClick={compile} disabled={compiling}>
-            {compiling ? "Compiling…" : compiledModel && !stale ? "Recompile" : "Compile"}
-          </button>
-          <button onClick={onRun} disabled={running || !compiledModel || stale}>
-            {running ? "Sampling…" : "Run NUTS"}
-          </button>
-          <span className="compile-status">
-            {compileError ? (
-              <span style={{ color: "#b91c1c" }}>✗ compile error</span>
-            ) : compiledModel && !stale ? (
-              <span style={{ color: "#047857" }}>
-                ✓ compiled ({compiledModel.n_params} params)
-              </span>
-            ) : compiledModel && stale ? (
-              <span style={{ color: "#b45309" }}>
-                ⚠ stale — recompile
-              </span>
-            ) : (
-              <span style={{ color: "#888" }}>not compiled</span>
-            )}
-          </span>
-        </div>
-
-        {compileError && (
-          <div className="note" style={{ borderLeftColor: "#b91c1c", background: "#fee2e2" }}>
-            <strong>Compile error:</strong>
-            <pre style={{ background: "transparent", border: "none", padding: "4px 0", margin: 0 }}>
-              {compileError}
-            </pre>
-          </div>
-        )}
-      </div>
-
       <div className="stan-editor-row">
         <div className="code-section stan-editor-col">
           <h3>
@@ -347,81 +247,192 @@ export function WasmSandbox() {
           />
         </div>
 
-        <div className="code-section graph-col">
-          <h3>Graphical model</h3>
-          <div className="model-diagram-card">
-            <GraphicalModel stanCode={debouncedStan} />
-          </div>
-        </div>
-      </div>
+        <div className="sandbox-side">
+          <CollapsibleSection title="Model & data" open={showSettings} onToggle={() => setShowSettings((o) => !o)} fixed>
+            <div className="row">
+              <label>Model:</label>
+              <select
+                value={presetKey}
+                onChange={(e) => onPresetChange(e.target.value as keyof typeof PRESETS)}
+              >
+                {Object.entries(PRESETS).map(([k, p]) => (
+                  <option key={k} value={k}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p style={{ color: "#666", fontSize: 13, margin: "-4px 0 12px" }}>{preset.description}</p>
 
-      <div className={`sandbox-panel${panelOpen ? "" : " collapsed"}`}>
-        <div className="sandbox-panel-tabs">
-          <button
-            className={`sandbox-panel-tab${panelTab === "data" ? " active" : ""}`}
-            onClick={() => {
-              setPanelTab("data");
-              setPanelOpen(true);
-            }}
-          >
-            Data{customData && " (custom CSV)"}
-          </button>
-          <button
-            className={`sandbox-panel-tab${panelTab === "results" ? " active" : ""}`}
-            onClick={() => {
-              setPanelTab("results");
-              setPanelOpen(true);
-            }}
-          >
-            Posterior summary{summary && ` (${summary.length})`}
-          </button>
-          <button
-            className="secondary sandbox-panel-toggle"
-            onClick={() => setPanelOpen((o) => !o)}
-          >
-            {panelOpen ? "▾ Hide" : "▴ Show"}
-          </button>
-        </div>
+            <div className="row">
+              <label>Data:</label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 400 }}>
+                <input
+                  type="radio"
+                  name="data-source"
+                  checked={customData === null}
+                  onChange={resetCsv}
+                />
+                Use preset
+              </label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 400 }}>
+                <input
+                  type="radio"
+                  name="data-source"
+                  checked={customData !== null}
+                  onChange={() => fileInputRef.current?.click()}
+                />
+                Upload CSV
+              </label>
+              <button className="secondary" onClick={() => fileInputRef.current?.click()}>
+                Choose File
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onCsvFile(f);
+                }}
+              />
+            </div>
+            {customData ? (
+              <p style={{ fontSize: 13, color: "#047857", margin: "-4px 0 12px" }}>
+                ✓ {csvFilename}
+                {csvSkipped.length > 0 && (
+                  <span style={{ fontSize: 12, color: "#b45309", marginLeft: 8 }}>
+                    skipped non-numeric column(s): {csvSkipped.join(", ")}
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p style={{ fontSize: 12, color: "#666", margin: "-4px 0 12px" }}>
+                any CSV — columns become Stan vectors; row count exposed as{" "}
+                <code>N</code> / <code>J</code> / <code>K</code>. Edit the Stan
+                program if your columns differ from the preset.
+              </p>
+            )}
 
-        {panelOpen && (
-          <div className="sandbox-panel-body">
-            {panelTab === "data" && <DataTable data={effectiveData} />}
-            {panelTab === "results" &&
-              (error ? (
-                <div className="note" style={{ borderLeftColor: "#b91c1c", background: "#fee2e2" }}>
-                  <strong>Error:</strong> {error}
+            {csvError && (
+              <div className="note" style={{ borderLeftColor: "#b91c1c", background: "#fee2e2" }}>
+                <strong>CSV error:</strong> {csvError}
+              </div>
+            )}
+
+            <div className="row">
+              <label>Warmup:</label>
+              <input
+                type="number"
+                value={nWarmup}
+                min={0}
+                step={100}
+                onChange={(e) => setNWarmup(Number(e.target.value))}
+              />
+              <label>Draws:</label>
+              <input
+                type="number"
+                value={nDraws}
+                min={1}
+                step={100}
+                onChange={(e) => setNDraws(Number(e.target.value))}
+              />
+              <label>Seed:</label>
+              <input
+                type="number"
+                value={seed}
+                onChange={(e) => setSeed(Number(e.target.value))}
+              />
+            </div>
+            <div className="row">
+              <button className="secondary" onClick={compile} disabled={compiling}>
+                {compiling ? "Compiling…" : compiledModel && !stale ? "Recompile" : "Compile"}
+              </button>
+              <button onClick={onRun} disabled={running || !compiledModel || stale}>
+                {running ? "Sampling…" : "Run NUTS"}
+              </button>
+              <span className="compile-status">
+                {compileError ? (
+                  <span style={{ color: "#b91c1c" }}>✗ compile error</span>
+                ) : compiledModel && !stale ? (
+                  <span style={{ color: "#047857" }}>
+                    ✓ compiled ({compiledModel.n_params} params)
+                  </span>
+                ) : compiledModel && stale ? (
+                  <span style={{ color: "#b45309" }}>
+                    ⚠ stale — recompile
+                  </span>
+                ) : (
+                  <span style={{ color: "#888" }}>not compiled</span>
+                )}
+              </span>
+            </div>
+
+            {compileError && (
+              <div className="note" style={{ borderLeftColor: "#b91c1c", background: "#fee2e2" }}>
+                <strong>Compile error:</strong>
+                <pre style={{ background: "transparent", border: "none", padding: "4px 0", margin: 0 }}>
+                  {compileError}
+                </pre>
+              </div>
+            )}
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Graphical model" open={showGraph} onToggle={() => setShowGraph((o) => !o)}>
+            <div className="model-diagram-card">
+              <GraphicalModel stanCode={debouncedStan} />
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title={`Data${customData ? " (custom CSV)" : ""}`}
+            open={showData}
+            onToggle={() => setShowData((o) => !o)}
+          >
+            <DataTable data={effectiveData} />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title={`Posterior summary${summary ? ` (${summary.length})` : ""}`}
+            open={showResults}
+            onToggle={() => setShowResults((o) => !o)}
+          >
+            {error ? (
+              <div className="note" style={{ borderLeftColor: "#b91c1c", background: "#fee2e2" }}>
+                <strong>Error:</strong> {error}
+              </div>
+            ) : summary ? (
+              <div className="results">
+                {elapsedMs && (
+                  <p style={{ fontSize: 13, color: "#666", margin: "0 0 8px" }}>
+                    sampled in {elapsedMs.toFixed(0)}ms
+                  </p>
+                )}
+                <div className="param-row header">
+                  <span>parameter</span>
+                  <span className="num">mean</span>
+                  <span className="num">sd</span>
+                  <span className="num">q10</span>
+                  <span className="num">q90</span>
+                  <span>posterior</span>
                 </div>
-              ) : summary ? (
-                <div className="results">
-                  {elapsedMs && (
-                    <p style={{ fontSize: 13, color: "#666", margin: "0 0 8px" }}>
-                      sampled in {elapsedMs.toFixed(0)}ms
-                    </p>
-                  )}
-                  <div className="param-row header">
-                    <span>parameter</span>
-                    <span className="num">mean</span>
-                    <span className="num">sd</span>
-                    <span className="num">q10</span>
-                    <span className="num">q90</span>
-                    <span>posterior</span>
+                {summary.map((p) => (
+                  <div className="param-row" key={p.name}>
+                    <span className="param-name">{p.name}</span>
+                    <span className="num">{p.mean.toFixed(3)}</span>
+                    <span className="num">{p.sd.toFixed(3)}</span>
+                    <span className="num">{p.q10.toFixed(3)}</span>
+                    <span className="num">{p.q90.toFixed(3)}</span>
+                    <Histogram values={p.samples} />
                   </div>
-                  {summary.map((p) => (
-                    <div className="param-row" key={p.name}>
-                      <span className="param-name">{p.name}</span>
-                      <span className="num">{p.mean.toFixed(3)}</span>
-                      <span className="num">{p.sd.toFixed(3)}</span>
-                      <span className="num">{p.q10.toFixed(3)}</span>
-                      <span className="num">{p.q90.toFixed(3)}</span>
-                      <Histogram values={p.samples} />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="hint">Compile and Run NUTS to see posterior summaries here.</p>
-              ))}
-          </div>
-        )}
+                ))}
+              </div>
+            ) : (
+              <p className="hint">Compile and Run NUTS to see posterior summaries here.</p>
+            )}
+          </CollapsibleSection>
+        </div>
       </div>
 
       <div className="note sandbox-footnote">
