@@ -60,20 +60,6 @@ export function WasmSandbox() {
   const [compileError, setCompileError] = useState<string | null>(null);
   const [lastCompiledKey, setLastCompiledKey] = useState<string | null>(null);
   const [compiling, setCompiling] = useState(false);
-  const [editorFullscreen, setEditorFullscreen] = useState(false);
-
-  useEffect(() => {
-    if (!editorFullscreen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setEditorFullscreen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [editorFullscreen]);
 
   const preset: Preset = PRESETS[presetKey];
   const effectiveData = customData ?? preset.data;
@@ -323,7 +309,7 @@ export function WasmSandbox() {
         </div>
       )}
 
-      <div className={`stan-editor-row${editorFullscreen ? " fullscreen" : ""}`}>
+      <div className="stan-editor-row">
         <div className="code-section stan-editor-col">
           <h3>
             Stan program
@@ -343,21 +329,12 @@ export function WasmSandbox() {
                 </button>
               </>
             )}
-            {" "}
-            <button
-              className="secondary"
-              style={{ padding: "1px 8px", fontSize: 12 }}
-              onClick={() => setEditorFullscreen((f) => !f)}
-            >
-              {editorFullscreen ? "✕ Exit fullscreen" : "⛶ Fullscreen"}
-            </button>
           </h3>
           <textarea
             className="stan-editor"
             value={effectiveStan}
             onChange={(e) => setCustomStan(e.target.value)}
             spellCheck={false}
-            autoFocus={editorFullscreen}
           />
         </div>
 

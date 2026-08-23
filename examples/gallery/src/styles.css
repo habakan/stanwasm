@@ -169,49 +169,31 @@ footer a {
   margin-left: 4px;
 }
 
+/* IDE-style by default — code on the left, spacious, no separate
+   "fullscreen" mode to opt into. */
 .stan-editor-row {
   display: flex;
   gap: 20px;
   flex-wrap: wrap;
-  align-items: flex-start;
-}
-
-.stan-editor-col {
-  flex: 1 1 420px;
-  min-width: 320px;
-}
-
-.graph-col {
-  flex: 0 1 auto;
-  min-width: 260px;
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.stan-editor-row.fullscreen {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  margin: 0;
-  padding: 20px 24px;
-  background: white;
-  overflow: auto;
   align-items: stretch;
 }
 
-.stan-editor-row.fullscreen .stan-editor-col {
-  flex: 1 1 55%;
+.stan-editor-col {
+  /* flex-grow ratio (3:2), not percentage basis — a percentage basis on
+     both columns summing to 100% plus the row's gap overflows the
+     container under flex-wrap, which silently wraps the graph-col onto
+     its own row below instead of beside the editor. */
+  flex: 3 1 420px;
+  min-width: 320px;
   display: flex;
   flex-direction: column;
 }
 
-.stan-editor-row.fullscreen .stan-editor {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.stan-editor-row.fullscreen .graph-col {
-  flex: 1 1 40%;
+.graph-col {
+  flex: 2 1 260px;
+  min-width: 260px;
+  max-width: 100%;
+  overflow: auto;
 }
 
 .results {
@@ -262,7 +244,8 @@ footer a {
 
 .stan-editor {
   width: 100%;
-  min-height: 280px;
+  flex: 1 1 auto;
+  min-height: 60vh;
   padding: 12px 14px;
   border: 1px solid #d5d5d5;
   border-radius: 4px;
