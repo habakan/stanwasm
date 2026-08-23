@@ -145,7 +145,7 @@ impl StanModel {
         let compiled = self
             .compiled
             .as_mut()
-            .ok_or_else(|| JsError::new("internal: compiled missing"))?;
+            .ok_or_else(|| compiled_checked_out("logProbGrad"))?;
         let n = compiled.n_params();
         if params.len() != n {
             return Err(JsError::new(&format!(
@@ -183,7 +183,7 @@ impl StanModel {
         let compiled = self
             .compiled
             .take()
-            .ok_or_else(|| JsError::new("internal: compiled missing — call StanModel anew"))?;
+            .ok_or_else(|| compiled_checked_out("sample"))?;
 
         // Run sampling in a closure so we can restore `self.compiled` on
         // *any* exit path below, not just success — a rejected `init` (a
@@ -304,7 +304,7 @@ impl StanModel {
         let compiled = self
             .compiled
             .take()
-            .ok_or_else(|| JsError::new("internal: compiled missing — call StanModel anew"))?;
+            .ok_or_else(|| compiled_checked_out("startStepSampling"))?;
         let math = CpuMath::new(LogpAdapter { compiled });
         let settings = DiagNutsSettings {
             num_tune: num_warmup as u64,
@@ -399,6 +399,16 @@ fn trace(model: &Model) -> Result<Compiled, EvalError> {
 
 fn jserr<E: std::fmt::Display>(e: E) -> JsError {
     JsError::new(&e.to_string())
+}
+
+/// The one reason `self.compiled` is ever `None`: a step-sampling session has
+/// it checked out. Say so, instead of reporting an internal invariant.
+fn compiled_checked_out(method: &str) -> JsError {
+    JsError::new(&format!(
+        "{method} is unavailable while a step-sampling session is running — \
+         it holds the compiled model. Call finishStepSampling() first (or \
+         exhaust stepDraw(), which calls it for you)."
+    ))
 }
 
 /// Runs once when the wasm module is instantiated. Forwards Rust panics

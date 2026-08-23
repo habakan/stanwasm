@@ -151,10 +151,13 @@ fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
         // scalar ⊙ container broadcasts element-wise, in both directions.
         (Scalar, _) | (_, Scalar) => true,
         (Vector(a), Vector(b)) => a == b,
-        (Matrix(a), Matrix(b)) => a == b,
+        // Both dimensions must agree; a ragged operand (`cols: None`) never
+        // matches, so it can't be zipped down silently either.
+        (Matrix(ra, Some(ca)), Matrix(rb, Some(cb))) => ra == rb && ca == cb,
+        (Matrix(..), Matrix(..)) => false,
         // Matrix × vector / vector × matrix is linear algebra, not
         // element-wise broadcast — not implemented (see `EvalError::NotAScalar`).
-        (Matrix(_), Vector(_)) | (Vector(_), Matrix(_)) => false,
+        (Matrix(..), Vector(_)) | (Vector(_), Matrix(..)) => false,
     };
     if ok {
         return Ok(());

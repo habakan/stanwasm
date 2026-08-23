@@ -2,7 +2,7 @@
 
 > **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
-Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~431 KB` wasm bundle, embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
+Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~466 KB` wasm bundle (`~180 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
 ![stanwasm examples gallery demo](examples/gallery/demo.gif)
 
@@ -177,7 +177,7 @@ Requires Rust 1.88+ (the workspace MSRV; `nuts-rs` needs edition 2024).
 
 ```bash
 cargo build --release
-cargo test                    # ~71 tests across all crates
+cargo test                    # ~76 tests across all crates
 cargo run --release -p stan-cli -- bench all
 ```
 

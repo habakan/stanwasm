@@ -62,15 +62,31 @@ pub enum EvalError {
         expected: String,
         got: String,
     },
+    #[error(
+        "{name} takes a single vector as its variate, but got {got}. An array \
+         of vectors (`array[N] vector[K] y; y ~ {name}(mu, L);`) is not \
+         vectorized here — write the loop form: \
+         `for (n in 1:N) y[n] ~ {name}(mu, L);`"
+    )]
+    MultivariateNotVectorized { name: String, got: String },
     #[error("integer division by zero")]
     IntDivisionByZero,
     #[error(
-        "constraint type `{0}` is declared but has no transform in this \
-         runtime yet — it would otherwise be sampled unconstrained, giving a \
-         silently wrong posterior. See the \"Not yet supported\" list in the \
-         README"
+        "parameter `{name}` is declared `{typ}`, which has no constraint \
+         transform in this runtime yet — it would otherwise be sampled \
+         unconstrained, giving a silently wrong posterior. See the \"Not yet \
+         supported\" list in the README"
     )]
-    UnsupportedConstraint(String),
+    UnsupportedConstraint { name: String, typ: String },
+    #[error(
+        "parameter `{0}` is declared `int`. Stan parameters must be \
+         continuous — NUTS differentiates the log density with respect to \
+         them. Move it to `data`/`transformed data`, or marginalize the \
+         discrete variable out of the model"
+    )]
+    IntParameter(String),
+    #[error("parameter `{name}`: {detail}")]
+    BadParameterDeclaration { name: String, detail: String },
     #[error(
         "if/while condition in `model`/`transformed parameters` depends on a \
          sampled parameter — not supported. NUTS traces this block once and \

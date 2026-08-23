@@ -316,6 +316,16 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
         // density and silently return a wrong posterior. They are errors now.
         "multi_normal_cholesky" => match (x, &args[0], &args[1]) {
             (Val::Vec(y), Val::Vec(mu), Val::Vec(l_rows)) => {
+                // `array[N] vector[K] y; y ~ multi_normal_cholesky(mu, L);` is
+                // legal Stan but arrives here as one N-row container, so it
+                // would otherwise be reported as a confusing size mismatch
+                // between the N rows and the K-long mu.
+                if matches!(y.first(), Some(Val::Vec(_))) {
+                    return Err(EvalError::MultivariateNotVectorized {
+                        name: name.to_string(),
+                        got: x.shape().to_string(),
+                    });
+                }
                 if y.len() != mu.len() || l_rows.len() != y.len() {
                     return Err(wrong_type(
                         name,

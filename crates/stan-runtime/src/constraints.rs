@@ -58,8 +58,11 @@ fn eval_plain_int(expr: &stan_ast::Expr, env: &Env) -> usize {
 
 /// Apply the constraint transform to a slice of unconstrained tape leaves.
 /// Returns `(constrained_value, log_jacobian)`.
+///
+/// `name` is only used to say which declaration an error is about.
 pub fn constrain(
     t: &mut Tape,
+    name: &str,
     typ: &StanType,
     raw: &[Val],
     env: &Env,
@@ -219,17 +222,26 @@ pub fn constrain(
         // the old pass-through arm: no transform, no Jacobian, negative values
         // accepted as if they were positive.
         StanType::Array(_, elem) => {
+            // `param_dims` is 0 for an element type with no unconstrained
+            // representation — `int` (rejected below) or a zero-sized vector.
+            if matches!(**elem, StanType::Int(_)) {
+                return Err(EvalError::IntParameter(name.to_string()));
+            }
             let chunk = param_dims(elem, env);
             if chunk == 0 {
-                return Err(EvalError::UnsupportedConstraint(format!(
-                    "array of {}",
-                    type_name(elem)
-                )));
+                return Err(EvalError::BadParameterDeclaration {
+                    name: name.to_string(),
+                    detail: format!(
+                        "`array[...] {}` has no unconstrained dimensions — \
+                         check that the element size is a positive data value",
+                        type_name(elem)
+                    ),
+                });
             }
             let mut out = Vec::with_capacity(raw.len() / chunk);
             let mut log_jac = Val::Num(0.0);
             for part in raw.chunks(chunk) {
-                let (c, j) = constrain(t, elem, part, env)?;
+                let (c, j) = constrain(t, name, elem, part, env)?;
                 log_jac = v_add(t, &log_jac, &j);
                 out.push(c);
             }
@@ -241,21 +253,31 @@ pub fn constrain(
         StanType::Matrix(r_e, c_e) => {
             let cols = match eval_plain(t, c_e, env)? {
                 Val::Num(v) => v as usize,
-                other => return Err(bad_size(c_e, &other)),
+                other => return Err(bad_size(name, &other)),
             };
             let rows = match eval_plain(t, r_e, env)? {
                 Val::Num(v) => v as usize,
-                other => return Err(bad_size(r_e, &other)),
+                other => return Err(bad_size(name, &other)),
             };
             if cols == 0 || rows * cols != raw.len() {
-                return Err(EvalError::UnsupportedConstraint(format!(
-                    "matrix[{rows}, {cols}] (sizes must be positive data values)"
-                )));
+                return Err(EvalError::BadParameterDeclaration {
+                    name: name.to_string(),
+                    detail: format!(
+                        "`matrix[{rows}, {cols}]` — both sizes must be \
+                         positive data values"
+                    ),
+                });
             }
             let mat = raw.chunks(cols).map(|row| Val::Vec(row.to_vec())).collect();
             (Val::Vec(mat), Val::Num(0.0))
         }
-        other => return Err(EvalError::UnsupportedConstraint(type_name(other))),
+        StanType::Int(_) => return Err(EvalError::IntParameter(name.to_string())),
+        other => {
+            return Err(EvalError::UnsupportedConstraint {
+                name: name.to_string(),
+                typ: type_name(other),
+            })
+        }
     })
 }
 
@@ -263,7 +285,7 @@ pub fn constrain(
 fn type_name(typ: &StanType) -> String {
     match typ {
         StanType::Real(_) => "real".into(),
-        StanType::Int(_) => "int (parameters cannot be integer-valued in Stan)".into(),
+        StanType::Int(_) => "int".into(),
         StanType::Vector(..) => "vector".into(),
         StanType::Matrix(..) => "matrix".into(),
         StanType::Simplex(_) => "simplex".into(),
@@ -278,11 +300,14 @@ fn type_name(typ: &StanType) -> String {
     }
 }
 
-fn bad_size(expr: &stan_ast::Expr, got: &Val) -> EvalError {
-    EvalError::UnsupportedConstraint(format!(
-        "size expression {expr:?} must evaluate to a plain data integer, got {}",
-        got.shape()
-    ))
+fn bad_size(name: &str, got: &Val) -> EvalError {
+    EvalError::BadParameterDeclaration {
+        name: name.to_string(),
+        detail: format!(
+            "a size expression must evaluate to a plain data integer, got {}",
+            got.shape()
+        ),
+    }
 }
 
 fn apply_upper(t: &mut Tape, raw: &Val, upper: &Val) -> (Val, Val) {

@@ -146,7 +146,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
         };
         match tok {
             Some(t) => tokens.push(t),
-            None => return Err(UnknownChar(c as char)),
+            // `c as char` would render a non-ASCII byte as mojibake (a UTF-8
+            // continuation byte reads as a Latin-1 glyph), so decode the whole
+            // character from the source instead.
+            None => return Err(UnknownChar(src[i..].chars().next().unwrap_or('\u{fffd}'))),
         }
         i += 1;
     }

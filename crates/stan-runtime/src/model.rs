@@ -373,7 +373,8 @@ impl Model {
             let k = param_dims(&decl.typ, &self.data_env);
             let raw: Vec<Val> = (0..k).map(|i| Val::Tape(leaves[leaf_idx + i])).collect();
             leaf_idx += k;
-            let (constrained, _log_jac) = constrain(tape, &decl.typ, &raw, &self.data_env)?;
+            let (constrained, _log_jac) =
+                constrain(tape, &decl.name, &decl.typ, &raw, &self.data_env)?;
             env.set(&decl.name, constrained);
         }
         for decl in &self.prog.transformed_params {
@@ -485,7 +486,8 @@ impl Model {
             let k = param_dims(&decl.typ, &self.data_env);
             let raw: Vec<Val> = (0..k).map(|i| Val::Tape(leaves[leaf_idx + i])).collect();
             leaf_idx += k;
-            let (constrained, log_jac) = constrain(tape, &decl.typ, &raw, &self.data_env)?;
+            let (constrained, log_jac) =
+                constrain(tape, &decl.name, &decl.typ, &raw, &self.data_env)?;
             env.set(&decl.name, constrained);
             lp = v_add(tape, &lp, &log_jac);
         }

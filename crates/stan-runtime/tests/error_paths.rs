@@ -137,10 +137,64 @@ fn unsupported_constraint_types_are_rejected() {
         let src = format!("data {{ int K; }} parameters {{ {decl} }} model {{ target += 0; }}");
         let e = err(&src, &format!(r#"{{"K":{k}}}"#), &vec![0.1; n_raw]);
         assert!(
-            e.contains("has no transform in this runtime yet"),
+            e.contains("has no constraint transform in this runtime yet"),
             "{decl}: {e}"
         );
     }
+}
+
+#[test]
+fn matrix_shape_check_compares_columns_not_just_rows() {
+    // Both operands have 2 rows, so a row-count-only check would let this
+    // through and `zip` would truncate the wider one's columns.
+    let e = err(
+        "data { matrix[2,3] A; matrix[2,4] B; } parameters { real a; } \
+         model { target += a * sum(A[1] + B[1]); }",
+        r#"{"A":[[1,2,3],[4,5,6]],"B":[[1,2,3,4],[5,6,7,8]]}"#,
+        &[1.0],
+    );
+    assert!(e.contains("shape mismatch"), "{e}");
+}
+
+#[test]
+fn int_parameters_are_rejected_with_their_own_message() {
+    let e = err(
+        "parameters { real a; int k; } model { a ~ normal(0, 1); }",
+        "{}",
+        &[0.0],
+    );
+    assert!(
+        e.contains("`k` is declared `int`") && e.contains("must be"),
+        "{e}"
+    );
+}
+
+#[test]
+fn unsupported_constraint_names_the_parameter() {
+    let e = err(
+        "data { int K; } parameters { cov_matrix[K] S; } model { target += 0; }",
+        r#"{"K":2}"#,
+        &[0.1, 0.2, 0.3],
+    );
+    assert!(e.contains("`S`") && e.contains("`cov_matrix`"), "{e}");
+}
+
+#[test]
+fn array_of_vectors_variate_points_at_the_loop_form() {
+    // Legal Stan, but this runtime doesn't vectorize a multivariate variate.
+    // The message has to name the loop form; reporting a size mismatch between
+    // the N array rows and the K-long mu sends the reader the wrong way.
+    let e = err(
+        "data { int N; int K; array[N] vector[K] y; vector[K] mu; } \
+         parameters { cholesky_factor_corr[K] L; } \
+         model { y ~ multi_normal_cholesky(mu, L); }",
+        r#"{"N":3,"K":2,"y":[[1,2],[3,4],[5,6]],"mu":[0,0]}"#,
+        &[0.3],
+    );
+    assert!(
+        e.contains("not vectorized here") && e.contains("for (n in 1:N)"),
+        "{e}"
+    );
 }
 
 #[test]

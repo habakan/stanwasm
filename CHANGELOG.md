@@ -93,6 +93,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   documented in `ARCHITECTURE.md` and `docs/en/BENCHMARKS.md`.
 - `num_warmup + num_draws` was summed as `u32` before widening to `u64`, so
   a large pair wrapped to a different run length.
+- The operand-shape check compared matrices by row count alone, so
+  `matrix[2,3] + matrix[2,4]` passed and the wider operand's columns were
+  zipped away. `Shape::Matrix` carries the column count now, and a ragged
+  container never compares equal.
+- `int` parameters, unsupported constraint types, and bad size expressions
+  now name the offending declaration and say what to do
+  (`parameter \`k\` is declared \`int\`. Stan parameters must be continuous…`)
+  instead of reporting an internal constraint-table miss.
+- `array[N] vector[K] y; y ~ multi_normal_cholesky(mu, L);` reported a size
+  mismatch between the N array rows and the K-long `mu`. It now says the
+  multivariate form isn't vectorized here and gives the loop form.
+- `logProbGrad`/`sample` during a step-sampling session reported
+  `internal: compiled missing`. They now say the session holds the compiled
+  model and point at `finishStepSampling()`.
+- The lexer's unknown-character error cast a byte to `char`, so a non-ASCII
+  character was reported as mojibake. It decodes the character.
 
 ### Changed
 
@@ -100,6 +116,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `package.json` declares `types`/`exports`. It was `index.ts`, which
   broke plain-JS consumers, bundlers, and Node without
   `--experimental-strip-types`.
+- Bundle size: `~466 KB` after `wasm-opt -Oz` (`~180 KB` gzipped), up from
+  `~431 KB` — the cost of the validation and the error messages above.
+  README, CITATION.cff and ARCHITECTURE.md all still said 431 KB.
 - Declared MSRV: Rust 1.88 (`rust-version` in the workspace `Cargo.toml`),
   set by `nuts-rs` 0.18's edition-2024 + let-chains usage and verified with
   `cargo +1.88 test --workspace`. `CONTRIBUTING.md` previously said 1.80,

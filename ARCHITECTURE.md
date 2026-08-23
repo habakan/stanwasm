@@ -5,7 +5,7 @@ A contributor-facing tour of `stanwasm` internals: workspace layout, data flow, 
 ## Goals
 
 - Parse and sample a useful subset of Stan models **entirely inside the browser**, with no compile server, no JS NUTS, no separate sampler binary.
-- Keep total wasm payload small after `wasm-opt -Oz` (currently ~431 KB, including `console_error_panic_hook` for browser diagnostics).
+- Keep total wasm payload small after `wasm-opt -Oz` (currently ~466 KB, ~180 KB gzipped, including `console_error_panic_hook` for browser diagnostics).
 - Allow the same Rust code to be exercised natively (`cargo test`) and from the browser (`wasm-pack build`) with a single source tree.
 - Sample with `nuts-rs` (the same NUTS implementation PyMC uses) so the sampler quality matches established Bayesian tooling.
 
@@ -19,7 +19,7 @@ A contributor-facing tour of `stanwasm` internals: workspace layout, data flow, 
            │
            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  stan_wasm_api.wasm  (single bundle, ~431 KB after wasm-opt)     │
+│  stan_wasm_api.wasm  (single bundle, ~466 KB after wasm-opt)     │
 │                                                                  │
 │   parser ──► AST ──► trace forward pass ──► autodiff tape        │
 │                              │                                   │
@@ -238,7 +238,7 @@ cargo run --release -p stan-cli -- bench all
 ./scripts/build-wasm.sh
 #   ├─ cargo build --release --target wasm32-unknown-unknown -p stan-wasm-api
 #   ├─ wasm-bindgen processes the cdylib, generates JS glue
-#   └─ wasm-opt -Oz shrinks the bundle to ~431 KB
+#   └─ wasm-opt -Oz shrinks the bundle to ~466 KB
 
 # 3. TS facade smoke + Node bench in V8
 cd ts && node --experimental-strip-types tests/smoke.ts

@@ -50,11 +50,23 @@ impl Val {
         match self {
             Val::Num(_) | Val::Tape(_) => Shape::Scalar,
             Val::Vec(xs) => {
-                if xs.iter().any(|x| matches!(x, Val::Vec(_))) {
-                    Shape::Matrix(xs.len())
-                } else {
-                    Shape::Vector(xs.len())
+                if !xs.iter().any(|x| matches!(x, Val::Vec(_))) {
+                    return Shape::Vector(xs.len());
                 }
+                // Rows must all be containers of the same length for this to
+                // be a well-formed matrix. `cols: None` marks a ragged value,
+                // which never compares equal to anything — the alternative is
+                // to compare row counts alone and let the columns be zipped
+                // down to the shorter operand.
+                let mut cols = None;
+                for x in xs {
+                    match (x, cols) {
+                        (Val::Vec(r), None) => cols = Some(r.len()),
+                        (Val::Vec(r), Some(c)) if r.len() == c => {}
+                        _ => return Shape::Matrix(xs.len(), None),
+                    }
+                }
+                Shape::Matrix(xs.len(), cols)
             }
         }
     }
@@ -66,8 +78,9 @@ impl Val {
 pub enum Shape {
     Scalar,
     Vector(usize),
-    /// A vec-of-rows; the payload is the row count.
-    Matrix(usize),
+    /// A vec-of-rows: `(rows, cols)`. `cols` is `None` when the rows are not
+    /// all containers of one common length.
+    Matrix(usize, Option<usize>),
 }
 
 impl std::fmt::Display for Shape {
@@ -75,7 +88,8 @@ impl std::fmt::Display for Shape {
         match self {
             Shape::Scalar => write!(f, "scalar"),
             Shape::Vector(n) => write!(f, "vector[{n}]"),
-            Shape::Matrix(r) => write!(f, "matrix with {r} rows"),
+            Shape::Matrix(r, Some(c)) => write!(f, "{r}x{c} matrix"),
+            Shape::Matrix(r, None) => write!(f, "ragged {r}-row container"),
         }
     }
 }
