@@ -71,7 +71,7 @@ cd ts && node --experimental-strip-types tests/smoke.ts
    - one oracle-vs-AOT comparison in `crates/stan-codegen/tests/`
 3. **Document subset boundaries.** If a PR partially implements a Stan feature, the README should reflect what now works and what still doesn't.
 4. **Don't break the no-wasm-gc invariant.** `crates/stan-codegen/tests/no_wasm_gc.rs` must keep passing — we ship plain wasm32 by design.
-5. **CHANGELOG entry.** Add a bullet under `[Unreleased]` in `CHANGELOG.md`.
+5. **CHANGELOG entry.** Add a bullet under `[Unreleased]` in `CHANGELOG.md`. Re-create that heading at the top of the file if the last release folded it into a version — see [`RELEASING.md`](RELEASING.md).
 6. **Format and lint.** `cargo fmt --all` and `cargo clippy --all-targets`.
 
 ## Code style
