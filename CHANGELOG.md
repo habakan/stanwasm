@@ -5,7 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] — 2026-08-25 (alpha)
+
+Initial alpha release: enough Stan to sample linear regression, logistic
+regression, Poisson regression, eight schools (non-centered), and
+multivariate-LKJ-style models end-to-end in the browser — plus a
+`generated quantities` block, step-by-step sampling for live
+visualization, and a tabbed examples gallery.
+
+The *Fixed*, *Changed* and *Security* sections below record hardening done
+before this first public tag — three rounds of pre-release correctness
+review — not regressions from an earlier published version. There is no
+earlier published version.
+
+### Added
+
+- `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`
+- Status banner and Stan ecosystem positioning in README
+- `generated quantities { ... }` block, evaluated natively (tape-replay,
+  inside the same wasm bundle) after sampling: `_rng` draws for every
+  covered distribution (`normal_rng`, `exponential_rng`, `gamma_rng`,
+  `dirichlet_rng`, `multi_normal_cholesky_rng`, etc.) plus `uniform_rng`.
+  New `StanModel` methods: `genQuantityNames()`, `generatedQuantities()`,
+  `constrainDraw()` (constrained parameter values for one unconstrained
+  draw — previously `sample()`'s output had no way to recover these).
+- Real evaluation of `if`/`else`, `while`, `break`/`continue`, and
+  comparison/logical operators (`== != < > <= >= && ||`) in `model`,
+  `transformed parameters`, and `generated quantities` — these previously
+  parsed but silently no-oped.
+- Step-by-step NUTS sampling: `StanModel.startStepSampling()` +
+  `.stepDraw()` advance the sampler one draw at a time, keeping its state
+  alive between calls (`.finishStepSampling()` to stop early), instead of
+  `sample()`'s "run the whole chain, return at the end" model — for driving
+  a live visualization of sampling in progress rather than replaying an
+  already-finished chain. `.stepDraw()` also returns nuts-rs's own
+  `step_size`/`num_steps` for that draw (its live dual-averaging adaptation
+  and trajectory-length search), not values this crate computes.
+- `examples/gallery`: a tabbed demo app — MCMC Visualizer (NUTS vs
+  Random-Walk Metropolis racing live on Neal's funnel via the step-by-step
+  API, adjustable chain count, a "fog of war" coverage veil, and a
+  per-chain live wasm log), Live Regression (drag-to-refit robust vs
+  conjugate regression), Hierarchical Shrinkage (partial-pooling shrinkage
+  on marketing-campaign A/B test data), and Wasm Sandbox (a fuller,
+  IDE-style API tour: CSV upload, editable Stan source, multiple presets,
+  posterior summary table).
+- `examples/gallery`: graphical-model diagrams (node-and-plate plots next
+  to each Stan code block) parsed directly from the Stan source rather
+  than hand-drawn per tab, including a live one in Wasm Sandbox that
+  follows the editor. Distribution formulas render via MathJax, served
+  from a locally-copied bundle rather than a CDN.
+
+### Changed
+
+- The npm entry point is `ts/index.js` with a hand-written `ts/index.d.ts`,
+  and `package.json` declares `types`/`exports`. It was `index.ts`, which
+  broke plain-JS consumers, bundlers, and Node without
+  `--experimental-strip-types`.
+- Bundle size: `~466 KB` after `wasm-opt -Oz` (`~180 KB` gzipped), up from
+  `~431 KB` — the cost of the validation and the error messages above.
+  README, CITATION.cff and ARCHITECTURE.md all still said 431 KB.
+- Declared MSRV: Rust 1.88 (`rust-version` in the workspace `Cargo.toml`),
+  set by `nuts-rs` 0.18's edition-2024 + let-chains usage and verified with
+  `cargo +1.88 test --workspace`. `CONTRIBUTING.md` previously said 1.80,
+  which does not build.
 
 ### Fixed
 
@@ -110,20 +172,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The lexer's unknown-character error cast a byte to `char`, so a non-ASCII
   character was reported as mojibake. It decodes the character.
 
-### Changed
-
-- The npm entry point is `ts/index.js` with a hand-written `ts/index.d.ts`,
-  and `package.json` declares `types`/`exports`. It was `index.ts`, which
-  broke plain-JS consumers, bundlers, and Node without
-  `--experimental-strip-types`.
-- Bundle size: `~466 KB` after `wasm-opt -Oz` (`~180 KB` gzipped), up from
-  `~431 KB` — the cost of the validation and the error messages above.
-  README, CITATION.cff and ARCHITECTURE.md all still said 431 KB.
-- Declared MSRV: Rust 1.88 (`rust-version` in the workspace `Cargo.toml`),
-  set by `nuts-rs` 0.18's edition-2024 + let-chains usage and verified with
-  `cargo +1.88 test --workspace`. `CONTRIBUTING.md` previously said 1.80,
-  which does not build.
-
 ### Security
 
 - CI pins every third-party action by commit SHA instead of by mutable tag, and
@@ -137,56 +185,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   samples unchanged.
 - Added `SECURITY.md` (reporting channel and threat model) and
   `.github/dependabot.yml` (Cargo, npm, GitHub Actions).
-
-### Removed
-
-- `docs/internal/DELIVERY.md` (maintainer-only release-planning notes) is no
-  longer tracked; `docs/internal/` is gitignored.
-
-## [0.1.0] — 2026-08-23 (alpha)
-
-Initial alpha release: enough Stan to sample linear regression, logistic
-regression, Poisson regression, eight schools (non-centered), and
-multivariate-LKJ-style models end-to-end in the browser — plus a
-`generated quantities` block, step-by-step sampling for live
-visualization, and a tabbed examples gallery.
-
-### Added
-
-- `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`
-- Status banner and Stan ecosystem positioning in README
-- `generated quantities { ... }` block, evaluated natively (tape-replay,
-  inside the same wasm bundle) after sampling: `_rng` draws for every
-  covered distribution (`normal_rng`, `exponential_rng`, `gamma_rng`,
-  `dirichlet_rng`, `multi_normal_cholesky_rng`, etc.) plus `uniform_rng`.
-  New `StanModel` methods: `genQuantityNames()`, `generatedQuantities()`,
-  `constrainDraw()` (constrained parameter values for one unconstrained
-  draw — previously `sample()`'s output had no way to recover these).
-- Real evaluation of `if`/`else`, `while`, `break`/`continue`, and
-  comparison/logical operators (`== != < > <= >= && ||`) in `model`,
-  `transformed parameters`, and `generated quantities` — these previously
-  parsed but silently no-oped.
-- Step-by-step NUTS sampling: `StanModel.startStepSampling()` +
-  `.stepDraw()` advance the sampler one draw at a time, keeping its state
-  alive between calls (`.finishStepSampling()` to stop early), instead of
-  `sample()`'s "run the whole chain, return at the end" model — for driving
-  a live visualization of sampling in progress rather than replaying an
-  already-finished chain. `.stepDraw()` also returns nuts-rs's own
-  `step_size`/`num_steps` for that draw (its live dual-averaging adaptation
-  and trajectory-length search), not values this crate computes.
-- `examples/gallery`: a tabbed demo app — MCMC Visualizer (NUTS vs
-  Random-Walk Metropolis racing live on Neal's funnel via the step-by-step
-  API, adjustable chain count, a "fog of war" coverage veil, and a
-  per-chain live wasm log), Live Regression (drag-to-refit robust vs
-  conjugate regression), Hierarchical Shrinkage (partial-pooling shrinkage
-  on marketing-campaign A/B test data), and Wasm Sandbox (a fuller,
-  IDE-style API tour: CSV upload, editable Stan source, multiple presets,
-  posterior summary table).
-- `examples/gallery`: graphical-model diagrams (node-and-plate plots next
-  to each Stan code block) parsed directly from the Stan source rather
-  than hand-drawn per tab, including a live one in Wasm Sandbox that
-  follows the editor. Distribution formulas render via MathJax, served
-  from a locally-copied bundle rather than a CDN.
 
 ### Architecture
 
@@ -255,5 +253,4 @@ Comparable to the `nuts-rs` direct-call benchmark. See `docs/en/BENCHMARKS.md`.
   `sample()` behavior and correctly restores `logProbGrad`/`sample`
   afterward
 
-[Unreleased]: https://github.com/habakan/stanwasm/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/habakan/stanwasm/releases/tag/v0.1.0
