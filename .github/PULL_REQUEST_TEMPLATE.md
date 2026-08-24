@@ -22,7 +22,8 @@
 
 ## CHANGELOG
 
-- [ ] Entry added under `[Unreleased]` in `CHANGELOG.md`
+- [ ] Entry added under `[Unreleased]` in `CHANGELOG.md` — add that
+      section back at the top if the last release folded it away
 
 ## Notes for reviewer
 
