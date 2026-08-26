@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Build commands moved into a `Makefile`; `scripts/build-wasm.sh` is gone.
+  `make wasm` replaces it, and `make` on its own lists every target. Building
+  from source is otherwise unchanged — the underlying `wasm-pack` invocation
+  is the same one.
+
+### Fixed
+
+- The pre-publish packaging check now runs `cargo package --workspace` instead
+  of one `cargo package -p` per crate. The per-crate form cannot pass before
+  the first crates.io release, because each manifest resolves its siblings
+  from the registry rather than from `path` — so the check that exists to
+  catch a path dependency missing its `version` requirement failed for an
+  unrelated reason at exactly the moment it was needed.
+
 ## [0.1.0] — 2026-08-25 (alpha)
 
 Initial alpha release: enough Stan to sample linear regression, logistic
