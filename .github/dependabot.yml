@@ -1,7 +1,7 @@
 version: 2
 
 updates:
-  # Keeps the SHA-pinned actions in test.yml current — pinning by SHA is what
+  # Keeps the SHA-pinned actions across all workflows current — pinning by SHA is what
   # makes a compromised action tag harmless, but it also means nothing updates
   # on its own without this.
   - package-ecosystem: github-actions

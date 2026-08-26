@@ -134,11 +134,7 @@ jobs:
       # The gallery consumes `ts/` as a `file:` dependency and type-checks
       # against its `index.d.ts`, so this is what catches a packaging or API
       # change that the Rust tests can't see.
-      - run: make wasm
-      - run: npm ci
-        working-directory: examples/gallery
-      - run: npm run build
-        working-directory: examples/gallery
+      - run: make gallery-build
 
   no-wasm-gc:
     name: confirm no wasm-gc opcodes

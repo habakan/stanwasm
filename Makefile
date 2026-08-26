@@ -13,7 +13,7 @@
 help:
 	@grep -hE '^[a-z][a-z-]*:.*##' $(MAKEFILE_LIST) \
 	  | sed 's/:[^#]*##/|/' \
-	  | awk -F'|' '{ printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }'
+	  | awk -F'|' '{ printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }'
 
 ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
@@ -83,6 +83,12 @@ bench-native: ## Native Rust benchmark, no wasm involved
 .PHONY: gallery
 gallery: wasm ## Vite dev server for examples/gallery
 	cd examples/gallery && npm install && npm run dev
+
+# `npm ci` rather than `npm install`: this is the build GitHub Pages ships, so
+# it resolves from the lockfile and nothing else.
+.PHONY: gallery-build
+gallery-build: wasm ## Production build of the gallery (what GitHub Pages ships)
+	cd examples/gallery && npm ci && npm run build
 
 # `--workspace` rather than a per-crate loop: `cargo package -p stan-parser` on
 # its own resolves `stan-ast` from the crates.io index and fails until 0.1.0 is

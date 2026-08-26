@@ -1,0 +1,80 @@
+name: pages
+
+# The gallery is the one thing in this repository a reader can try without
+# installing anything, so it ships from `main` on every change that can alter
+# it. That includes the Rust crates: the wasm the page loads is built from
+# them, so a codegen or runtime change with no gallery diff still changes what
+# the site does.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "ts/**"
+      - "examples/gallery/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "Makefile"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Read-only by default; only the deploy job widens this, and only to what
+# actions/deploy-pages needs. The build job never holds a token that can
+# publish.
+permissions:
+  contents: read
+
+# A queued deploy should be superseded by a newer one, but a deploy already in
+# flight must not be cancelled — that can leave the site half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Third-party actions are pinned by commit SHA, not by tag, for the reason
+# spelled out at the top of test.yml. Dependabot bumps the SHA and the
+# trailing comment together.
+jobs:
+  build:
+    name: build the gallery
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: jetli/wasm-pack-action@0d096b08b4e5a7de8c28de67e11e945404e9eefa # v0.4.0
+        with:
+          version: "v0.13.1"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      # `vite.config.ts` sets `base: "./"`, so the bundle carries no knowledge
+      # of the `/stanwasm/` project-site subpath and the same output works from
+      # any prefix. The two runtime fetches that can't be rewritten at build
+      # time — the wasm and MathJax — resolve through `import.meta.env.BASE_URL`
+      # in `src/App.tsx` and `src/graphicalModel.tsx`.
+      - run: make gallery-build
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: examples/gallery/dist
+
+  deploy:
+    name: deploy to github-pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
