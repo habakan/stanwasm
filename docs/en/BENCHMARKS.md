@@ -4,8 +4,8 @@ Two harnesses available:
 
 | Harness | What it measures | Run |
 |---------|------------------|-----|
-| native Rust release | Tape replay & nuts-rs without any wasm overhead | `cargo run --release -p stan-cli -- bench all` |
-| Node.js V8 + wasm32 | Same code path users see in the browser | `cd ts && npm run build:wasm && npm run bench` |
+| native Rust release | Tape replay & nuts-rs without any wasm overhead | `make bench-native` |
+| Node.js V8 + wasm32 | Same code path users see in the browser | `make bench` |
 
 The Node bench compares **two sampling paths** end-to-end:
 
@@ -38,11 +38,10 @@ The Node bench compares **two sampling paths** end-to-end:
 
 ```bash
 # Native
-cargo run --release -p stan-cli -- bench all
+make bench-native
 
-# Node.js (requires wasm-pack on PATH)
-./scripts/build-wasm.sh
-cd ts && node --experimental-strip-types tests/bench.ts
+# Node.js (requires wasm-pack on PATH; rebuilds ts/pkg/ if it is stale)
+make bench
 ```
 
 ## Architecture details

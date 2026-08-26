@@ -15,7 +15,7 @@
   },
   "files": ["index.js", "index.d.ts", "pkg/"],
   "scripts": {
-    "build:wasm": "../scripts/build-wasm.sh",
+    "build:wasm": "make -C .. wasm",
     "test": "node --import tsx/esm tests/smoke.ts",
     "test:aot": "node --import tsx/esm tests/aot_smoke.ts",
     "bench": "node --import tsx/esm tests/bench.ts"
