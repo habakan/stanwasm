@@ -73,18 +73,15 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace --release
-      - run: ./scripts/build-wasm.sh
-      - run: cd ts && node --experimental-strip-types tests/smoke.ts
+      - run: make fmt-check
+      - run: make clippy
+      - run: make test TESTFLAGS=--release
+      - run: make smoke
       # The same two checks RELEASING.md asks for before publishing by hand.
       # Repeated here because the point of this workflow is to notice when the
       # manual procedure was not followed.
-      - name: dry-run package the leaf crates
-        run: |
-          cargo package --no-verify -p stan-ast
-          cargo package --no-verify -p stan-autodiff
+      - name: dry-run package every manifest
+        run: cargo package --workspace --no-verify
       - name: confirm the npm tarball carries the wasm
         working-directory: ts
         run: |

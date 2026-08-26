@@ -31,28 +31,21 @@ matches.
 ## 2. Check locally
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --release
+make check TESTFLAGS=--release   # fmt + clippy + the release test suite
+make smoke                       # builds ts/pkg/, then exercises it in Node
 
-./scripts/build-wasm.sh
-cd ts && node --experimental-strip-types tests/smoke.ts && cd ..
-
-# Manifests are publishable (a path dependency with no version requirement
-# fails here, not halfway through step 4).
-for c in stan-ast stan-autodiff stan-parser stan-runtime stan-codegen stan-wasm-api; do
-  cargo package --no-verify -p "$c"
-done
-
-# The npm tarball actually contains the wasm — see step 5.
-cd ts && npm pack --dry-run && cd ..
+# Every publishable manifest packages, and the npm tarball really contains the
+# wasm. A path dependency with no version requirement fails here rather than
+# halfway through step 4, when the crates already up cannot be taken back.
+make package
 ```
 
-Until the first crates.io publish, `cargo package` on everything except
-`stan-ast` and `stan-autodiff` reports `no matching package named stan-ast
-found`. That is expected: the packaged manifest resolves siblings from the
-registry, and they are not there yet. Manifest errors look different — they
-name the manifest and the field.
+`make package` runs `cargo package --workspace`, not a per-crate loop. That
+matters before the first release: `cargo package -p stan-parser` on its own
+resolves `stan-ast` from the crates.io index and fails with `no matching
+package named stan-ast found` until 0.1.0 is really published there, while the
+workspace form resolves siblings locally and can check all six manifests
+today.
 
 ## 3. Tag, and let CI check the tree
 
@@ -96,7 +89,7 @@ re-publish the same number.
 ## 5. Publish to npm
 
 ```bash
-./scripts/build-wasm.sh   # required — the wasm is not committed
+make wasm                 # required — the wasm is not committed
 cd ts
 npm pack --dry-run        # confirm pkg/*.wasm is in the file list
 npm publish --access public
@@ -106,8 +99,8 @@ The `npm pack --dry-run` line is not ceremony. `wasm-pack` writes its own
 `.gitignore` (containing `*`) into `ts/pkg/`, and npm honors a nested
 `.gitignore` when no `.npmignore` sits beside it — which once published a
 package whose `pkg/` was empty, no wasm and no glue JS, despite
-`package.json`'s `files` saying to include it. `scripts/build-wasm.sh` deletes
-that file after every build; this check is what catches it coming back.
+`package.json`'s `files` saying to include it. The Makefile's `wasm` target
+deletes that file after every build; this check is what catches it coming back.
 
 ## 6. After
 

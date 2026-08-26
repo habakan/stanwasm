@@ -57,7 +57,7 @@ Nothing is published to npm or crates.io yet. When it is, releases will carry
 published tarball can be traced back to the commit and workflow that built it.
 
 Independently of that, `ts/pkg/` is generated entirely by
-`./scripts/build-wasm.sh` from this source tree, so you can rebuild and compare
+`make wasm` from this source tree, so you can rebuild and compare
 rather than trusting the published bytes.
 
 ## Hardening already in place

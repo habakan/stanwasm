@@ -107,12 +107,8 @@ A single `stan_wasm_api_bg.wasm` is shipped to the browser (replaces the previou
 **Not published to npm or crates.io yet** — build from source for now. `ts/` is the package that will be published, so the import path below is what it will be either way.
 
 ```bash
-# Build the wasm bundle into ts/pkg/
-./scripts/build-wasm.sh
-
-# Run the smoke test
-cd ts
-node --experimental-strip-types tests/smoke.ts
+# Build the wasm bundle into ts/pkg/ and run the smoke test against it
+make smoke
 ```
 
 To use it from another project before it is on npm, point at the checkout: `npm install /path/to/stanwasm/ts` (or `npm pack` in `ts/` and install the tarball). The entry point is plain `.js` with a `.d.ts` alongside, so bundlers and plain-JS consumers work without a TypeScript step.

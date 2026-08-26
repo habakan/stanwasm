@@ -235,17 +235,17 @@ cargo test --workspace
 cargo run --release -p stan-cli -- bench all
 
 # 2. wasm32: produce the wasm-pack output consumed by ts/ and examples/
-./scripts/build-wasm.sh
+make wasm
 #   ├─ cargo build --release --target wasm32-unknown-unknown -p stan-wasm-api
 #   ├─ wasm-bindgen processes the cdylib, generates JS glue
-#   └─ wasm-opt -Oz shrinks the bundle to ~466 KB
+#   └─ wasm-opt (wasm-pack's release default) shrinks the bundle to ~466 KB
 
-# 3. TS facade smoke + Node bench in V8
-cd ts && node --experimental-strip-types tests/smoke.ts
-cd ts && node --experimental-strip-types tests/bench.ts
+# 3. TS facade smoke + Node bench in V8 (both rebuild the wasm if it is stale)
+make smoke
+make bench
 
 # 4. Demo site (Vite + React)
-cd examples/gallery && npm install && npm run dev
+make gallery
 ```
 
 The CI workflow (`.github/workflows/test.yml`) reproduces step 1 + 2 on Linux and macOS, plus a Node smoke step.

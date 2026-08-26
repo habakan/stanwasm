@@ -8,10 +8,14 @@ entirely in the browser is worth having.
 ## Run locally
 
 ```bash
-# From the repo root: build the wasm bundle first.
-./scripts/build-wasm.sh
+# From the repo root. Builds the wasm bundle, installs deps, starts Vite.
+make gallery
+```
 
-# Then run the demo dev server.
+Or, equivalently, by hand:
+
+```bash
+make wasm            # from the repo root
 cd examples/gallery
 npm install
 npm run dev          # auto-copies the wasm into public/ before starting

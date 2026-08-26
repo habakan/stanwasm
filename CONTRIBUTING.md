@@ -36,13 +36,14 @@ If you have a Stan problem that needs full language support, you almost certainl
 git clone https://github.com/habakan/stanwasm
 cd stanwasm
 
-# Native build + tests (all crates)
-cargo build --workspace --release
-cargo test --workspace
-
-# wasm32 build for the browser API
-./scripts/build-wasm.sh  # requires wasm-pack
+make            # lists every target
+make check      # fmt + clippy + the native test suite
+make wasm       # wasm32 build for the browser API (requires wasm-pack)
 ```
+
+Every target is a thin wrapper over the underlying `cargo` / `wasm-pack` /
+`node` command, and CI calls the same ones, so a green `make check` locally
+means the same thing it means in CI.
 
 Required tools:
 - Rust 1.88+ (the MSRV declared in the workspace `Cargo.toml`; `rust-toolchain.toml` pins the stable channel for development)
@@ -53,14 +54,13 @@ Required tools:
 
 ```bash
 # Everything (native + integration)
-cargo test --workspace
+make test
 
-# Specific crate
+# Specific crate — no target for this, call cargo directly
 cargo test -p stan-parser
 
-# wasm-pack-built bundle in Node
-./scripts/build-wasm.sh
-cd ts && node --experimental-strip-types tests/smoke.ts
+# wasm-pack-built bundle in Node; rebuilds the bundle first if it is stale
+make smoke
 ```
 
 ## Pull request guidelines
