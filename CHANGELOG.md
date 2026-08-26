@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The examples gallery is deployed to GitHub Pages from `main`
+  ([habakan.github.io/stanwasm](https://habakan.github.io/stanwasm/)), so the
+  demos can be tried without a Rust, wasm-pack and Node toolchain. Rebuilt on
+  any change to the crates as well as to the app — the wasm the page loads is
+  built from the Rust sources.
+
 ### Changed
 
 - Build commands moved into a `Makefile`; `scripts/build-wasm.sh` is gone.

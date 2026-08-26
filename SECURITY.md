@@ -63,8 +63,13 @@ rather than trusting the published bytes.
 ## Hardening already in place
 
 - Every crate is `#![forbid(unsafe_code)]`; there is no `unsafe` in the tree.
-- CI pins third-party actions by commit SHA and runs with
-  `permissions: contents: read`. No workflow uses secrets or
-  `pull_request_target`.
+- CI pins third-party actions by commit SHA, and every workflow declares
+  `permissions: contents: read` at the top level. Exactly two jobs widen that,
+  each in its own job block so nothing else in the run inherits it:
+  `release.yml`'s `github-release` (`contents: write`, to create the release)
+  and `pages.yml`'s `deploy` (`pages: write` + `id-token: write`, which is what
+  `actions/deploy-pages` mints its OIDC token with). No workflow uses secrets
+  or `pull_request_target`, and publishing to crates.io and npm is done by
+  hand — CI holds no registry credentials.
 - Dependabot watches Cargo, npm, and GitHub Actions — see
   [`.github/dependabot.yml`](.github/dependabot.yml).

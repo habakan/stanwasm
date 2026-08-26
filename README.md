@@ -6,6 +6,10 @@ Stan probabilistic models compiled and sampled entirely inside the browser. Pure
 
 ![stanwasm examples gallery demo](examples/gallery/demo.gif)
 
+**[Try it in your browser](https://habakan.github.io/stanwasm/)** — the gallery
+below, deployed from `main`. Nothing to install, and no server does any of the
+sampling.
+
 ## When to use this (and when not)
 
 | Need | Use this | Use cmdstan / Stan Playground instead |
@@ -160,7 +164,9 @@ const draw = model.stepDraw();
 
 ### Demos
 
-[`examples/gallery`](examples/gallery) — one app, tabbed:
+**[habakan.github.io/stanwasm](https://habakan.github.io/stanwasm/)** — deployed
+from `main` on every change to the crates, `ts/`, or the app itself. Source:
+[`examples/gallery`](examples/gallery). One app, tabbed:
 
 - **MCMC Visualizer** — NUTS and Random-Walk Metropolis step the same hard posterior (Neal's funnel) side by side, one real draw per animation frame, via the step-by-step sampling API (`startStepSampling`/`stepDraw`) — not a replay of a finished chain.
 - **Live Regression** — drag a data point and watch a robust (Student-t) and a conjugate (normal) regression refit **live**, every animation frame, diverging on the outlier — no closed form for the former, no server round trip for either.

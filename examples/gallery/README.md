@@ -5,6 +5,12 @@ entirely in the browser is worth having.
 
 ![demo](demo.gif)
 
+Deployed at **[habakan.github.io/stanwasm](https://habakan.github.io/stanwasm/)**
+by [`.github/workflows/pages.yml`](../../.github/workflows/pages.yml), which
+rebuilds on every push to `main` that touches the crates, `ts/`, or this
+directory — the wasm the page loads is built from the Rust sources, so a
+codegen change with no diff here still changes what the site does.
+
 ## Run locally
 
 ```bash
@@ -20,6 +26,11 @@ cd examples/gallery
 npm install
 npm run dev          # auto-copies the wasm into public/ before starting
 ```
+
+To check what GitHub Pages will actually serve, `make gallery-build` produces
+the same `dist/` the workflow uploads. `vite.config.ts` sets `base: "./"`, so
+that output is prefix-independent and `npm run preview` is representative even
+though it serves from `/` rather than `/stanwasm/`.
 
 Open `http://localhost:5173`.
 
