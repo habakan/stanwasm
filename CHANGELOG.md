@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The gallery no longer ships the wasm twice. Passing an explicit URL out of
+  `public/` did not stop Vite emitting an asset for wasm-bindgen's own
+  `new URL("stan_wasm_api_bg.wasm", import.meta.url)`, so the built site
+  carried both copies — 955 KB where 477 KB is used, and the copy actually
+  fetched had no content hash. The default resolution is used now.
 - The pre-publish packaging check now runs `cargo package --workspace` instead
   of one `cargo package -p` per crate. The per-crate form cannot pass before
   the first crates.io release, because each manifest resolves its siblings

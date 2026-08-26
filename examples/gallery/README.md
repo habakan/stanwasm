@@ -24,7 +24,7 @@ Or, equivalently, by hand:
 make wasm            # from the repo root
 cd examples/gallery
 npm install
-npm run dev          # auto-copies the wasm into public/ before starting
+npm run dev          # copies MathJax into public/ before starting
 ```
 
 To check what GitHub Pages will actually serve, `make gallery-build` produces

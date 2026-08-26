@@ -5,5 +5,4 @@ dist
 *.tsbuildinfo
 vite.config.d.ts
 vite.config.js
-public/*.wasm
 public/mathjax-tex-svg.js
