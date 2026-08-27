@@ -10,20 +10,6 @@ Stan probabilistic models compiled and sampled entirely inside the browser. Pure
 below, deployed from `main`. Nothing to install, and no server does any of the
 sampling.
 
-## When to use this (and when not)
-
-| Need | Use this | Use cmdstan / Stan Playground instead |
-|---|---|---|
-| Full Stan language coverage | | ✓ |
-| Run in a browser with no server | ✓ | |
-| Embed a Bayesian model into a web app (npm package) | ✓ | |
-| Data must not leave the user's device | ✓ | |
-| Offline / air-gapped environment | ✓ | |
-| Research / publication-grade workflows | | ✓ |
-| `functions { ... }` block, full multivariate suite | | ✓ |
-
-[Stan Playground](https://stan-playground.flatironinstitute.org) is the official Stan-recommended browser interface; it uses a compile server and supports the full Stan language. stanwasm is **complementary**: smaller surface, no server, embeddable.
-
 ## Validated end-to-end
 
 Linear regression posterior recovers the true slope to ±0.3 in 1000 post-warmup draws (seed=42). AOT codegen output agrees with the AST oracle to 1e-12 on log_prob and gradients, checked on `normal`, `exponential`, `poisson`, `multi_normal_cholesky` and `lkj_corr_cholesky` (`crates/stan-codegen/tests/aot_vs_oracle.rs`); the remaining distributions are covered by hand-computed log-density tests against the AST evaluator only.
