@@ -5,6 +5,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
+keywords = ["stan", "bayesian", "distributions", "mcmc", "statistics"]
+categories = ["science", "mathematics"]
 
 [dependencies]
 stan-ast.workspace = true
