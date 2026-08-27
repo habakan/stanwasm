@@ -80,8 +80,8 @@ jobs:
       # The same two checks RELEASING.md asks for before publishing by hand.
       # Repeated here because the point of this workflow is to notice when the
       # manual procedure was not followed.
-      - name: dry-run package every manifest
-        run: cargo package --workspace --no-verify
+      - name: dry-run package every manifest, licence checks included
+        run: make package
       - name: confirm the npm tarball carries the wasm
         working-directory: ts
         run: |
