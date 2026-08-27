@@ -193,6 +193,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "foldhash"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
+
+[[package]]
 name = "gemm"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -316,7 +322,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
  "ahash",
- "serde",
 ]
 
 [[package]]
@@ -324,6 +329,11 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+dependencies = [
+ "foldhash",
+ "serde",
+ "serde_core",
+]
 
 [[package]]
 name = "indexmap"
@@ -758,7 +768,7 @@ dependencies = [
  "thiserror",
  "wasm-encoder",
  "wasmi",
- "wasmparser",
+ "wasmparser 0.257.1",
 ]
 
 [[package]]
@@ -797,7 +807,7 @@ dependencies = [
  "stan-runtime",
  "thiserror",
  "wasm-bindgen",
- "wasmparser",
+ "wasmparser 0.257.1",
 ]
 
 [[package]]
@@ -928,7 +938,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e913f9242315ca39eff82aee0e19ee7a372155717ff0eb082c741e435ce25ed1"
 dependencies = [
  "leb128",
- "wasmparser",
+ "wasmparser 0.220.1",
 ]
 
 [[package]]
@@ -977,9 +987,18 @@ version = "0.220.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d07b6a3b550fefa1a914b6d54fc175dd11c3392da11eee604e6ffc759805d25"
 dependencies = [
- "ahash",
  "bitflags",
- "hashbrown 0.14.5",
+ "indexmap",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.257.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d92fc335fb6d48f46bda1d8b26b69e28320c15ac3272208333833d6e217e2b4a"
+dependencies = [
+ "bitflags",
+ "hashbrown 0.17.1",
  "indexmap",
  "semver",
  "serde",
