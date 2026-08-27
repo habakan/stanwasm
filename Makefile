@@ -99,7 +99,20 @@ gallery-build: wasm ## Production build of the gallery (what GitHub Pages ships)
 .PHONY: package
 package: ## Dry-run packaging every crate + the npm tarball
 	cargo package --workspace --no-verify
-	cd ts && npm pack --dry-run
+# Apache-2.0 requires the licence text to travel with the artifact, and
+# `cargo package` only collects files inside the crate directory — the LICENSE
+# at the repo root reaches no tarball at all. Same for `npm pack`. Asserted
+# rather than assumed: a missing licence is invisible until someone reads a
+# published artifact, and by then the version cannot be taken back.
+	@for f in target/package/*.crate; do \
+	  tar tzf "$$f" | grep -q '/LICENSE$$' \
+	    || { echo "error: $$f ships no LICENSE" >&2; exit 1; }; \
+	done
+	@echo "LICENSE present in every .crate"
+	cd ts && npm pack --dry-run --json > /tmp/stanwasm-pack.json
+	@node -e 'const f=require("/tmp/stanwasm-pack.json")[0].files.map(x=>x.path); \
+	  if(!f.some(p=>/^LICENSE$$/.test(p))) { console.error("error: npm tarball ships no LICENSE:\n"+f.join("\n")); process.exit(1) } \
+	  console.log("LICENSE present in the npm tarball ("+f.length+" files)")'
 
 .PHONY: clean
 clean: ## Remove cargo target/ and the generated ts/pkg/

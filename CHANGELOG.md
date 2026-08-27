@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Published artifacts now carry the Apache-2.0 licence text. `cargo package`
+  only collects files inside a crate's own directory and `npm pack` behaves
+  the same way, so the `LICENSE` at the repo root reached neither the six
+  `.crate` files nor the npm tarball — every artifact declared a licence it
+  did not include. `make package` now fails if any of them is missing.
 - The gallery no longer ships the wasm twice. Passing an explicit URL out of
   `public/` did not stop Vite emitting an asset for wasm-bindgen's own
   `new URL("stan_wasm_api_bg.wasm", import.meta.url)`, so the built site
