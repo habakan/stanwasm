@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   demos can be tried without a Rust, wasm-pack and Node toolchain. Rebuilt on
   any change to the crates as well as to the app — the wasm the page loads is
   built from the Rust sources.
+- Every publishable crate now sets `keywords`, `categories` and `readme`, and
+  each has its own `README.md`; the npm package has one too. Without them a
+  crates.io or npm page renders as a title and nothing else.
 
 ### Changed
 
