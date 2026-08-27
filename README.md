@@ -10,88 +10,6 @@ Stan probabilistic models compiled and sampled entirely inside the browser. Pure
 below, deployed from `main`. Nothing to install, and no server does any of the
 sampling.
 
-## Validated end-to-end
-
-Linear regression posterior recovers the true slope to ±0.3 in 1000 post-warmup draws (seed=42). AOT codegen output agrees with the AST oracle to 1e-12 on log_prob and gradients, checked on `normal`, `exponential`, `poisson`, `multi_normal_cholesky` and `lkj_corr_cholesky` (`crates/stan-codegen/tests/aot_vs_oracle.rs`); the remaining distributions are covered by hand-computed log-density tests against the AST evaluator only.
-
-## Stan language coverage
-
-Distributions covered:
-- Continuous: `normal`, `std_normal`, `exponential`, `half_normal`, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta`
-- Discrete: `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2`
-- Multivariate: `multi_normal_cholesky`, `lkj_corr_cholesky`, `dirichlet`
-
-Constraint transforms:
-- Scalar: `lower`, `upper`, `lower_upper`
-- Vector: same with element-wise broadcast
-- Vector shape: `simplex`, `ordered`, `positive_ordered`
-- Matrix: `cholesky_factor_corr`
-
-Blocks: `data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, plus `for`/`while` loops, `if`/`else`, `break`/`continue`, comparison/logical operators, sampling statements (`y ~ dist(...)`), and `target += expr`. `if`/`while` conditions that depend on a sampled parameter work in `generated quantities` (re-evaluated natively per draw) but are a compile-time error in `model`/`transformed parameters` — NUTS traces that block once and replays the same graph for every draw, so a parameter-dependent branch can't be honored there.
-
-`generated quantities` supports RNG draws for every covered distribution above (`normal_rng`, `exponential_rng`, `gamma_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng`, etc.) plus `uniform_rng`. It runs natively (tape-replay) inside the same wasm bundle — there is no separate AOT-compiled path for it (see [Architecture](#architecture)).
-
-**The scalar `_rng` functions are scalar-only.** `real y = normal_rng(mu, sigma);` works; `normal_rng` applied to a vector argument is an error, not a vectorized draw. Combined with indexed assignment not being implemented (`y_rep[n] = ...` is a clean error), that rules out the usual posterior-predictive idiom:
-
-```stan
-generated quantities {
-  vector[N] y_rep;
-  for (n in 1:N) y_rep[n] = normal_rng(alpha + beta * x[n], sigma);  // NOT supported
-}
-```
-
-Only `dirichlet_rng` and `multi_normal_cholesky_rng` return containers, because their draw *is* a vector. Vectorized scalar RNG and indexed assignment are both tracked in [`ROADMAP.md`](ROADMAP.md).
-
-**Not yet supported** — each of these is a clean load-time or evaluation error, never a silently different answer:
-
-- Distributions: `multi_normal` (full covariance), `multinomial`, `categorical`, and `lkj_corr_cholesky_rng`
-- Constraint types: `cov_matrix`, `cholesky_factor_cov`, `corr_matrix`, `unit_vector`
-- `functions { ... }` (user-defined functions)
-- Matrix algebra with the generic operators: `X * beta` (matrix × vector) is not a matrix product. Write the loop form, `for (n in 1:N) ... X[n] * beta`, or use `multi_normal_cholesky`, whose matrix work is done internally.
-- Indexed assignment: `y_rep[n] = ...;` and vectorized scalar `_rng`
-- `transformed data { ... }` parses, but its statements are folded into the `model` block, so they re-run every trace and the variables they define are not visible from `generated quantities`.
-
-Stan's static typing is honored where it changes results: `int / int` is integer division (`N / 2` with `N = 3` is `1`), and `^` binds tighter than unary minus and associates right (`-a^2` is `-(a^2)`, `2^3^2` is `512`).
-
-The `data` block is checked against the supplied JSON when the model loads — a missing field, a wrong length, a non-integral `int`, or a violated `<lower=...>`/`<upper=...>` bound is an error rather than a model that samples the wrong thing.
-
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for an internals tour and [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md) for performance numbers. Documentation is organized by language under `docs/en/` and `docs/ja/`.
-
-## Architecture
-
-```
-Stan source + JSON data
-       │
-       ▼  (one-time)
-stan-parser ─► AST ─► stan-runtime (trace forward pass on autodiff tape)
-                                      │
-                                      ▼
-                          ┌──── tape replay (sampling)
-                          │              │
-                          │              ▼
-                          │         nuts-rs (embedded in same wasm)
-                          │              │
-                          │              ▼
-                          │           samples
-                          │
-                          └──── stan-codegen (wasm-encoder)  ──►  AOT model wasm bytes
-                                                                  (Web Worker handoff)
-```
-
-A single `stan_wasm_api_bg.wasm` is shipped to the browser (replaces the previous `wasm_api.wasm` + `nuts_rs.wasm` pair). Native builds expose the AST evaluation interpreter for golden-value testing only.
-
-## Workspace layout
-
-| Crate | Target | Role |
-|---|---|---|
-| `stan-ast` | lib | AST types, shared definitions |
-| `stan-parser` | lib | Lexer, parser, error reporting |
-| `stan-autodiff` | lib | Reverse-mode tape (flat array) |
-| `stan-runtime` | lib | Distributions, constraints, AST evaluator (reference oracle) |
-| `stan-codegen` | lib | AOT compilation: tape → wasm bytes (via `wasm-encoder`) |
-| `stan-wasm-api` | cdylib (wasm32) | wasm-bindgen public API; embeds nuts-rs |
-| `stan-cli` | bin (native) | Local development, golden-value tests, benchmarks |
-
 ## Quick start (browser / Node.js)
 
 **Not published to npm or crates.io yet** — build from source for now. `ts/` is the package that will be published, so the import path below is what it will be either way.
@@ -158,6 +76,80 @@ from `main` on every change to the crates, `ts/`, or the app itself. Source:
 - **Live Regression** — drag a data point and watch a robust (Student-t) and a conjugate (normal) regression refit **live**, every animation frame, diverging on the outlier — no closed form for the former, no server round trip for either.
 - **Hierarchical Shrinkage** — six marketing campaigns' observed A/B test lift (three well-powered, three small-sample pilots) fit with a partial-pooling model (the classic "eight schools" structure). Drag one's observed value and watch a flashy small-sample number get pulled toward the population estimate live, by an amount the posterior derives rather than a hand-tuned rule.
 - **Wasm Sandbox** — a fuller API tour: CSV upload, editable Stan source, multiple presets, posterior summary table.
+
+## Stan language coverage
+
+A subset. Everything in the "Not yet" column is a clean load-time or
+evaluation error — never a model that silently samples something else.
+
+| | Supported | Not yet |
+|---|---|---|
+| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta` | |
+| Discrete | `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2` | `multinomial`, `categorical` |
+| Multivariate | `multi_normal_cholesky`, `lkj_corr_cholesky`, `dirichlet` | `multi_normal` (full covariance) |
+| Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors | |
+| Vector shape | `simplex`, `ordered`, `positive_ordered` | `unit_vector` |
+| Matrix constraints | `cholesky_factor_corr` | `cov_matrix`, `cholesky_factor_cov`, `corr_matrix` |
+| Blocks | `data`, `parameters`, `transformed parameters`, `model`, `generated quantities` | `functions { ... }` |
+| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr` | indexed assignment (`y_rep[n] = ...`) |
+| Operators | arithmetic, comparison, logical, `^` | matrix product — `X * beta` is not one |
+| `_rng` | scalar draws for every distribution above, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | vectorized scalar `_rng`, `lkj_corr_cholesky_rng` |
+
+Four caveats the table can't carry:
+
+- **Branches on a sampled parameter.** `if`/`while` conditions that depend on a
+  parameter work in `generated quantities` (re-evaluated natively per draw) but
+  are a compile-time error in `model`/`transformed parameters` — NUTS traces
+  that block once and replays the same graph for every draw.
+- **No posterior-predictive loop.** Scalar `_rng` plus no indexed assignment
+  rules out the usual idiom; `for (n in 1:N) y_rep[n] = normal_rng(...)` is an
+  error. Only `dirichlet_rng` and `multi_normal_cholesky_rng` return
+  containers, because their draw *is* a vector. Both gaps are tracked in
+  [`ROADMAP.md`](ROADMAP.md).
+- **`transformed data` parses but does not memoize.** Its statements fold into
+  `model`, so they re-run every trace and its variables are invisible from
+  `generated quantities`.
+- **Stan's static typing is honored where it changes results.** `int / int` is
+  integer division (`N / 2` with `N = 3` is `1`), and `^` binds tighter than
+  unary minus and associates right (`-a^2` is `-(a^2)`, `2^3^2` is `512`).
+
+For matrix algebra, write the loop form (`for (n in 1:N) ... X[n] * beta`) or
+use `multi_normal_cholesky`, whose matrix work is done internally.
+
+The `data` block is checked against the supplied JSON when the model loads — a
+missing field, a wrong length, a non-integral `int`, or a violated
+`<lower=...>`/`<upper=...>` bound is an error rather than a model that samples
+the wrong thing.
+
+## Architecture
+
+```
+Stan source + JSON data
+       │
+       ▼  (one-time)
+stan-parser ─► AST ─► stan-runtime (trace forward pass on autodiff tape)
+                                      │
+                                      ▼
+                          ┌──── tape replay (sampling)
+                          │              │
+                          │              ▼
+                          │         nuts-rs (embedded in same wasm)
+                          │              │
+                          │              ▼
+                          │           samples
+                          │
+                          └──── stan-codegen (wasm-encoder)  ──►  AOT model wasm bytes
+                                                                  (Web Worker handoff)
+```
+
+A single `stan_wasm_api_bg.wasm` is shipped to the browser (replaces the previous `wasm_api.wasm` + `nuts_rs.wasm` pair). Native builds expose the AST evaluation interpreter for golden-value testing only.
+
+
+[`ARCHITECTURE.md`](ARCHITECTURE.md) is the internals tour — the seven-crate
+workspace layout, the autodiff tape design, the AOT codegen ABI, and why
+wasm32 rather than wasm-gc. Performance numbers live in
+[`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md). Documentation is organized by
+language under `docs/en/` and `docs/ja/`.
 
 ## Native development
 
