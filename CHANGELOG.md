@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The gallery no longer hangs on "Loading WebAssembly bundle…" when the module
+  fails to instantiate. `init()` had no `.catch()`, so a rejected promise left
+  the loading state up forever with the error swallowed — which is exactly how
+  the relaxed-SIMD failure presented on iOS: a permanent spinner and no clue
+  why. The error is now shown, with a specific explanation when it is the
+  relaxed-SIMD rejection.
+
+### Documentation
+
+- README and the npm README now say plainly that **stanwasm does not run on
+  Safari or on any browser on iOS/iPadOS**. The bundle carries relaxed SIMD
+  instructions, emitted by `nuts-rs` → `faer` → `pulp` via
+  `#[target_feature(enable = "relaxed-simd")]`, and WebKit rejects the whole
+  module at compile time. Runtime dispatch does not help — wasm validates the
+  entire module up front — and neither `-C target-feature=-relaxed-simd`, a
+  `wasm-opt` pass, nor any dependency feature removes them today. Measured
+  under Playwright: Chromium 151 and Firefox 153 load it, WebKit 26.5 does not.
+
 ## [0.1.0] — 2026-08-28 (alpha)
 
 Initial alpha release: enough Stan to sample linear regression, logistic

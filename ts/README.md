@@ -16,6 +16,16 @@ No server, no cmdstan, no round trip.
 > [Stan Playground](https://github.com/flatironinstitute/stan-playground) —
 > this is for browser-embedded use cases where those do not fit.
 
+## Browser support
+
+**Does not run on Safari, or on any browser on iOS or iPadOS.** The bundle
+contains [relaxed SIMD](https://github.com/WebAssembly/relaxed-simd)
+instructions, which WebKit rejects at compile time, so the module never
+instantiates. Chrome, Edge, Firefox and Node.js run it. The instructions come
+from `nuts-rs` → `faer` → `pulp` and there is no build flag that removes them
+today — see
+[the README](https://github.com/habakan/stanwasm#browser-support).
+
 ## Install
 
 ```bash

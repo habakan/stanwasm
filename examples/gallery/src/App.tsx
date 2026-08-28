@@ -40,6 +40,7 @@ type TabKey = (typeof TABS)[number]["key"];
 
 export function App() {
   const [loaded, setLoaded] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>(TABS[0].key);
 
   useEffect(() => {
@@ -55,7 +56,13 @@ export function App() {
     //
     // Loaded once here, shared by every tab, so switching tabs never
     // re-instantiates the wasm module.
-    init().then(() => setLoaded(true));
+    // `.catch` is not optional here. Without it a rejected init leaves
+    // `loaded` false forever and the page sits on "Loading…" with nothing
+    // said — which is exactly how the relaxed-SIMD failure below presented
+    // on iOS: a permanent spinner and no clue why.
+    init()
+      .then(() => setLoaded(true))
+      .catch((e: unknown) => setInitError(String((e as Error)?.message ?? e)));
   }, []);
 
   const active = TABS.find((t) => t.key === tab)!;
@@ -101,8 +108,34 @@ export function App() {
       )}
 
       <div className="tab-body">
-        {!loaded && <p>Loading WebAssembly bundle…</p>}
-        {loaded && <active.Component />}
+        {initError ? (
+          <div className="init-error">
+            <p>
+              <strong>This browser could not load the WebAssembly bundle.</strong>
+            </p>
+            {/^.*relaxed simd.*$/i.test(initError) ? (
+              <p>
+                The bundle contains <code>relaxed SIMD</code> instructions, which Safari
+                and every browser on iOS still reject at compile time. Chrome, Edge and
+                Firefox on the desktop run it. This is a packaging bug on our side, not
+                something you can work around —{" "}
+                <a
+                  href="https://github.com/habakan/stanwasm/issues"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  tracked here
+                </a>
+                .
+              </p>
+            ) : null}
+            <pre>{initError}</pre>
+          </div>
+        ) : !loaded ? (
+          <p>Loading WebAssembly bundle…</p>
+        ) : (
+          <active.Component />
+        )}
       </div>
 
       {!isSandbox && (

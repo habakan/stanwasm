@@ -810,3 +810,24 @@ footer a {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+
+/* Shown when the wasm bundle fails to compile — currently the relaxed-SIMD
+   rejection on Safari/iOS. Loud on purpose: the previous behaviour was a
+   permanent "Loading…" with the CompileError swallowed by a missing catch. */
+.init-error {
+  max-width: 46rem;
+  margin: 2rem auto;
+  padding: 1rem 1.25rem;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+.init-error pre {
+  overflow-x: auto;
+  padding: 0.6rem;
+  border-radius: 4px;
+  background: #fff;
+  color: #b91c1c;
+  font-size: 0.85em;
+}

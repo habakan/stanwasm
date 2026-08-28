@@ -15,6 +15,31 @@ Stan probabilistic models compiled and sampled entirely inside the browser. Pure
 below, deployed from `main`. Nothing to install, and no server does any of the
 sampling.
 
+## Browser support
+
+> **Does not run on Safari, or on any browser on iOS or iPadOS.**
+
+The bundle contains [relaxed SIMD](https://github.com/WebAssembly/relaxed-simd)
+instructions, which those engines reject at compile time — the module fails to
+instantiate at all, so nothing on the page works. Every browser on iOS and
+iPadOS uses WebKit, so this is the platform, not the browser you picked.
+
+| | |
+|---|---|
+| Works | Chrome and Edge (relaxed SIMD since Chrome 114), Firefox, Node.js, and Chromium-based Android browsers |
+| Does not work | Safari, and every browser on iOS / iPadOS |
+
+Verified by loading the gallery under Playwright's three engines: Chromium 151
+and Firefox 153 instantiate the module; WebKit 26.5 rejects it.
+
+The instructions come from `nuts-rs` → `faer` → `pulp`, which attaches
+`#[target_feature(enable = "relaxed-simd")]` to its wasm kernels. It dispatches
+on a runtime flag, but that does not help here: wasm validates a whole module
+up front, so instructions that are never reached still fail the module. There
+is no build flag, `wasm-opt` pass, or dependency feature that removes them
+today — `-C target-feature=-relaxed-simd` does not, because the per-function
+attribute overrides it. Fixing this needs a change in `pulp`.
+
 ## Quick start (browser / Node.js)
 
 ```bash
