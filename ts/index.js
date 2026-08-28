@@ -9,12 +9,12 @@
 // a bundler, and in Node without `--experimental-strip-types`. There is no
 // TypeScript syntax here to lose.
 
-import init from "./pkg/stan_wasm_api.js";
+import init from "./pkg/stanwasm.js";
 export {
   StanModel,
   version,
   setAotExports,
   clearAotExports,
   sharedMemory,
-} from "./pkg/stan_wasm_api.js";
+} from "./pkg/stanwasm.js";
 export default init;

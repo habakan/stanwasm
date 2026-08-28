@@ -46,13 +46,13 @@ make bench
 
 ## Architecture details
 
-`sample` (replay) lives entirely inside `stan_wasm_api_bg.wasm`. nuts-rs gets its log_prob_grad from `Compiled::log_prob_grad`, which dispatches on `Op` per tape node. V8 JIT-compiles this dispatch loop, but cannot inline across the dispatch.
+`sample` (replay) lives entirely inside `stanwasm_bg.wasm`. nuts-rs gets its log_prob_grad from `Compiled::log_prob_grad`, which dispatches on `Op` per tape node. V8 JIT-compiles this dispatch loop, but cannot inline across the dispatch.
 
 `sampleViaAot` lives across two wasm modules:
 
 ```
 ┌──────────────────────────────┐    shared linear memory    ┌──────────────────────────┐
-│  stan_wasm_api_bg.wasm       │ ◄────────────────────────► │  AOT model wasm          │
+│  stanwasm_bg.wasm       │ ◄────────────────────────► │  AOT model wasm          │
 │                              │                             │                          │
 │  - parser, codegen           │                             │  - imports "stan.memory" │
 │  - nuts-rs sampler driver    │                             │  - exports log_prob_grad │
@@ -63,12 +63,12 @@ make bench
 └──────────────────────────────┘                             └──────────────────────────┘
 ```
 
-The JS bridge between the two modules is a 5-line snippet (`crates/stan-wasm-api/js/aot_bridge.js`) that V8 inlines aggressively after warmup.
+The JS bridge between the two modules is a 5-line snippet (`crates/stanwasm/js/aot_bridge.js`) that V8 inlines aggressively after warmup.
 
 ## Caveats
 
 - Each row is one run of 2,000 NUTS draws. Variance ±5–10 % between runs. `linear_regression` is the most variable (sharp posterior).
 - `sample ms` includes warmup adaptation. For longer chains the per-draw rate stabilizes lower.
-- Math import shims (lgamma, digamma, phi) are JS-side polynomial approximations; precision matches `stan_autodiff` Rust functions.
+- Math import shims (lgamma, digamma, phi) are JS-side polynomial approximations; precision matches `stanwasm_autodiff` Rust functions.
 - AOT path requires the host to provide math imports; missing imports throw at instantiate time.
 - The AOT path has a size ceiling: the emitted function needs two wasm locals per tape node and V8 caps a function at 50,000 locals, so a fully-unrolled trace above ~25,000 nodes cannot be compiled. For a vectorized linear regression that is roughly `N ≈ 2,000`. `compile()` reports this as `CodegenError::TooManyLocals`; use `sample()` (tape replay), which has no such limit. See [ARCHITECTURE.md](../../ARCHITECTURE.md#size-limit-on-the-aot-path).

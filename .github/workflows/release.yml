@@ -77,25 +77,11 @@ jobs:
       - run: make clippy
       - run: make test TESTFLAGS=--release
       - run: make smoke
-      # The same two checks RELEASING.md asks for before publishing by hand.
+      # The same check RELEASING.md asks for before publishing by hand.
       # Repeated here because the point of this workflow is to notice when the
       # manual procedure was not followed.
-      - name: dry-run package every manifest, licence checks included
+      - name: dry-run every manifest and the npm tarball, licence checks included
         run: make package
-      - name: confirm the npm tarball carries the wasm
-        working-directory: ts
-        run: |
-          set -euo pipefail
-          npm pack --dry-run --json > /tmp/pack.json
-          node -e '
-            const f = require("/tmp/pack.json")[0].files.map(x => x.path);
-            const wasm = f.filter(p => p.endsWith(".wasm"));
-            if (!wasm.length) {
-              console.error("no .wasm in the tarball:\n" + f.join("\n"));
-              process.exit(1);
-            }
-            console.log("tarball ok, " + f.length + " files, wasm: " + wasm.join(", "));
-          '
 
   github-release:
     name: create the GitHub release

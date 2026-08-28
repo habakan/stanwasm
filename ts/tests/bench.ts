@@ -15,7 +15,7 @@ import init, {
 } from "../index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const wasmPath = resolve(here, "..", "pkg", "stan_wasm_api_bg.wasm");
+const wasmPath = resolve(here, "..", "pkg", "stanwasm_bg.wasm");
 await init({ module_or_path: await readFile(wasmPath) });
 
 // Math shims for the AOT module's imports.

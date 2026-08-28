@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import init, { StanModel, version } from "../index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const wasmPath = resolve(here, "..", "pkg", "stan_wasm_api_bg.wasm");
+const wasmPath = resolve(here, "..", "pkg", "stanwasm_bg.wasm");
 
 const stanCode = `
 data {

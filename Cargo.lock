@@ -735,65 +735,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
-name = "stan-ast"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "stan-autodiff"
-version = "0.1.0"
-
-[[package]]
-name = "stan-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "stan-autodiff",
- "stan-codegen",
- "stan-parser",
- "stan-runtime",
- "stan-wasm-api",
- "wasmi",
-]
-
-[[package]]
-name = "stan-codegen"
-version = "0.1.0"
-dependencies = [
- "stan-ast",
- "stan-autodiff",
- "stan-runtime",
- "thiserror",
- "wasm-encoder",
- "wasmi",
- "wasmparser 0.257.1",
-]
-
-[[package]]
-name = "stan-parser"
-version = "0.1.0"
-dependencies = [
- "stan-ast",
- "thiserror",
-]
-
-[[package]]
-name = "stan-runtime"
-version = "0.1.0"
-dependencies = [
- "rand",
- "rand_distr",
- "serde_json",
- "stan-ast",
- "stan-autodiff",
- "stan-parser",
- "thiserror",
-]
-
-[[package]]
-name = "stan-wasm-api"
+name = "stanwasm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -801,13 +743,71 @@ dependencies = [
  "getrandom",
  "nuts-rs",
  "rand",
- "stan-ast",
- "stan-codegen",
- "stan-parser",
- "stan-runtime",
+ "stanwasm-ast",
+ "stanwasm-codegen",
+ "stanwasm-parser",
+ "stanwasm-runtime",
  "thiserror",
  "wasm-bindgen",
  "wasmparser 0.257.1",
+]
+
+[[package]]
+name = "stanwasm-ast"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "stanwasm-autodiff"
+version = "0.1.0"
+
+[[package]]
+name = "stanwasm-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "stanwasm",
+ "stanwasm-autodiff",
+ "stanwasm-codegen",
+ "stanwasm-parser",
+ "stanwasm-runtime",
+ "wasmi",
+]
+
+[[package]]
+name = "stanwasm-codegen"
+version = "0.1.0"
+dependencies = [
+ "stanwasm-ast",
+ "stanwasm-autodiff",
+ "stanwasm-runtime",
+ "thiserror",
+ "wasm-encoder",
+ "wasmi",
+ "wasmparser 0.257.1",
+]
+
+[[package]]
+name = "stanwasm-parser"
+version = "0.1.0"
+dependencies = [
+ "stanwasm-ast",
+ "thiserror",
+]
+
+[[package]]
+name = "stanwasm-runtime"
+version = "0.1.0"
+dependencies = [
+ "rand",
+ "rand_distr",
+ "serde_json",
+ "stanwasm-ast",
+ "stanwasm-autodiff",
+ "stanwasm-parser",
+ "thiserror",
 ]
 
 [[package]]

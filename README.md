@@ -127,7 +127,7 @@ the wrong thing.
 Stan source + JSON data
        │
        ▼  (one-time)
-stan-parser ─► AST ─► stan-runtime (trace forward pass on autodiff tape)
+stanwasm-parser ─► AST ─► stanwasm-runtime (trace forward pass on autodiff tape)
                                       │
                                       ▼
                           ┌──── tape replay (sampling)
@@ -138,11 +138,11 @@ stan-parser ─► AST ─► stan-runtime (trace forward pass on autodiff tape)
                           │              ▼
                           │           samples
                           │
-                          └──── stan-codegen (wasm-encoder)  ──►  AOT model wasm bytes
+                          └──── stanwasm-codegen (wasm-encoder)  ──►  AOT model wasm bytes
                                                                   (Web Worker handoff)
 ```
 
-A single `stan_wasm_api_bg.wasm` is shipped to the browser (replaces the previous `wasm_api.wasm` + `nuts_rs.wasm` pair). Native builds expose the AST evaluation interpreter for golden-value testing only.
+A single `stanwasm_bg.wasm` is shipped to the browser (replaces the previous `wasm_api.wasm` + `nuts_rs.wasm` pair). Native builds expose the AST evaluation interpreter for golden-value testing only.
 
 
 [`ARCHITECTURE.md`](ARCHITECTURE.md) is the internals tour — the seven-crate
@@ -158,7 +158,7 @@ Requires Rust 1.88+ (the workspace MSRV; `nuts-rs` needs edition 2024).
 ```bash
 cargo build --release
 cargo test                    # ~76 tests across all crates
-cargo run --release -p stan-cli -- bench all
+cargo run --release -p stanwasm-cli -- bench all
 ```
 
 ## Security

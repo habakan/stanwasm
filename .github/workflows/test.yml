@@ -90,9 +90,9 @@ jobs:
           toolchain: stable
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo build --target wasm32-unknown-unknown -p stan-wasm-api --release
+      - run: cargo build --target wasm32-unknown-unknown -p stanwasm --release
       - name: artifact size
-        run: ls -la target/wasm32-unknown-unknown/release/stan_wasm_api.wasm
+        run: ls -la target/wasm32-unknown-unknown/release/stanwasm.wasm
 
   wasm-pack:
     name: wasm-pack build + Node smoke
@@ -146,5 +146,5 @@ jobs:
           toolchain: stable
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo build --target wasm32-unknown-unknown -p stan-wasm-api --release
-      - run: cargo test -p stan-codegen --test no_wasm_gc
+      - run: cargo build --target wasm32-unknown-unknown -p stanwasm --release
+      - run: cargo test -p stanwasm-codegen --test no_wasm_gc

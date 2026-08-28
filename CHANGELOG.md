@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Every crate is renamed to a `stanwasm` prefix: `stanwasm-ast`,
+  `stanwasm-parser`, `stanwasm-autodiff`, `stanwasm-runtime`,
+  `stanwasm-codegen`, `stanwasm-cli`, and `stan-wasm-api` becomes plain
+  `stanwasm` — the same name as the npm package. crates.io is a flat namespace
+  and never frees a name once taken, so shipping `stan-parser` and
+  `stan-runtime` would have claimed generic Stan names that read as belonging
+  to Stan itself. The wasm-bindgen output moves with it:
+  `stan_wasm_api_bg.wasm` is now `stanwasm_bg.wasm`. Nothing was published
+  under the old names, so no import path in the wild breaks.
+- The five crates below `stanwasm` now say in their `description` that they
+  are internal and carry no API stability guarantee. They reach crates.io only
+  because cargo requires a dependency to be on the registry before its
+  dependent can be.
+- `make package` now also asserts the npm tarball carries the wasm, not just
+  the licence. It was the one manual `npm pack --dry-run` step in
+  RELEASING.md, and npm is the artifact most people actually install.
 - Build commands moved into a `Makefile`; `scripts/build-wasm.sh` is gone.
   `make wasm` replaces it, and `make` on its own lists every target. Building
   from source is otherwise unchanged — the underlying `wasm-pack` invocation
@@ -34,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   did not include. `make package` now fails if any of them is missing.
 - The gallery no longer ships the wasm twice. Passing an explicit URL out of
   `public/` did not stop Vite emitting an asset for wasm-bindgen's own
-  `new URL("stan_wasm_api_bg.wasm", import.meta.url)`, so the built site
+  `new URL("stanwasm_bg.wasm", import.meta.url)`, so the built site
   carried both copies — 955 KB where 477 KB is used, and the copy actually
   fetched had no content hash. The default resolution is used now.
 - The pre-publish packaging check now runs `cargo package --workspace` instead
@@ -186,7 +202,7 @@ earlier published version.
 - `Val::to_f64`/`to_tape` panicked on a container, so comparing two vectors
   with `==` or feeding a matrix product to a scalar lpdf trapped the wasm
   instance. They return `EvalError` instead.
-- `stan-codegen` emitted AOT modules with two wasm locals per tape node and
+- `stanwasm-codegen` emitted AOT modules with two wasm locals per tape node and
   no ceiling, so a model whose trace exceeds ~25,000 nodes (roughly
   `N ≈ 2,000` for a vectorized regression) produced a module the browser
   rejects with `CompileError: local count too large`. `compile()` now
@@ -227,8 +243,8 @@ earlier published version.
 
 ### Architecture
 
-- Seven Rust crates: `stan-ast`, `stan-parser`, `stan-autodiff`,
-  `stan-runtime`, `stan-codegen`, `stan-wasm-api`, `stan-cli`
+- Seven Rust crates: `stanwasm-ast`, `stanwasm-parser`, `stanwasm-autodiff`,
+  `stanwasm-runtime`, `stanwasm-codegen`, `stanwasm`, `stanwasm-cli`
 - Single wasm bundle (~431 KB after `wasm-opt`, including `rand`/
   `rand_distr` for `generated quantities` RNG support) shipping the
   parser, AOT codegen, tape replay, and embedded `nuts-rs` sampler

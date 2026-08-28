@@ -26,7 +26,7 @@ counts as a vulnerability here.
 **In scope**
 
 - Memory-safety or sandbox-escape issues in the emitted AOT WebAssembly, or in
-  the `stan-codegen` path that emits it. Every crate is
+  the `stanwasm-codegen` path that emits it. Every crate is
   `#![forbid(unsafe_code)]` and the emitted module imports only `Math.*` and the
   host's linear memory, so this would be a real finding.
 - A crafted Stan model or data JSON that makes the parser or evaluator do

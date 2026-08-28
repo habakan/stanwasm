@@ -6,5 +6,5 @@ export {
   setAotExports,
   clearAotExports,
   sharedMemory,
-} from "./pkg/stan_wasm_api.js";
-export { default } from "./pkg/stan_wasm_api.js";
+} from "./pkg/stanwasm.js";
+export { default } from "./pkg/stanwasm.js";

@@ -48,7 +48,7 @@ check: fmt-check clippy test ## fmt-check + clippy + test
 # unrelated edit does not pay for a wasm-pack rebuild. Cargo does the
 # fine-grained dependency tracking; this only has to answer "did any Rust
 # source or manifest change since the bundle was written".
-WASM_OUT := ts/pkg/stan_wasm_api_bg.wasm
+WASM_OUT := ts/pkg/stanwasm_bg.wasm
 WASM_SRC := $(shell find crates -name '*.rs') Cargo.toml Cargo.lock
 
 .PHONY: wasm
@@ -57,7 +57,7 @@ wasm: $(WASM_OUT) ## Build the wasm bundle into ts/pkg/
 $(WASM_OUT): $(WASM_SRC)
 	@command -v wasm-pack >/dev/null 2>&1 \
 	  || { echo "error: wasm-pack not found. Install with: cargo install wasm-pack" >&2; exit 1; }
-	wasm-pack build crates/stan-wasm-api --target web --out-dir $(ROOT)/ts/pkg --release
+	wasm-pack build crates/stanwasm --target web --out-dir $(ROOT)/ts/pkg --release
 # wasm-pack drops its own `.gitignore` (just `*`) into ts/pkg/. That's
 # redundant here — the repo root .gitignore already excludes /ts/pkg — and
 # actively harmful: npm's ignore-file resolution honors a nested .gitignore
@@ -78,7 +78,7 @@ bench: wasm ## Node benchmark (replay vs AOT)
 
 .PHONY: bench-native
 bench-native: ## Native Rust benchmark, no wasm involved
-	cargo run --release -p stan-cli -- bench all
+	cargo run --release -p stanwasm-cli -- bench all
 
 .PHONY: gallery
 gallery: wasm ## Vite dev server for examples/gallery
@@ -90,20 +90,23 @@ gallery: wasm ## Vite dev server for examples/gallery
 gallery-build: wasm ## Production build of the gallery (what GitHub Pages ships)
 	cd examples/gallery && npm ci && npm run build
 
-# `--workspace` rather than a per-crate loop: `cargo package -p stan-parser` on
-# its own resolves `stan-ast` from the crates.io index and fails until 0.1.0 is
-# actually published there, whereas the workspace form resolves siblings
-# locally. So this is runnable before the first release, which is exactly when
-# a path dependency missing its `version` needs to surface — not halfway
-# through publishing, when the crates already up cannot be taken back.
+# `--workspace` rather than a per-crate loop: `cargo package -p stanwasm-parser`
+# on its own resolves `stanwasm-ast` from the crates.io index and fails until
+# 0.1.0 is actually published there, whereas the workspace form resolves
+# siblings locally. So this is runnable before the first release, which is
+# exactly when a path dependency missing its `version` needs to surface — not
+# halfway through publishing, when the crates already up cannot be taken back.
 .PHONY: package
-package: ## Dry-run packaging every crate + the npm tarball
+package: wasm ## Dry-run packaging every crate + the npm tarball
 	cargo package --workspace --no-verify
-# Apache-2.0 requires the licence text to travel with the artifact, and
-# `cargo package` only collects files inside the crate directory — the LICENSE
-# at the repo root reaches no tarball at all. Same for `npm pack`. Asserted
-# rather than assumed: a missing licence is invisible until someone reads a
-# published artifact, and by then the version cannot be taken back.
+# Apache-2.0 requires the licence text to travel with the artifact, and both
+# `cargo package` and `npm pack` only collect files inside their own directory
+# — the LICENSE at the repo root reaches no tarball on its own. The npm
+# tarball has a second invisible failure: `wasm-pack` writes its own
+# `.gitignore` (containing `*`) into `ts/pkg/`, which npm honours when no
+# `.npmignore` sits beside it, and that once published a package carrying no
+# wasm at all. A published version cannot be taken back, so both are asserted
+# rather than assumed.
 	@for f in target/package/*.crate; do \
 	  tar tzf "$$f" | grep -q '/LICENSE$$' \
 	    || { echo "error: $$f ships no LICENSE" >&2; exit 1; }; \
@@ -111,8 +114,10 @@ package: ## Dry-run packaging every crate + the npm tarball
 	@echo "LICENSE present in every .crate"
 	cd ts && npm pack --dry-run --json > /tmp/stanwasm-pack.json
 	@node -e 'const f=require("/tmp/stanwasm-pack.json")[0].files.map(x=>x.path); \
-	  if(!f.some(p=>/^LICENSE$$/.test(p))) { console.error("error: npm tarball ships no LICENSE:\n"+f.join("\n")); process.exit(1) } \
-	  console.log("LICENSE present in the npm tarball ("+f.length+" files)")'
+	  const need={"LICENSE":/^LICENSE$$/,"the wasm":/^pkg\/.*\.wasm$$/}; \
+	  for (const [what,re] of Object.entries(need)) if(!f.some(p=>re.test(p))) { \
+	    console.error("error: npm tarball ships no "+what+":\n"+f.join("\n")); process.exit(1) } \
+	  console.log("LICENSE and wasm present in the npm tarball ("+f.length+" files)")'
 
 .PHONY: clean
 clean: ## Remove cargo target/ and the generated ts/pkg/

@@ -72,7 +72,7 @@ the file and hand it over:
 import init, { StanModel } from "stanwasm";
 import { readFile } from "node:fs/promises";
 
-await init({ module_or_path: await readFile("node_modules/stanwasm/pkg/stan_wasm_api_bg.wasm") });
+await init({ module_or_path: await readFile("node_modules/stanwasm/pkg/stanwasm_bg.wasm") });
 ```
 
 ## More

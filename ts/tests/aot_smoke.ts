@@ -13,13 +13,13 @@ import init, {
 } from "../index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const wasmPath = resolve(here, "..", "pkg", "stan_wasm_api_bg.wasm");
+const wasmPath = resolve(here, "..", "pkg", "stanwasm_bg.wasm");
 const wasmBytes = await readFile(wasmPath);
 await init({ module_or_path: wasmBytes });
 
 // Math imports the AOT module needs (subset depending on the model).
 const lgamma = (x: number): number => {
-  // Stirling-series; matches stan_autodiff::lgamma. Adequate for x > 0.
+  // Stirling-series; matches stanwasm_autodiff::lgamma. Adequate for x > 0.
   let z = x;
   let r = 0;
   while (z < 10) { r -= Math.log(z); z += 1; }

@@ -14,7 +14,7 @@ labels: bug
 <!-- minimal code or commands -->
 
 ```bash
-cargo test -p stan-runtime --test log_prob
+cargo test -p stanwasm-runtime --test log_prob
 ```
 
 or, for browser / Node:

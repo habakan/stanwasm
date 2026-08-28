@@ -28,8 +28,8 @@ full language coverage for its own sake.
   fine in practice.
 - The real work is the type system: binding `real/vector/matrix/int` (+
   array/size) arguments, return values, and function-local scoping, in
-  **both** `stan-runtime::eval` (interpreter) and the AOT tape-unrolling
-  path in `stan-codegen`.
+  **both** `stanwasm-runtime::eval` (interpreter) and the AOT tape-unrolling
+  path in `stanwasm-codegen`.
 - Rough size: comparable to or a bit larger than the `generated quantities`
   work (spans parser → runtime → codegen → wasm-api).
 
@@ -42,7 +42,7 @@ full language coverage for its own sake.
 - `lkj_corr_cholesky_rng` (needs the onion-method sampling algorithm —
   self-contained, known algorithm, just not implemented yet)
 - Each of these follows the same pattern as the ~15 distributions already
-  implemented in `stan-runtime/src/distributions.rs`: add the log-pdf/pmf
+  implemented in `stanwasm-runtime/src/distributions.rs`: add the log-pdf/pmf
   (and Jacobian, if it's a constrained type) using the existing tape/matrix
   ops. Roughly half a day to a day each, no structural blocker.
 

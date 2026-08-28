@@ -44,7 +44,7 @@ export function App() {
 
   useEffect(() => {
     // No explicit URL: wasm-bindgen's default resolution is
-    // `new URL("stan_wasm_api_bg.wasm", import.meta.url)`, relative to the glue
+    // `new URL("stanwasm_bg.wasm", import.meta.url)`, relative to the glue
     // in ../../ts/pkg/. Vite rewrites that to a content-hashed asset at build
     // time, and `server.fs.allow` (vite.config.ts) covers it during `dev`.
     //

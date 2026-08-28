@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/stan-ast",
-    "crates/stan-parser",
-    "crates/stan-autodiff",
-    "crates/stan-runtime",
-    "crates/stan-codegen",
-    "crates/stan-wasm-api",
-    "crates/stan-cli",
+    "crates/stanwasm-ast",
+    "crates/stanwasm-parser",
+    "crates/stanwasm-autodiff",
+    "crates/stanwasm-runtime",
+    "crates/stanwasm-codegen",
+    "crates/stanwasm",
+    "crates/stanwasm-cli",
 ]
 
 [workspace.package]
@@ -27,16 +27,20 @@ repository = "https://github.com/habakan/stanwasm"
 # inside `[workspace.dependencies]`, so a bump means editing these six lines
 # alongside `workspace.package.version`.
 #
+# Every published name is prefixed `stanwasm`, matching the npm package —
+# never a bare `stan-*`, which on a flat registry namespace would read as a
+# crate belonging to Stan itself.
+#
 # First publish has to go in dependency order, since each crate resolves the
 # previous one from the registry:
-#   stan-ast -> stan-autodiff -> stan-parser -> stan-runtime
-#     -> stan-codegen -> stan-wasm-api
-stan-ast = { path = "crates/stan-ast", version = "0.1.0" }
-stan-parser = { path = "crates/stan-parser", version = "0.1.0" }
-stan-autodiff = { path = "crates/stan-autodiff", version = "0.1.0" }
-stan-runtime = { path = "crates/stan-runtime", version = "0.1.0" }
-stan-codegen = { path = "crates/stan-codegen", version = "0.1.0" }
-stan-wasm-api = { path = "crates/stan-wasm-api", version = "0.1.0" }
+#   stanwasm-ast -> stanwasm-autodiff -> stanwasm-parser -> stanwasm-runtime
+#     -> stanwasm-codegen -> stanwasm
+stanwasm-ast = { path = "crates/stanwasm-ast", version = "0.1.0" }
+stanwasm-parser = { path = "crates/stanwasm-parser", version = "0.1.0" }
+stanwasm-autodiff = { path = "crates/stanwasm-autodiff", version = "0.1.0" }
+stanwasm-runtime = { path = "crates/stanwasm-runtime", version = "0.1.0" }
+stanwasm-codegen = { path = "crates/stanwasm-codegen", version = "0.1.0" }
+stanwasm = { path = "crates/stanwasm", version = "0.1.0" }
 
 nuts-rs = { version = "0.18.1", default-features = false }
 wasm-bindgen = "0.2"
@@ -53,5 +57,5 @@ lto = true
 codegen-units = 1
 panic = "abort"
 
-[profile.release.package."stan-wasm-api"]
+[profile.release.package."stanwasm"]
 opt-level = "z"

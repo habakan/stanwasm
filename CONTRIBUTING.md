@@ -57,7 +57,7 @@ Required tools:
 make test
 
 # Specific crate — no target for this, call cargo directly
-cargo test -p stan-parser
+cargo test -p stanwasm-parser
 
 # wasm-pack-built bundle in Node; rebuilds the bundle first if it is stale
 make smoke
@@ -67,17 +67,17 @@ make smoke
 
 1. **One concern per PR.** Distribution additions, codegen optimizations, and doc tweaks all separate.
 2. **Test coverage.** New distributions need at least:
-   - one finite-difference gradient check in `crates/stan-runtime/tests/`
-   - one oracle-vs-AOT comparison in `crates/stan-codegen/tests/`
+   - one finite-difference gradient check in `crates/stanwasm-runtime/tests/`
+   - one oracle-vs-AOT comparison in `crates/stanwasm-codegen/tests/`
 3. **Document subset boundaries.** If a PR partially implements a Stan feature, the README should reflect what now works and what still doesn't.
-4. **Don't break the no-wasm-gc invariant.** `crates/stan-codegen/tests/no_wasm_gc.rs` must keep passing — we ship plain wasm32 by design.
+4. **Don't break the no-wasm-gc invariant.** `crates/stanwasm-codegen/tests/no_wasm_gc.rs` must keep passing — we ship plain wasm32 by design.
 5. **CHANGELOG entry.** Add a bullet under `[Unreleased]` in `CHANGELOG.md`. Re-create that heading at the top of the file if the last release folded it into a version — see [`RELEASING.md`](RELEASING.md).
 6. **Format and lint.** `cargo fmt --all` and `cargo clippy --all-targets`.
 
 ## Code style
 
 - Rust 2021 edition, default `cargo fmt` style
-- Prefer `forbid(unsafe_code)` per crate; only `stan-wasm-api` has FFI-flavored exceptions
+- Prefer `forbid(unsafe_code)` per crate; only `stanwasm` has FFI-flavored exceptions
 - Comments explain *why*, not *what*
 - No emoji in code or comments
 

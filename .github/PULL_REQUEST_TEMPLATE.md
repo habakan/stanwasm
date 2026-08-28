@@ -12,7 +12,7 @@
 
 - [ ] In scope per `CONTRIBUTING.md` (Stan subset / nuts-rs / browser-only)
 - [ ] If it's a Stan feature addition, documented in `README.md` under "Stan language coverage"
-- [ ] Does not break the no-wasm-gc invariant (`cargo test -p stan-codegen --test no_wasm_gc`)
+- [ ] Does not break the no-wasm-gc invariant (`cargo test -p stanwasm-codegen --test no_wasm_gc`)
 
 ## Tests added
 

@@ -19,7 +19,7 @@ A contributor-facing tour of `stanwasm` internals: workspace layout, data flow, 
            │
            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  stan_wasm_api.wasm  (single bundle, ~466 KB after wasm-opt)     │
+│  stanwasm.wasm  (single bundle, ~466 KB after wasm-opt)          │
 │                                                                  │
 │   parser ──► AST ──► trace forward pass ──► autodiff tape        │
 │                              │                                   │
@@ -59,13 +59,13 @@ Seven crates, one TS facade.
 
 | Crate | Target | Role |
 |---|---|---|
-| `stan-ast` | lib (native + wasm) | AST type definitions shared by parser, runtime, codegen. Optional `serde` for golden-value tests. |
-| `stan-parser` | lib | Hand-written recursive-descent parser. Token enum + lexer + Pratt precedence climbing for expressions. |
-| `stan-autodiff` | lib | Reverse-mode autodiff tape (SoA `Vec<f64>` / `Vec<u32>`). Per-op enum, 28 supported ops, CSE caches for log/exp, O(1) reset via generation counter, and `forward_replay` for the sampling hot loop. |
-| `stan-runtime` | lib (native by default) | Distributions, constraint transforms, Stan-program evaluator. `Compiled` struct wraps a frozen tape + root index for the replay path. The native-only AST evaluator is the **golden oracle** used in tests; production wasm does not reach it. |
-| `stan-codegen` | lib | Emits per-model wasm via `wasm-encoder`. ABI imports memory from the host; exports `log_prob_grad(params_ptr, grads_ptr, n_params)`. No WAT, no `wabt`. |
-| `stan-wasm-api` | cdylib (wasm32) | wasm-bindgen public API. Embeds `nuts-rs` (Rust crate) for sampling. Exposes `StanModel` class, `setAotExports` bridge, and the `aot_logp` JS shim. |
-| `stan-cli` | bin (native) | Development CLI. `bench all` times AST eval / replay / AOT (via `wasmi`) / end-to-end sampling. |
+| `stanwasm-ast` | lib (native + wasm) | AST type definitions shared by parser, runtime, codegen. Optional `serde` for golden-value tests. |
+| `stanwasm-parser` | lib | Hand-written recursive-descent parser. Token enum + lexer + Pratt precedence climbing for expressions. |
+| `stanwasm-autodiff` | lib | Reverse-mode autodiff tape (SoA `Vec<f64>` / `Vec<u32>`). Per-op enum, 28 supported ops, CSE caches for log/exp, O(1) reset via generation counter, and `forward_replay` for the sampling hot loop. |
+| `stanwasm-runtime` | lib (native by default) | Distributions, constraint transforms, Stan-program evaluator. `Compiled` struct wraps a frozen tape + root index for the replay path. The native-only AST evaluator is the **golden oracle** used in tests; production wasm does not reach it. |
+| `stanwasm-codegen` | lib | Emits per-model wasm via `wasm-encoder`. ABI imports memory from the host; exports `log_prob_grad(params_ptr, grads_ptr, n_params)`. No WAT, no `wabt`. |
+| `stanwasm` | cdylib (wasm32) | wasm-bindgen public API. Embeds `nuts-rs` (Rust crate) for sampling. Exposes `StanModel` class, `setAotExports` bridge, and the `aot_logp` JS shim. |
+| `stanwasm-cli` | bin (native) | Development CLI. `bench all` times AST eval / replay / AOT (via `wasmi`) / end-to-end sampling. |
 
 The `ts/` directory holds the wasm-pack output, hand-written facade, and Node.js integration tests. `examples/gallery/` is a Vite + React demo (tabbed: live regression, hierarchical shrinkage, a fuller API tour) that consumes the local `ts/` package as a `file:` dep.
 
@@ -76,19 +76,19 @@ The `ts/` directory holds the wasm-pack output, hand-written facade, and Node.js
 ```
 new StanModel(stanCode, dataJson)
        │
-       ▼ stan-parser
+       ▼ stanwasm-parser
    tokenize → AST
        │
-       ▼ stan-runtime::data_from_json
+       ▼ stanwasm-runtime::data_from_json
    serde_json → Env { name -> Val }
        │
-       ▼ stan-runtime::Model::parse_and_load
+       ▼ stanwasm-runtime::Model::parse_and_load
        │ - resolves data sizes (N, K, …) via eval_plain
        │ - counts unconstrained parameter dimensions
        ▼
    Model { prog, data_env, n_params }
        │
-       ▼ stan-runtime::Compiled::from
+       ▼ stanwasm-runtime::Compiled::from
    tape.new_var × n_params  → leaf tape nodes
    apply constraints + Jacobians, evaluate model block
    forward pass on tape, returns root tape index
@@ -114,7 +114,7 @@ for each leapfrog step in nuts-rs:
 
 ### Hot path: `sampleViaAot` (V8-JIT'd AOT)
 
-The recorded tape is one-shot rewritten to wasm32 by `stan-codegen`. Each tape node becomes a sequence of wasm instructions writing to a function-local `f64`. There are no loops, no conditionals, and no memory access in the body except for parameter loads and gradient stores. V8 JITs this aggressively.
+The recorded tape is one-shot rewritten to wasm32 by `stanwasm-codegen`. Each tape node becomes a sequence of wasm instructions writing to a function-local `f64`. There are no loops, no conditionals, and no memory access in the body except for parameter loads and gradient stores. V8 JITs this aggressively.
 
 Per-leapfrog step:
 - `nuts-rs` calls `aot_logp(params_ptr, grads_ptr, n)` (a wasm-bindgen import)
@@ -145,7 +145,7 @@ This shared-memory design avoids any per-call JS-side `memcpy` between the two w
 
 ## Autodiff tape design
 
-`stan-autodiff::Tape` is a struct of arrays:
+`stanwasm-autodiff::Tape` is a struct of arrays:
 
 ```rust
 val:   Vec<f64>     // primal value at each node
@@ -162,9 +162,9 @@ Direct-mapped CSE caches dedupe `log(x)` and `exp(x)` on the same tape index (ve
 
 Initial capacity: 65 536 nodes. Vec grows automatically; we do not pre-reserve from JS hints.
 
-## AOT codegen design (`stan-codegen`)
+## AOT codegen design (`stanwasm-codegen`)
 
-After `Compiled::from` runs the trace on a `Tape`, `stan-codegen::compile` walks `tape.op_at(k)` once and emits:
+After `Compiled::from` runs the trace on a `Tape`, `stanwasm-codegen::compile` walks `tape.op_at(k)` once and emits:
 
 ```
 fn log_prob_grad(params_ptr: i32, grads_ptr: i32, n_params: i32) -> f64
@@ -208,9 +208,9 @@ Imports are emitted only for math functions the recorded tape actually used (`sc
 
 The emitted function declares one primal and one adjoint local per tape node, so a trace of *n* nodes needs *2n* wasm locals. V8 accepts at most **50,000 locals per function**, which caps the AOT path at a tape of ~25,000 nodes. Because the trace is fully unrolled, tape length grows with the data: a vectorized `y ~ normal(alpha + beta * x, sigma)` uses roughly a dozen nodes per observation, so the ceiling lands somewhere around `N ≈ 2,000` for that model and lower for models that do more work per observation.
 
-`stan-codegen::compile` checks this before emitting and returns `CodegenError::TooManyLocals` rather than producing a module that fails to instantiate in the browser with an opaque `CompileError: local count too large`. The tape-replay path (`StanModel::sample`) has no such limit — it interprets the same tape and is the fallback for large models.
+`stanwasm-codegen::compile` checks this before emitting and returns `CodegenError::TooManyLocals` rather than producing a module that fails to instantiate in the browser with an opaque `CompileError: local count too large`. The tape-replay path (`StanModel::sample`) has no such limit — it interprets the same tape and is the fallback for large models.
 
-The output validates without the `GC` feature in `wasmparser` — see `crates/stan-codegen/tests/no_wasm_gc.rs`.
+The output validates without the `GC` feature in `wasmparser` — see `crates/stanwasm-codegen/tests/no_wasm_gc.rs`.
 
 ## Native vs wasm builds
 
@@ -218,7 +218,7 @@ Same source tree, different feature surfaces:
 
 | Concern | Native (`cargo test`) | wasm32 (`wasm-pack build`) |
 |---|---|---|
-| AST evaluator (`stan-runtime::eval`) | Compiled in, used as golden oracle | Compiled in and used at runtime: it produces the trace `sample` replays, and evaluates `generated quantities` natively per draw |
+| AST evaluator (`stanwasm-runtime::eval`) | Compiled in, used as golden oracle | Compiled in and used at runtime: it produces the trace `sample` replays, and evaluates `generated quantities` natively per draw |
 | Parser + tape + codegen | Compiled in | Compiled in |
 | `nuts-rs` | Used via `Compiled` adapter | Same, via `wasm-bindgen` types |
 | AOT execution | Verified by spawning `wasmi` in tests | Done by V8 in the browser |
@@ -232,11 +232,11 @@ This lets us write tests like "the AOT-emitted wasm produces the same `(logp, gr
 ```bash
 # 1. Native: parser + autodiff + runtime + codegen tests, plus the CLI bench
 cargo test --workspace
-cargo run --release -p stan-cli -- bench all
+cargo run --release -p stanwasm-cli -- bench all
 
 # 2. wasm32: produce the wasm-pack output consumed by ts/ and examples/
 make wasm
-#   ├─ cargo build --release --target wasm32-unknown-unknown -p stan-wasm-api
+#   ├─ cargo build --release --target wasm32-unknown-unknown -p stanwasm
 #   ├─ wasm-bindgen processes the cdylib, generates JS glue
 #   └─ wasm-opt (wasm-pack's release default) shrinks the bundle to ~466 KB
 
@@ -254,13 +254,13 @@ The CI workflow (`.github/workflows/test.yml`) reproduces step 1 + 2 on Linux an
 
 Three layers of confidence:
 
-1. **Per-operation unit tests** in `stan-autodiff/tests/gradients.rs`. Each derivative is checked analytically against hand-computed values.
+1. **Per-operation unit tests** in `stanwasm-autodiff/tests/gradients.rs`. Each derivative is checked analytically against hand-computed values.
 
-2. **Whole-model finite-difference tests** in `stan-runtime/tests/log_prob.rs`. For each model that exercises a distribution / constraint, the autodiff-produced gradient is compared to a central-difference numerical gradient and required to agree to ~1e-4.
+2. **Whole-model finite-difference tests** in `stanwasm-runtime/tests/log_prob.rs`. For each model that exercises a distribution / constraint, the autodiff-produced gradient is compared to a central-difference numerical gradient and required to agree to ~1e-4.
 
-3. **AOT-vs-oracle equivalence** in `stan-codegen/tests/aot_vs_oracle.rs`. The codegen-emitted wasm is instantiated under `wasmi`, fed the same parameters as the AST evaluator, and the resulting `(log_prob, gradient)` pair is required to agree to 1e-12. The `no_wasm_gc.rs` companion pins that the output does not use `WasmFeatures::GC`.
+3. **AOT-vs-oracle equivalence** in `stanwasm-codegen/tests/aot_vs_oracle.rs`. The codegen-emitted wasm is instantiated under `wasmi`, fed the same parameters as the AST evaluator, and the resulting `(log_prob, gradient)` pair is required to agree to 1e-12. The `no_wasm_gc.rs` companion pins that the output does not use `WasmFeatures::GC`.
 
-End-to-end sampling is exercised by `stan-wasm-api/tests/sampling.rs`: it runs the full nuts-rs loop on `linear_regression` and asserts the posterior mean of β recovers the true slope to within 0.3 over 400 post-warmup draws.
+End-to-end sampling is exercised by `stanwasm/tests/sampling.rs`: it runs the full nuts-rs loop on `linear_regression` and asserts the posterior mean of β recovers the true slope to within 0.3 over 400 post-warmup draws.
 
 ## Why wasm32, not wasm-gc
 
@@ -268,11 +268,11 @@ End-to-end sampling is exercised by `stan-wasm-api/tests/sampling.rs`: it runs t
 - The bottleneck for sampling is the per-leapfrog `log_prob_grad` call, and the AOT model wasm is emitted as plain wasm32 with no `struct.new` / `array.new` — there is nothing to GC.
 - Skipping wasm-gc keeps the runtime predictable across all current browser versions and avoids the `wasm-gc` feature negotiation that some embedders still gate.
 
-The `crates/stan-codegen/tests/no_wasm_gc.rs` test enforces this invariant: the validator is run with `WasmFeatures::default() - WasmFeatures::GC` and must accept the artifact.
+The `crates/stanwasm-codegen/tests/no_wasm_gc.rs` test enforces this invariant: the validator is run with `WasmFeatures::default() - WasmFeatures::GC` and must accept the artifact.
 
 ## References
 
 - [`README.md`](README.md) — user-facing intro and quick start
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to propose changes
 - [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md) — performance methodology and current numbers
-- [`crates/stan-codegen/tests/no_wasm_gc.rs`](crates/stan-codegen/tests/no_wasm_gc.rs) — wasm-gc absence invariant
+- [`crates/stanwasm-codegen/tests/no_wasm_gc.rs`](crates/stanwasm-codegen/tests/no_wasm_gc.rs) — wasm-gc absence invariant

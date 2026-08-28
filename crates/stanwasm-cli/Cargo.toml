@@ -1,0 +1,21 @@
+[package]
+name = "stanwasm-cli"
+description = "Local development CLI for stanwasm: golden-value tests and benchmarks. Not published."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "stanwasm-cli"
+path = "src/main.rs"
+
+[dependencies]
+stanwasm-parser.workspace = true
+stanwasm-autodiff.workspace = true
+stanwasm-runtime = { workspace = true, features = ["json"] }
+stanwasm-codegen.workspace = true
+stanwasm.workspace = true
+anyhow.workspace = true
+wasmi = "0.32"

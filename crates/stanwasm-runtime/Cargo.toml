@@ -1,0 +1,23 @@
+[package]
+name = "stanwasm-runtime"
+description = "Stan distributions, constraint transforms, and AST evaluator — the native golden-oracle behind stanwasm. Internal; no API stability guarantee."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["stan", "bayesian", "distributions", "mcmc", "statistics"]
+categories = ["science", "mathematics"]
+
+[dependencies]
+stanwasm-ast.workspace = true
+stanwasm-autodiff.workspace = true
+stanwasm-parser.workspace = true
+thiserror.workspace = true
+serde_json = { workspace = true, optional = true }
+rand.workspace = true
+rand_distr = "0.6"
+
+[features]
+default = ["json"]
+json = ["dep:serde_json"]
