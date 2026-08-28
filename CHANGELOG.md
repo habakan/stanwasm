@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `wasm-encoder` 0.220 -> 0.257. `Instruction::F64Const` now takes an `Ieee64`
+- `wasm-encoder` 0.220 -> 0.258, and `wasmparser` (dev) 0.220 -> 0.258. `Instruction::F64Const` now takes an `Ieee64`
   rather than an `f64`, which is the whole of the break — the AOT codegen is
   otherwise unchanged, and `aot_vs_oracle` still matches the native oracle on
   every model it covers. The bundle grows 477 KB -> 494 KB raw, but only
