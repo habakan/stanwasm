@@ -1,7 +1,7 @@
 # stanwasm
 
 Stan probabilistic models compiled and sampled **entirely in the browser**.
-Pure Rust compiled to WebAssembly, a single ~466 KB bundle (~180 KB gzipped),
+Pure Rust compiled to WebAssembly, a single ~482 KB bundle (~180 KB gzipped),
 with [nuts-rs](https://github.com/pymc-devs/nuts-rs) embedded as the sampler.
 No server, no cmdstan, no round trip.
 

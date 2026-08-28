@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `wasm-encoder` 0.220 -> 0.257. `Instruction::F64Const` now takes an `Ieee64`
+  rather than an `f64`, which is the whole of the break — the AOT codegen is
+  otherwise unchanged, and `aot_vs_oracle` still matches the native oracle on
+  every model it covers. The bundle grows 477 KB -> 494 KB raw, but only
+  184.0 KB -> 184.8 KB gzipped: `wasm-encoder` runs *inside* the browser
+  bundle, so its own size is part of the payload.
+- `chacha20` 0.10.0 -> 0.10.2 and `spin` 0.9.8 -> 0.9.9 in `Cargo.lock`; both
+  earlier versions were yanked. Lockfile only, no manifest change.
 - Every crate is renamed to a `stanwasm` prefix: `stanwasm-ast`,
   `stanwasm-parser`, `stanwasm-autodiff`, `stanwasm-runtime`,
   `stanwasm-codegen`, `stanwasm-cli`, and `stan-wasm-api` becomes plain
