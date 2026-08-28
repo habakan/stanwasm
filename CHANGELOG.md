@@ -5,77 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-
-- The examples gallery is deployed to GitHub Pages from `main`
-  ([habakan.github.io/stanwasm](https://habakan.github.io/stanwasm/)), so the
-  demos can be tried without a Rust, wasm-pack and Node toolchain. Rebuilt on
-  any change to the crates as well as to the app — the wasm the page loads is
-  built from the Rust sources.
-- Every publishable crate now sets `keywords`, `categories` and `readme`, and
-  each has its own `README.md`; the npm package has one too. Without them a
-  crates.io or npm page renders as a title and nothing else.
-
-### Changed
-
-- `wasm-encoder` 0.220 -> 0.258, and the `wasmparser` dev-dependency with it.
-  `Instruction::F64Const` takes an `Ieee64` rather than an `f64` now, which is
-  the whole of the break — the AOT codegen is otherwise unchanged, and
-  `aot_vs_oracle` still matches the native oracle on every model it covers. The
-  bundle grows 477 KB -> 494 KB raw, but only 184.0 KB -> 184.8 KB gzipped:
-  `wasm-encoder` runs *inside* the browser bundle, so its own size is part of
-  the payload.
-- `wasmi` 0.32 -> 1.1, the AOT reference interpreter behind `aot_vs_oracle`
-  and `stanwasm-cli bench`. Two breaks, both mechanical: `MemoryType::new`
-  returns a `MemoryType` rather than a `Result`, and `Linker::instantiate(..)
-  .start(..)` is now a single `instantiate_and_start`. Neither crate reaches
-  the browser bundle — `stanwasm-cli` is `publish = false`, and
-  `stanwasm-codegen` takes wasmi as a dev-dependency only.
-- `chacha20` 0.10.0 -> 0.10.2 and `spin` 0.9.8 -> 0.9.9 in `Cargo.lock`; both
-  earlier versions were yanked. Lockfile only, no manifest change.
-- Every crate is renamed to a `stanwasm` prefix: `stanwasm-ast`,
-  `stanwasm-parser`, `stanwasm-autodiff`, `stanwasm-runtime`,
-  `stanwasm-codegen`, `stanwasm-cli`, and `stan-wasm-api` becomes plain
-  `stanwasm` — the same name as the npm package. crates.io is a flat namespace
-  and never frees a name once taken, so shipping `stan-parser` and
-  `stan-runtime` would have claimed generic Stan names that read as belonging
-  to Stan itself. The wasm-bindgen output moves with it:
-  `stan_wasm_api_bg.wasm` is now `stanwasm_bg.wasm`. Nothing was published
-  under the old names, so no import path in the wild breaks.
-- The five crates below `stanwasm` now say in their `description` that they
-  are internal and carry no API stability guarantee. They reach crates.io only
-  because cargo requires a dependency to be on the registry before its
-  dependent can be.
-- `make package` now also asserts the npm tarball carries the wasm, not just
-  the licence. It was the one manual `npm pack --dry-run` step in
-  RELEASING.md, and npm is the artifact most people actually install.
-- Build commands moved into a `Makefile`; `scripts/build-wasm.sh` is gone.
-  `make wasm` replaces it, and `make` on its own lists every target. Building
-  from source is otherwise unchanged — the underlying `wasm-pack` invocation
-  is the same one.
-
-### Fixed
-
-- Published artifacts now carry the Apache-2.0 licence text. `cargo package`
-  only collects files inside a crate's own directory and `npm pack` behaves
-  the same way, so the `LICENSE` at the repo root reached neither the six
-  `.crate` files nor the npm tarball — every artifact declared a licence it
-  did not include. `make package` now fails if any of them is missing.
-- The gallery no longer ships the wasm twice. Passing an explicit URL out of
-  `public/` did not stop Vite emitting an asset for wasm-bindgen's own
-  `new URL("stanwasm_bg.wasm", import.meta.url)`, so the built site
-  carried both copies — 955 KB where 477 KB is used, and the copy actually
-  fetched had no content hash. The default resolution is used now.
-- The pre-publish packaging check now runs `cargo package --workspace` instead
-  of one `cargo package -p` per crate. The per-crate form cannot pass before
-  the first crates.io release, because each manifest resolves its siblings
-  from the registry rather than from `path` — so the check that exists to
-  catch a path dependency missing its `version` requirement failed for an
-  unrelated reason at exactly the moment it was needed.
-
-## [0.1.0] — 2026-08-25 (alpha)
+## [0.1.0] — 2026-08-28 (alpha)
 
 Initial alpha release: enough Stan to sample linear regression, logistic
 regression, Poisson regression, eight schools (non-centered), and
@@ -125,7 +55,52 @@ earlier published version.
   follows the editor. Distribution formulas render via MathJax, served
   from a locally-copied bundle rather than a CDN.
 
+- The examples gallery is deployed to GitHub Pages from `main`
+  ([habakan.github.io/stanwasm](https://habakan.github.io/stanwasm/)), so the
+  demos can be tried without a Rust, wasm-pack and Node toolchain. Rebuilt on
+  any change to the crates as well as to the app — the wasm the page loads is
+  built from the Rust sources.
+- Every publishable crate now sets `keywords`, `categories` and `readme`, and
+  each has its own `README.md`; the npm package has one too. Without them a
+  crates.io or npm page renders as a title and nothing else.
+
 ### Changed
+
+- `wasm-encoder` 0.220 -> 0.258, and the `wasmparser` dev-dependency with it.
+  `Instruction::F64Const` takes an `Ieee64` rather than an `f64` now, which is
+  the whole of the break — the AOT codegen is otherwise unchanged, and
+  `aot_vs_oracle` still matches the native oracle on every model it covers. The
+  bundle grows 477 KB -> 494 KB raw, but only 184.0 KB -> 184.8 KB gzipped:
+  `wasm-encoder` runs *inside* the browser bundle, so its own size is part of
+  the payload.
+- `wasmi` 0.32 -> 1.1, the AOT reference interpreter behind `aot_vs_oracle`
+  and `stanwasm-cli bench`. Two breaks, both mechanical: `MemoryType::new`
+  returns a `MemoryType` rather than a `Result`, and `Linker::instantiate(..)
+  .start(..)` is now a single `instantiate_and_start`. Neither crate reaches
+  the browser bundle — `stanwasm-cli` is `publish = false`, and
+  `stanwasm-codegen` takes wasmi as a dev-dependency only.
+- `chacha20` 0.10.0 -> 0.10.2 and `spin` 0.9.8 -> 0.9.9 in `Cargo.lock`; both
+  earlier versions were yanked. Lockfile only, no manifest change.
+- Every crate is renamed to a `stanwasm` prefix: `stanwasm-ast`,
+  `stanwasm-parser`, `stanwasm-autodiff`, `stanwasm-runtime`,
+  `stanwasm-codegen`, `stanwasm-cli`, and `stan-wasm-api` becomes plain
+  `stanwasm` — the same name as the npm package. crates.io is a flat namespace
+  and never frees a name once taken, so shipping `stan-parser` and
+  `stan-runtime` would have claimed generic Stan names that read as belonging
+  to Stan itself. The wasm-bindgen output moves with it:
+  `stan_wasm_api_bg.wasm` is now `stanwasm_bg.wasm`. Nothing was published
+  under the old names, so no import path in the wild breaks.
+- The five crates below `stanwasm` now say in their `description` that they
+  are internal and carry no API stability guarantee. They reach crates.io only
+  because cargo requires a dependency to be on the registry before its
+  dependent can be.
+- `make package` now also asserts the npm tarball carries the wasm, not just
+  the licence. It was the one manual `npm pack --dry-run` step in
+  RELEASING.md, and npm is the artifact most people actually install.
+- Build commands moved into a `Makefile`; `scripts/build-wasm.sh` is gone.
+  `make wasm` replaces it, and `make` on its own lists every target. Building
+  from source is otherwise unchanged — the underlying `wasm-pack` invocation
+  is the same one.
 
 - The npm entry point is `ts/index.js` with a hand-written `ts/index.d.ts`,
   and `package.json` declares `types`/`exports`. It was `index.ts`, which
@@ -140,6 +115,23 @@ earlier published version.
   which does not build.
 
 ### Fixed
+
+- Published artifacts now carry the Apache-2.0 licence text. `cargo package`
+  only collects files inside a crate's own directory and `npm pack` behaves
+  the same way, so the `LICENSE` at the repo root reached neither the six
+  `.crate` files nor the npm tarball — every artifact declared a licence it
+  did not include. `make package` now fails if any of them is missing.
+- The gallery no longer ships the wasm twice. Passing an explicit URL out of
+  `public/` did not stop Vite emitting an asset for wasm-bindgen's own
+  `new URL("stanwasm_bg.wasm", import.meta.url)`, so the built site
+  carried both copies — 955 KB where 477 KB is used, and the copy actually
+  fetched had no content hash. The default resolution is used now.
+- The pre-publish packaging check now runs `cargo package --workspace` instead
+  of one `cargo package -p` per crate. The per-crate form cannot pass before
+  the first crates.io release, because each manifest resolves its siblings
+  from the registry rather than from `path` — so the check that exists to
+  catch a path dependency missing its `version` requirement failed for an
+  unrelated reason at exactly the moment it was needed.
 
 - Typos and unsupported constructs that used to silently contribute nothing
   to the log density (or a stale value) instead of failing now raise a clean
