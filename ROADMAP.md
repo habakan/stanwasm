@@ -14,6 +14,51 @@ explorable blog-post demos, and privacy-constrained client-side analytics
 depth of embeddability and honesty about the subset matter more than chasing
 full language coverage for its own sake.
 
+## What works today
+
+A subset. Everything in the TODO column is a clean load-time or evaluation
+error — never a model that silently samples something else. The gaps are
+worked through below, ordered by effort.
+
+| | Supported | TODO |
+|---|---|---|
+| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta` | |
+| Discrete | `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2` | `multinomial`, `categorical` |
+| Multivariate | `multi_normal_cholesky`, `lkj_corr_cholesky`, `dirichlet` | `multi_normal` (full covariance) |
+| Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors | |
+| Vector shape | `simplex`, `ordered`, `positive_ordered` | `unit_vector` |
+| Matrix constraints | `cholesky_factor_corr` | `cov_matrix`, `cholesky_factor_cov`, `corr_matrix` |
+| Blocks | `data`, `parameters`, `transformed parameters`, `model`, `generated quantities` | `functions { ... }` |
+| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr` | indexed assignment (`y_rep[n] = ...`) |
+| Operators | arithmetic, comparison, logical, `^` | matrix product — `X * beta` is not one |
+| `_rng` | scalar draws for every distribution above, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | vectorized scalar `_rng`, `lkj_corr_cholesky_rng` |
+
+Four caveats the table can't carry:
+
+- **Branches on a sampled parameter.** `if`/`while` conditions that depend on a
+  parameter work in `generated quantities` (re-evaluated natively per draw) but
+  are a compile-time error in `model`/`transformed parameters` — NUTS traces
+  that block once and replays the same graph for every draw.
+- **No posterior-predictive loop.** Scalar `_rng` plus no indexed assignment
+  rules out the usual idiom; `for (n in 1:N) y_rep[n] = normal_rng(...)` is an
+  error. Only `dirichlet_rng` and `multi_normal_cholesky_rng` return
+  containers, because their draw *is* a vector. Both gaps are tracked in
+  [`ROADMAP.md`](ROADMAP.md).
+- **`transformed data` parses but does not memoize.** Its statements fold into
+  `model`, so they re-run every trace and its variables are invisible from
+  `generated quantities`.
+- **Stan's static typing is honored where it changes results.** `int / int` is
+  integer division (`N / 2` with `N = 3` is `1`), and `^` binds tighter than
+  unary minus and associates right (`-a^2` is `-(a^2)`, `2^3^2` is `512`).
+
+For matrix algebra, write the loop form (`for (n in 1:N) ... X[n] * beta`) or
+use `multi_normal_cholesky`, whose matrix work is done internally.
+
+The `data` block is checked against the supplied JSON when the model loads — a
+missing field, a wrong length, a non-integral `int`, or a violated
+`<lower=...>`/`<upper=...>` bound is an error rather than a model that samples
+the wrong thing.
+
 ## Remaining language gaps, roughly ordered by effort
 
 ### `functions { ... }` (user-defined functions) — the hard one
