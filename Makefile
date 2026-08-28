@@ -57,6 +57,12 @@ wasm: $(WASM_OUT) ## Build the wasm bundle into ts/pkg/
 $(WASM_OUT): $(WASM_SRC)
 	@command -v wasm-pack >/dev/null 2>&1 \
 	  || { echo "error: wasm-pack not found. Install with: cargo install wasm-pack" >&2; exit 1; }
+# wasm-pack writes into the out-dir without clearing it, so anything it no
+# longer emits just stays. Renaming the crate once left the previous bundle's
+# `stan_wasm_api*` files sitting beside the new ones, and `"files": ["pkg/"]`
+# would have shipped both — 477 KB of dead wasm in the published package.
+# Everything here is generated; `clean` removes the same directory.
+	rm -rf $(ROOT)/ts/pkg
 	wasm-pack build crates/stanwasm --target web --out-dir $(ROOT)/ts/pkg --release
 # wasm-pack drops its own `.gitignore` (just `*`) into ts/pkg/. That's
 # redundant here — the repo root .gitignore already excludes /ts/pkg — and
@@ -114,10 +120,12 @@ package: wasm ## Dry-run packaging every crate + the npm tarball
 	@echo "LICENSE present in every .crate"
 	cd ts && npm pack --dry-run --json > /tmp/stanwasm-pack.json
 	@node -e 'const f=require("/tmp/stanwasm-pack.json")[0].files.map(x=>x.path); \
-	  const need={"LICENSE":/^LICENSE$$/,"the wasm":/^pkg\/.*\.wasm$$/}; \
-	  for (const [what,re] of Object.entries(need)) if(!f.some(p=>re.test(p))) { \
-	    console.error("error: npm tarball ships no "+what+":\n"+f.join("\n")); process.exit(1) } \
-	  console.log("LICENSE and wasm present in the npm tarball ("+f.length+" files)")'
+	  if(!f.some(p=>/^LICENSE$$/.test(p))) { \
+	    console.error("error: npm tarball ships no LICENSE:\n"+f.join("\n")); process.exit(1) } \
+	  const wasm=f.filter(p=>/\.wasm$$/.test(p)); \
+	  if(wasm.length!==1) { \
+	    console.error("error: expected exactly one .wasm in the npm tarball, got "+wasm.length+":\n"+f.join("\n")); process.exit(1) } \
+	  console.log("npm tarball ok: "+f.length+" files, LICENSE, "+wasm[0])'
 
 .PHONY: clean
 clean: ## Remove cargo target/ and the generated ts/pkg/
