@@ -24,14 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Instruction::F64Const` takes an `Ieee64` rather than an `f64` now, which is
   the whole of the break — the AOT codegen is otherwise unchanged, and
   `aot_vs_oracle` still matches the native oracle on every model it covers. The
-  bundle grows 477 KB -> 494 KB raw, but only 184.0 KB -> 184.8 KB gzipped: `wasm-encoder` runs *inside* the browser
-  bundle, so its own size is part of the payload.
+  bundle grows 477 KB -> 494 KB raw, but only 184.0 KB -> 184.8 KB gzipped:
+  `wasm-encoder` runs *inside* the browser bundle, so its own size is part of
+  the payload.
 - `wasmi` 0.32 -> 1.1, the AOT reference interpreter behind `aot_vs_oracle`
   and `stanwasm-cli bench`. Two breaks, both mechanical: `MemoryType::new`
   returns a `MemoryType` rather than a `Result`, and `Linker::instantiate(..)
   .start(..)` is now a single `instantiate_and_start`. Neither crate reaches
-  the browser bundle — `stanwasm-cli` is `publish = false` and `stanwasm-codegen`
-  takes wasmi as a dev-dependency only.
+  the browser bundle — `stanwasm-cli` is `publish = false`, and
+  `stanwasm-codegen` takes wasmi as a dev-dependency only.
 - `chacha20` 0.10.0 -> 0.10.2 and `spin` 0.9.8 -> 0.9.9 in `Cargo.lock`; both
   earlier versions were yanked. Lockfile only, no manifest change.
 - Every crate is renamed to a `stanwasm` prefix: `stanwasm-ast`,
