@@ -52,9 +52,13 @@ counts as a vulnerability here.
 
 ## Verifying what you install
 
-Nothing is published to npm or crates.io yet. When it is, releases will carry
-[npm provenance](https://docs.npmjs.com/generating-provenance-statements), so a
-published tarball can be traced back to the commit and workflow that built it.
+`stanwasm` 0.1.0 is on [npm](https://www.npmjs.com/package/stanwasm) and
+[crates.io](https://crates.io/crates/stanwasm). It was published by hand from a
+local checkout of the `v0.1.0` tag, so it carries **no**
+[npm provenance](https://docs.npmjs.com/generating-provenance-statements)
+attestation — provenance requires publishing from a CI workflow, which this
+project does not do yet. Until it does, a tarball cannot be cryptographically
+traced back to the commit that built it.
 
 Independently of that, `ts/pkg/` is generated entirely by
 `make wasm` from this source tree, so you can rebuild and compare

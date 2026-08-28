@@ -1,5 +1,10 @@
 # stanwasm
 
+[![npm](https://img.shields.io/npm/v/stanwasm?logo=npm&color=cb3837)](https://www.npmjs.com/package/stanwasm)
+[![crates.io](https://img.shields.io/crates/v/stanwasm?logo=rust&color=e43717)](https://crates.io/crates/stanwasm)
+[![bundle](https://img.shields.io/badge/wasm-482%20KB%20%7C%20180%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](docs/en/BENCHMARKS.md)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 > **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
 Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~482 KB` wasm bundle (`~180 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
@@ -12,14 +17,17 @@ sampling.
 
 ## Quick start (browser / Node.js)
 
-**Not published to npm or crates.io yet** — build from source for now. `ts/` is the package that will be published, so the import path below is what it will be either way.
-
 ```bash
-# Build the wasm bundle into ts/pkg/ and run the smoke test against it
-make smoke
+npm install stanwasm
 ```
 
-To use it from another project before it is on npm, point at the checkout: `npm install /path/to/stanwasm/ts` (or `npm pack` in `ts/` and install the tarball). The entry point is plain `.js` with a `.d.ts` alongside, so bundlers and plain-JS consumers work without a TypeScript step.
+The entry point is plain `.js` with a `.d.ts` alongside, so bundlers and
+plain-JS consumers work without a TypeScript step. The wasm ships inside the
+package — nothing is fetched at install time and nothing is compiled on a
+server.
+
+To build from a checkout instead, `make smoke` produces the bundle in `ts/pkg/`
+and exercises it in Node.
 
 ```ts
 import init, { StanModel } from "stanwasm";

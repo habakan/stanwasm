@@ -1,5 +1,9 @@
 # stanwasm
 
+[![crates.io](https://img.shields.io/crates/v/stanwasm?logo=rust&color=e43717)](https://crates.io/crates/stanwasm)
+[![npm](https://img.shields.io/npm/v/stanwasm?logo=npm&color=cb3837)](https://www.npmjs.com/package/stanwasm)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/habakan/stanwasm/blob/main/LICENSE)
+
 The wasm-bindgen API behind stanwasm: parse, compile and sample a Stan model
 entirely inside the browser.
 
