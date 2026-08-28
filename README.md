@@ -87,10 +87,11 @@ from `main` on every change to the crates, `ts/`, or the app itself. Source:
 
 ## Stan language coverage
 
-A subset. Everything in the "Not yet" column is a clean load-time or
-evaluation error — never a model that silently samples something else.
+A subset. Everything in the TODO column is a clean load-time or evaluation
+error — never a model that silently samples something else — and is tracked in
+[`ROADMAP.md`](ROADMAP.md), ordered by effort.
 
-| | Supported | Not yet |
+| | Supported | TODO |
 |---|---|---|
 | Continuous | `normal`, `std_normal`, `exponential`, `half_normal`, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta` | |
 | Discrete | `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2` | `multinomial`, `categorical` |
@@ -131,31 +132,10 @@ the wrong thing.
 
 ## Architecture
 
-```
-Stan source + JSON data
-       │
-       ▼  (one-time)
-stanwasm-parser ─► AST ─► stanwasm-runtime (trace forward pass on autodiff tape)
-                                      │
-                                      ▼
-                          ┌──── tape replay (sampling)
-                          │              │
-                          │              ▼
-                          │         nuts-rs (embedded in same wasm)
-                          │              │
-                          │              ▼
-                          │           samples
-                          │
-                          └──── stanwasm-codegen (wasm-encoder)  ──►  AOT model wasm bytes
-                                                                  (Web Worker handoff)
-```
-
-A single `stanwasm_bg.wasm` is shipped to the browser (replaces the previous `wasm_api.wasm` + `nuts_rs.wasm` pair). Native builds expose the AST evaluation interpreter for golden-value testing only.
-
-
-[`ARCHITECTURE.md`](ARCHITECTURE.md) is the internals tour — the seven-crate
-workspace layout, the autodiff tape design, the AOT codegen ABI, and why
-wasm32 rather than wasm-gc. Performance numbers live in
+[`ARCHITECTURE.md`](ARCHITECTURE.md) is the internals tour: the data flow from
+Stan source to samples, the seven-crate workspace layout, the autodiff tape
+design, the AOT codegen ABI, what differs between the native and wasm builds,
+and why wasm32 rather than wasm-gc. Performance numbers live in
 [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md). Documentation is organized by
 language under `docs/en/` and `docs/ja/`.
 
