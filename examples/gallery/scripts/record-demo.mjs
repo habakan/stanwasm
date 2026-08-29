@@ -15,7 +15,10 @@ import { writeFileSync } from "node:fs";
 
 const OUT = process.argv[2];
 const URL = process.argv[3] ?? "http://localhost:4173/";
-const W = 1600, H = 900;
+// Record at the export resolution. Recording 1600x900 and exporting 1920x1080
+// upscales every frame; deviceScaleFactor 2 then renders at 3840x2160 and
+// downsamples into it, which is what keeps the small type legible.
+const W = 1920, H = 1080;
 
 const browser = await chromium.launch();
 const context = await browser.newContext({
@@ -56,33 +59,35 @@ try {
   await page.getByRole("button", { name: "Live Regression" }).click();
   await page.waitForSelector("svg.plot-wrap circle", { timeout: 20000 });
   await beat(900);
+  // Two outliers at opposite corners, both left in place. Top-left (low x,
+  // high y) and bottom-right (high x, low y) each pull against the true
+  // positive slope, so they reinforce: the conjugate-normal fit collapses
+  // while the Student-t fit stays on the data. Dragging one out and back, as
+  // this used to, undid the effect before the viewer could read it.
   const pts = page.locator("svg.plot-wrap circle");
-  const target = pts.nth(Math.floor((await pts.count()) / 2));
-  const box = await target.boundingBox();
+  const n = await pts.count();
   const plot = await page.locator("svg.plot-wrap").boundingBox();
-  if (box && plot) {
+  const corners = [
+    { idx: Math.floor(n / 3), fx: 0.10, fy: 0.08 },      // top-left
+    { idx: Math.floor((2 * n) / 3), fx: 0.90, fy: 0.92 }, // bottom-right
+  ];
+  for (const { idx, fx, fy } of corners) {
+    const box = await pts.nth(idx).boundingBox();
+    if (!box || !plot) continue;
     const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-    // Aim at the plot's own top-left corner rather than a fixed pixel offset.
-    // The point of this beat is that the robust fit ignores an outlier, which
-    // only reads if the outlier is genuinely far from the cloud.
-    const to = { x: plot.x + plot.width * 0.10, y: plot.y + plot.height * 0.08 };
-    const STEPS = 26;
+    const to = { x: plot.x + plot.width * fx, y: plot.y + plot.height * fy };
+    const STEPS = 22;
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();
     for (let i = 1; i <= STEPS; i++) {
       const t = i / STEPS;
       await page.mouse.move(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
-      await beat(33);
-    }
-    await beat(800);
-    for (let i = STEPS; i >= 0; i--) {
-      const t = i / STEPS;
-      await page.mouse.move(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
-      await beat(18);
+      await beat(30);
     }
     await page.mouse.up();
+    await beat(500);
   }
-  await fill(3);
+  await fill(6.5);
 
   // The sandbox is the one section that earns more than 3s: it is a flow, not
   // a still. Whole view -> open the graphical model -> compile -> results.
