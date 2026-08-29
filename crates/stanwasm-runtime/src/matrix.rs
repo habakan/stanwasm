@@ -1,7 +1,7 @@
 //! Matrix / vector helpers used by multivariate distributions and constraint
 //! transforms. A matrix is represented as `Val::Vec` of `Val::Vec` rows.
 
-use crate::ops::{v_add, v_div, v_mul, v_sub};
+use crate::ops::{v_add, v_div, v_mul, v_sqrt, v_sub};
 use crate::value::Val;
 use stanwasm_autodiff::Tape;
 
@@ -39,4 +39,38 @@ pub fn mat_mdiv_ltri_low(t: &mut Tape, l_rows: &[Val], b: &[Val]) -> Vec<Val> {
         }
     }
     x
+}
+
+/// Cholesky decomposition of a symmetric positive-definite matrix (`sigma_rows`,
+/// a vec of rows): returns the lower-triangular `L` with `Σ = L Lᵀ`, in the
+/// same rows-of-`Val::Vec` shape used elsewhere. Used to turn a full-covariance
+/// `multi_normal` into the same math as `multi_normal_cholesky`, since
+/// `log det Σ = 2 Σ log Lᵢᵢ`.
+pub fn cholesky_decompose(t: &mut Tape, sigma_rows: &[Val]) -> Vec<Val> {
+    let n = sigma_rows.len();
+    let mut l: Vec<Vec<Val>> = vec![Vec::new(); n];
+    for i in 0..n {
+        let row_i: Vec<Val> = match &sigma_rows[i] {
+            Val::Vec(r) => r.clone(),
+            other => vec![other.clone()],
+        };
+        for j in 0..=i {
+            let mut sum = row_i.get(j).cloned().unwrap_or(Val::Num(0.0));
+            // Both `l[i]` and `l[j]` are indexed by `k`, so this isn't a
+            // single-container iteration clippy's needless_range_loop lint
+            // has in mind.
+            #[allow(clippy::needless_range_loop)]
+            for k in 0..j {
+                let prod = v_mul(t, &l[i][k], &l[j][k]);
+                sum = v_sub(t, &sum, &prod);
+            }
+            if i == j {
+                l[i].push(v_sqrt(t, &sum));
+            } else {
+                let ljj = l[j][j].clone();
+                l[i].push(v_div(t, &sum, &ljj));
+            }
+        }
+    }
+    l.into_iter().map(Val::Vec).collect()
 }

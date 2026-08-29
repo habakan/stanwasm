@@ -175,6 +175,102 @@ fn multivariate_lkj_compiles_and_samples() {
     assert!(samples.iter().all(|s| s.is_finite()));
 }
 
+const MULTI_NORMAL_FULL_COV: &str = r#"
+data {
+  int<lower=1> K;
+  vector[K] y;
+  matrix[K, K] Sigma;
+}
+parameters {
+  vector[K] mu;
+}
+model {
+  mu ~ normal(0, 5);
+  y  ~ multi_normal(mu, Sigma);
+}
+"#;
+
+const MULTI_NORMAL_FULL_COV_DATA: &str = r#"{
+  "K": 2,
+  "y": [1.0, 2.0],
+  "Sigma": [[4.0, 2.0], [2.0, 3.0]]
+}"#;
+
+#[test]
+fn multi_normal_full_cov_compiles_and_samples() {
+    let mut model = StanModel::new(MULTI_NORMAL_FULL_COV, MULTI_NORMAL_FULL_COV_DATA).unwrap();
+    assert_eq!(model.n_params(), 2);
+
+    let init = vec![0.1; 2];
+    let n_warmup = 200;
+    let n_draws = 400;
+    let samples = model.sample(&init, n_warmup, n_draws, 42).unwrap();
+    assert_eq!(samples.len(), 2 * (n_warmup + n_draws) as usize);
+    assert!(samples.iter().all(|s| s.is_finite()));
+}
+
+const CATEGORICAL_MODEL: &str = r#"
+data {
+  int<lower=1> K;
+  int<lower=1> y;
+}
+parameters {
+  simplex[K] theta;
+}
+model {
+  y ~ categorical(theta);
+}
+"#;
+
+const CATEGORICAL_DATA: &str = r#"{
+  "K": 3,
+  "y": 2
+}"#;
+
+#[test]
+fn categorical_compiles_and_samples() {
+    let mut model = StanModel::new(CATEGORICAL_MODEL, CATEGORICAL_DATA).unwrap();
+    assert_eq!(model.n_params(), 2);
+
+    let init = vec![0.1; 2];
+    let n_warmup = 200;
+    let n_draws = 400;
+    let samples = model.sample(&init, n_warmup, n_draws, 42).unwrap();
+    assert_eq!(samples.len(), 2 * (n_warmup + n_draws) as usize);
+    assert!(samples.iter().all(|s| s.is_finite()));
+}
+
+const MULTINOMIAL_MODEL: &str = r#"
+data {
+  int<lower=1> K;
+  array[K] int<lower=0> y;
+}
+parameters {
+  simplex[K] theta;
+}
+model {
+  y ~ multinomial(theta);
+}
+"#;
+
+const MULTINOMIAL_DATA: &str = r#"{
+  "K": 3,
+  "y": [3, 5, 2]
+}"#;
+
+#[test]
+fn multinomial_compiles_and_samples() {
+    let mut model = StanModel::new(MULTINOMIAL_MODEL, MULTINOMIAL_DATA).unwrap();
+    assert_eq!(model.n_params(), 2);
+
+    let init = vec![0.1; 2];
+    let n_warmup = 200;
+    let n_draws = 400;
+    let samples = model.sample(&init, n_warmup, n_draws, 42).unwrap();
+    assert_eq!(samples.len(), 2 * (n_warmup + n_draws) as usize);
+    assert!(samples.iter().all(|s| s.is_finite()));
+}
+
 const GQ_RNG_MODEL: &str = r#"
 data {
   int<lower=0> N;

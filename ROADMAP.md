@@ -23,8 +23,8 @@ worked through below, ordered by effort.
 | | Supported | TODO |
 |---|---|---|
 | Continuous | `normal`, `std_normal`, `exponential`, `half_normal`, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta` | |
-| Discrete | `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2` | `multinomial`, `categorical` |
-| Multivariate | `multi_normal_cholesky`, `lkj_corr_cholesky`, `dirichlet` | `multi_normal` (full covariance) |
+| Discrete | `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2`, `categorical` | |
+| Multivariate | `multi_normal_cholesky`, `multi_normal` (full covariance), `lkj_corr_cholesky`, `dirichlet`, `multinomial` | |
 | Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors | |
 | Vector shape | `simplex`, `ordered`, `positive_ordered` | `unit_vector` |
 | Matrix constraints | `cholesky_factor_corr` | `cov_matrix`, `cholesky_factor_cov`, `corr_matrix` |
@@ -78,15 +78,15 @@ the wrong thing.
 - Rough size: comparable to or a bit larger than the `generated quantities`
   work (spans parser → runtime → codegen → wasm-api).
 
-### Missing distributions & constraint transforms — incremental, not hard
+### Missing constraint transforms — incremental, not hard
 
-- Distributions: `multi_normal` (full covariance, not just Cholesky),
-  `multinomial`, `categorical`
+- `multi_normal` (full covariance), `multinomial` and `categorical` are done —
+  see `stanwasm-runtime/src/distributions.rs`.
 - Constraint/shape transforms: `cov_matrix`, `cholesky_factor_cov`,
   `corr_matrix`, `unit_vector`
 - `lkj_corr_cholesky_rng` (needs the onion-method sampling algorithm —
   self-contained, known algorithm, just not implemented yet)
-- Each of these follows the same pattern as the ~15 distributions already
+- Each of these follows the same pattern as the distributions already
   implemented in `stanwasm-runtime/src/distributions.rs`: add the log-pdf/pmf
   (and Jacobian, if it's a constrained type) using the existing tape/matrix
   ops. Roughly half a day to a day each, no structural blocker.

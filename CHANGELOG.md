@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Three previously-TODO distributions: `multi_normal` (full covariance,
+  Cholesky-decomposed internally and routed through the existing
+  `multi_normal_cholesky` math), `multinomial`, and `categorical`. See
+  `stanwasm-runtime/src/distributions.rs`.
+
 ### Fixed
 
 - The gallery no longer hangs on "Loading WebAssembly bundle…" when the module
