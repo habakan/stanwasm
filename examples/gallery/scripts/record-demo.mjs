@@ -59,13 +59,27 @@ try {
   const pts = page.locator("svg.plot-wrap circle");
   const target = pts.nth(Math.floor((await pts.count()) / 2));
   const box = await target.boundingBox();
-  if (box) {
-    const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
-    await page.mouse.move(cx, cy);
+  const plot = await page.locator("svg.plot-wrap").boundingBox();
+  if (box && plot) {
+    const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    // Aim at the plot's own top-left corner rather than a fixed pixel offset.
+    // The point of this beat is that the robust fit ignores an outlier, which
+    // only reads if the outlier is genuinely far from the cloud.
+    const to = { x: plot.x + plot.width * 0.10, y: plot.y + plot.height * 0.08 };
+    const STEPS = 26;
+    await page.mouse.move(from.x, from.y);
     await page.mouse.down();
-    for (let i = 1; i <= 26; i++) { await page.mouse.move(cx - i * 3.4, cy - i * 6.2); await beat(33); }
+    for (let i = 1; i <= STEPS; i++) {
+      const t = i / STEPS;
+      await page.mouse.move(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+      await beat(33);
+    }
     await beat(800);
-    for (let i = 26; i >= 0; i--) { await page.mouse.move(cx - i * 3.4, cy - i * 6.2); await beat(18); }
+    for (let i = STEPS; i >= 0; i--) {
+      const t = i / STEPS;
+      await page.mouse.move(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+      await beat(18);
+    }
     await page.mouse.up();
   }
   await fill(3);
