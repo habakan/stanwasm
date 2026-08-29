@@ -139,13 +139,7 @@ export function App() {
       </div>
 
       {!isSandbox && (
-        <footer>
-          stanwasm · alpha · Apache-2.0 · embedded{" "}
-          <a href="https://github.com/pymc-devs/nuts-rs" target="_blank" rel="noreferrer">
-            nuts-rs
-          </a>{" "}
-          sampler
-        </footer>
+        <footer>stanwasm · alpha · Apache-2.0</footer>
       )}
     </div>
     </MathJaxProvider>

@@ -458,11 +458,6 @@ export function WasmSandbox() {
 
       <div className="note sandbox-footnote">
         All sampling runs in WebAssembly inside your browser. No data leaves your device.
-        For full Stan language coverage and a polished UI, see{" "}
-        <a href="https://stan-playground.flatironinstitute.org" target="_blank" rel="noreferrer">
-          Stan Playground
-        </a>
-        .
       </div>
     </div>
   );
