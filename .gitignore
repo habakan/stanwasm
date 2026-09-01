@@ -17,6 +17,10 @@ dist
 # local tooling scratch (audit reports, caches)
 /.gstack/
 
+# agent instructions — personal setup, not part of the project
+/AGENTS.md
+/CLAUDE.md
+
 # editor
 .idea
 .vscode
