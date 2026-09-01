@@ -1,6 +1,6 @@
 //! End-to-end log_prob and gradient tests against hand-computed values.
 
-use stanwasm_runtime::{Env, Model};
+use stanwasm_runtime::{Env, Model, Val};
 
 const LINEAR_REGRESSION: &str = r#"
 data {
@@ -353,5 +353,34 @@ model { atan2(my, mx) ~ normal(hd, 1.0); }
     assert!(
         grad[0].abs() < 1e-9,
         "hd at the true angle should be a mode: {grad:?}"
+    );
+}
+
+#[test]
+fn matrix_times_vector_is_the_matrix_product() {
+    // `X * beta` used to be a clean ShapeMismatch, so the standard regression idiom
+    // had to be written as a loop.
+    let src = r#"
+data { matrix[2,2] X; vector[2] y; }
+parameters { vector[2] b; }
+model { y ~ normal(X * b, 1.0); }
+"#;
+    let mut data = Env::new();
+    data.set(
+        "X",
+        Val::Vec(vec![
+            Val::Vec(vec![Val::Num(1.0), Val::Num(2.0)]),
+            Val::Vec(vec![Val::Num(3.0), Val::Num(4.0)]),
+        ]),
+    );
+    data.set_vector("y", &[1.0, 2.0]);
+    let model = Model::parse_and_load(src, data).unwrap();
+
+    // b = (1, 0) gives X*b = (1, 3), so the residuals are (0, -1).
+    let (lp, grad) = model.log_prob_grad(&[1.0, 0.0]).unwrap();
+    assert!(close(lp, -0.5 - 2.0 * 0.9189385332, 1e-9), "lp = {lp}");
+    assert!(
+        close(grad[0], -3.0, 1e-9) && close(grad[1], -4.0, 1e-9),
+        "grad = {grad:?}"
     );
 }

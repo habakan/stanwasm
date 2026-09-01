@@ -42,6 +42,52 @@ pub fn mat_mdiv_ltri_low(t: &mut Tape, l_rows: &[Val], b: &[Val]) -> Vec<Val> {
 
 /// Cholesky decomposition of a symmetric positive-definite matrix: `Σ = L Lᵀ`,
 /// rows of `Val::Vec`. Lets full-covariance `multi_normal` reuse the Cholesky math.
+/// `A * b` where `a_rows` is a vec of row containers. Returns the length-rows vector.
+pub fn mat_vec_mul(t: &mut Tape, a_rows: &[Val], b: &[Val]) -> Vec<Val> {
+    a_rows
+        .iter()
+        .map(|row| {
+            let cells = match row {
+                Val::Vec(xs) => xs.as_slice(),
+                _ => std::slice::from_ref(row),
+            };
+            let mut acc = Val::Num(0.0);
+            for (x, y) in cells.iter().zip(b) {
+                let p = v_mul(t, x, y);
+                acc = v_add(t, &acc, &p);
+            }
+            acc
+        })
+        .collect()
+}
+
+/// `A * B`, both vecs of row containers. `b_rows` is indexed by row, so the inner
+/// loop walks `b_rows[k][j]` rather than a transposed copy.
+pub fn mat_mat_mul(t: &mut Tape, a_rows: &[Val], b_rows: &[Val], cols: usize) -> Vec<Val> {
+    let cell = |t: &mut Tape, row: &Val, j: usize| -> Val {
+        let cells = match row {
+            Val::Vec(xs) => xs.clone(),
+            _ => vec![row.clone()],
+        };
+        let mut acc = Val::Num(0.0);
+        for (k, x) in cells.iter().enumerate() {
+            let Some(brow) = b_rows.get(k) else { break };
+            let bv = match brow {
+                Val::Vec(xs) => xs.get(j).cloned(),
+                other => Some(other.clone()),
+            };
+            let Some(bv) = bv else { break };
+            let p = v_mul(t, x, &bv);
+            acc = v_add(t, &acc, &p);
+        }
+        acc
+    };
+    a_rows
+        .iter()
+        .map(|row| Val::Vec((0..cols).map(|j| cell(t, row, j)).collect()))
+        .collect()
+}
+
 pub fn cholesky_decompose(t: &mut Tape, sigma_rows: &[Val]) -> Vec<Val> {
     let n = sigma_rows.len();
     let mut l: Vec<Vec<Val>> = vec![Vec::new(); n];

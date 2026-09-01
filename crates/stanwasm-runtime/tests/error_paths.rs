@@ -282,11 +282,13 @@ fn comparing_containers_is_an_error() {
 }
 
 #[test]
-fn matrix_times_vector_is_an_error_not_a_wrong_answer() {
+fn matrix_times_vector_with_a_mismatched_inner_dimension_is_an_error() {
+    // The product itself is supported; only dimensions that cannot meet are rejected,
+    // and `zip` would otherwise truncate to the shorter operand.
     let e = err(
-        "data { matrix[2,2] X; vector[2] y; } parameters { vector[2] b; } \
+        "data { matrix[2,3] X; vector[2] y; } parameters { vector[2] b; } \
          model { y ~ normal(X * b, 1); }",
-        r#"{"X":[[1,0],[0,1]],"y":[1,2]}"#,
+        r#"{"X":[[1,0,1],[0,1,1]],"y":[1,2]}"#,
         &[0.0, 0.0],
     );
     assert!(e.contains("shape mismatch"), "{e}");

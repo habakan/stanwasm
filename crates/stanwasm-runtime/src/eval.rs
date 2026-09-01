@@ -3,6 +3,7 @@
 use crate::distributions::{eval_dist, eval_sample_vec};
 use crate::env::Env;
 use crate::error::EvalError;
+use crate::matrix;
 use crate::ops::{
     v_abs, v_acos, v_add, v_asin, v_atan, v_cos, v_div, v_exp, v_inv_logit, v_lgamma, v_log,
     v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_sub, v_tan, v_tanh,
@@ -42,7 +43,7 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
             Ok(match op.as_str() {
                 "+" => v_add(t, &lv, &rv),
                 "-" => v_sub(t, &lv, &rv),
-                "*" => v_mul(t, &lv, &rv),
+                "*" => mul_or_matmul(t, &lv, &rv)?,
                 // `int / int` truncates toward zero (`N / 2` with `N = 3` is 1).
                 // Int-ness is a property of the declarations, so it comes from the tree.
                 "/" if is_int_expr(l, env) && is_int_expr(r, env) => {
@@ -132,6 +133,27 @@ pub fn stan_type_is_int(typ: &StanType) -> bool {
     }
 }
 
+/// Stan's `*` is a matrix product when the ranks call for one and element-wise
+/// otherwise; `check_binop_shapes` has already rejected the mismatched cases.
+fn mul_or_matmul(t: &mut Tape, lhs: &Val, rhs: &Val) -> Result<Val> {
+    use Shape::*;
+    match (lhs.shape(), rhs.shape()) {
+        (Matrix(_, Some(_)), Vector(_)) => {
+            let (Val::Vec(a), Val::Vec(b)) = (lhs, rhs) else {
+                return Err(EvalError::NotAScalar);
+            };
+            Ok(Val::Vec(matrix::mat_vec_mul(t, a, b)))
+        }
+        (Matrix(_, Some(_)), Matrix(_, Some(cb))) => {
+            let (Val::Vec(a), Val::Vec(b)) = (lhs, rhs) else {
+                return Err(EvalError::NotAScalar);
+            };
+            Ok(Val::Vec(matrix::mat_mat_mul(t, a, b, cb)))
+        }
+        _ => Ok(v_mul(t, lhs, rhs)),
+    }
+}
+
 /// Reject operand shapes this runtime would otherwise answer wrongly: `ops::v_*`
 /// broadcast and `zip` truncates, so `vector[3] + vector[2]` would quietly work.
 fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
@@ -142,12 +164,18 @@ fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
         // scalar ⊙ container broadcasts element-wise, in both directions.
         (Scalar, _) | (_, Scalar) => true,
         (Vector(a), Vector(b)) => a == b,
-        // Both dimensions must agree; a ragged operand (`cols: None`) never
-        // matches, so it can't be zipped down silently either.
+        // `*` is a matrix product, so it needs the inner dimensions to meet; every
+        // other operator is element-wise and needs both to agree. A ragged operand
+        // (`cols: None`) matches nothing, so it can't be zipped down silently.
+        (Matrix(_, Some(ca)), Matrix(rb, Some(cb))) if op == "*" => {
+            let _ = cb;
+            ca == rb
+        }
         (Matrix(ra, Some(ca)), Matrix(rb, Some(cb))) => ra == rb && ca == cb,
         (Matrix(..), Matrix(..)) => false,
-        // Matrix × vector / vector × matrix is linear algebra, not
-        // element-wise broadcast — not implemented (see `EvalError::NotAScalar`).
+        // `*` on these is linear algebra, handled in eval_binop; any other operator
+        // would be an element-wise broadcast across mismatched ranks.
+        (Matrix(_, Some(ca)), Vector(b)) => op == "*" && ca == b,
         (Matrix(..), Vector(_)) | (Vector(_), Matrix(..)) => false,
     };
     if ok {

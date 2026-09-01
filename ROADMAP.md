@@ -30,7 +30,7 @@ worked through below, ordered by effort.
 | Matrix constraints | `cholesky_factor_corr` | `cov_matrix`, `cholesky_factor_cov`, `corr_matrix` |
 | Blocks | `data`, `parameters`, `transformed parameters`, `model`, `generated quantities` | `functions { ... }` |
 | Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr` | indexed assignment (`y_rep[n] = ...`) |
-| Operators | arithmetic, comparison, logical, `^` | matrix product — `X * beta` is not one |
+| Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`) | element-wise `.*` `./` |
 | `_rng` | scalar draws for every distribution above, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | vectorized scalar `_rng`, `lkj_corr_cholesky_rng` |
 | Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2` | `log10`, `dot_product`, `norm` |
 
@@ -135,14 +135,10 @@ validation. Still open:
   are small next to the payoff: broadcasting in `rng::dispatch` plus lvalue
   resolution in `eval::eval_stmt`.
 
-- **`Val::Vec` is used for both math vectors and matrices, and `*` is always
-  element-wise.** `X * beta` (matrix-vector product, a standard Stan idiom)
-  is now a clean `ShapeMismatch` error rather than a wrong answer, but real
-  matrix multiplication still isn't available to user-written model code —
-  the internal distributions that need it (`multi_normal_cholesky`, etc.)
-  route around it via dedicated helpers in `matrix.rs`. Needs a type-aware
-  dispatch (or a distinct operator) before matrices support general linear
-  algebra syntax.
+- **`vector * vector` is element-wise, where Stan rejects it.** `*` now dispatches
+  on shape, so matrix-vector and matrix-matrix products work, but two vectors still
+  multiply element-wise instead of erroring the way Stan does. Stan spells that `.*`,
+  which is unimplemented, so nothing yet distinguishes the two.
 
 - **`transformed data { ... }` is folded into `model`.** Its statements are
   appended to the model block, so they re-run on every trace instead of once
