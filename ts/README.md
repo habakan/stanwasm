@@ -18,13 +18,16 @@ No server, no cmdstan, no round trip.
 
 ## Browser support
 
-**Does not run on Safari, or on any browser on iOS or iPadOS.** The bundle
-contains [relaxed SIMD](https://github.com/WebAssembly/relaxed-simd)
-instructions, which WebKit rejects at compile time, so the module never
-instantiates. Chrome, Edge, Firefox and Node.js run it. The instructions come
-from `nuts-rs` → `faer` → `pulp` and there is no build flag that removes them
-today — see
-[the README](https://github.com/habakan/stanwasm#browser-support).
+Chrome, Edge, Firefox, Safari and Node.js, plus every browser on iOS and
+iPadOS. Verified under Playwright's three engines: Chromium 151, Firefox 153
+and WebKit 26.5 all instantiate the module and sample.
+
+Safari used to fail outright — WebKit rejects a module containing
+[relaxed SIMD](https://github.com/WebAssembly/relaxed-simd) opcodes at
+validation time, and `pulp` emitted them. This package ships the prebuilt wasm
+with that resolved, so nothing is required of you; see
+[the README](https://github.com/habakan/stanwasm#browser-support) for the
+details and the one caveat that applies to the Rust crate.
 
 ## Install
 

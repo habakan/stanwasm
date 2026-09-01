@@ -17,28 +17,41 @@ sampling.
 
 ## Browser support
 
-> **Does not run on Safari, or on any browser on iOS or iPadOS.**
+Chrome, Edge, Firefox, Safari, and Node.js, plus every browser on iOS and
+iPadOS. Verified by loading the gallery under Playwright's three engines:
+Chromium 151, Firefox 153 and WebKit 26.5 all instantiate the module and
+sample, and the posterior means agree across them.
 
-The bundle contains [relaxed SIMD](https://github.com/WebAssembly/relaxed-simd)
-instructions, which those engines reject at compile time — the module fails to
-instantiate at all, so nothing on the page works. Every browser on iOS and
-iPadOS uses WebKit, so this is the platform, not the browser you picked.
+> **Safari support depends on a dependency fix that has not shipped yet.** The
+> npm package is unaffected — it carries the prebuilt wasm, so
+> `npm install stanwasm` gets it. If you depend on the `stanwasm` **crate** from
+> crates.io and build the wasm yourself, you need the same patch in your own
+> workspace (below) until the fix is released.
 
-| | |
-|---|---|
-| Works | Chrome and Edge (relaxed SIMD since Chrome 114), Firefox, Node.js, and Chromium-based Android browsers |
-| Does not work | Safari, and every browser on iOS / iPadOS |
+WebKit rejects a module containing
+[relaxed SIMD](https://github.com/WebAssembly/relaxed-simd) opcodes at
+validation time. Runtime dispatch does not help: wasm validates a whole module
+up front, so instructions that are never reached still fail it — the module
+never instantiates and nothing on the page works. The opcodes come from
+`nuts-rs` → `faer` → `pulp`, which attaches
+`#[target_feature(enable = "relaxed-simd")]` to its wasm kernels.
 
-Verified by loading the gallery under Playwright's three engines: Chromium 151
-and Firefox 153 instantiate the module; WebKit 26.5 rejects it.
+pulp made this optional in [pulp#30](https://github.com/sarah-quinones/pulp/pull/30)
+(a `relaxed-simd` feature, on by default), released in 0.22.3, and faer already
+opts out. nuts-rs is the last crate in the graph pulling pulp's default
+features, and Cargo cannot subtract a transitive default feature, so this
+workspace pins a fork until
+[nuts-rs#76](https://github.com/pymc-devs/nuts-rs/pull/76) is merged and
+released:
 
-The instructions come from `nuts-rs` → `faer` → `pulp`, which attaches
-`#[target_feature(enable = "relaxed-simd")]` to its wasm kernels. It dispatches
-on a runtime flag, but that does not help here: wasm validates a whole module
-up front, so instructions that are never reached still fail the module. There
-is no build flag, `wasm-opt` pass, or dependency feature that removes them
-today — `-C target-feature=-relaxed-simd` does not, because the per-function
-attribute overrides it. Fixing this needs a change in `pulp`.
+```toml
+[patch.crates-io]
+nuts-rs = { git = "https://github.com/habakan/nuts-rs", rev = "61f261b26815be8cb21d5eef0840ba9f869d3af4" }
+```
+
+Dropping relaxed SIMD costs nothing measurable at these parameter dimensions:
+-4.3% and 0.0% on two models (1000 warmup + 1000 draws, median of 7 runs,
+Chromium). The bundle grows about 2 KB.
 
 ## Quick start (browser / Node.js)
 

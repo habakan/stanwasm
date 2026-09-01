@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **stanwasm now runs on Safari and on iOS/iPadOS.** WebKit rejects a module
+  containing relaxed SIMD opcodes at validation time, so the bundle previously
+  failed to instantiate at all on those platforms. The opcodes came from
+  `nuts-rs` → `faer` → `pulp`. pulp made them optional in
+  [pulp#30](https://github.com/sarah-quinones/pulp/pull/30) (a `relaxed-simd`
+  feature, on by default) and released it in 0.22.3; faer already opts out.
+  nuts-rs was the last crate in the graph pulling pulp's default features, and
+  Cargo cannot subtract a transitive default feature, so the workspace pins a
+  fork by rev until [nuts-rs#76](https://github.com/pymc-devs/nuts-rs/pull/76)
+  is merged and released. The pin covers workspace builds and therefore the npm
+  package, which ships the prebuilt wasm; the `stanwasm` crate published to
+  crates.io still resolves plain nuts-rs, because Cargo does not carry
+  `[patch]` into a published crate.
+
+  Verified under Playwright: Chromium 151, Firefox 153 and WebKit 26.5 all
+  instantiate and sample, with posterior means agreeing across engines, and the
+  gallery renders in WebKit at an iPhone viewport. Dropping relaxed SIMD costs
+  nothing measurable at these parameter dimensions (-4.3% and 0.0% on two
+  models, 1000 warmup + 1000 draws, median of 7 runs, Chromium); the bundle
+  grows about 2 KB.
+
 - Three previously-TODO distributions: `multi_normal` (full covariance,
   Cholesky-decomposed internally and routed through the existing
   `multi_normal_cholesky` math), `multinomial`, and `categorical`. See
@@ -25,14 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
-- README and the npm README now say plainly that **stanwasm does not run on
-  Safari or on any browser on iOS/iPadOS**. The bundle carries relaxed SIMD
-  instructions, emitted by `nuts-rs` → `faer` → `pulp` via
-  `#[target_feature(enable = "relaxed-simd")]`, and WebKit rejects the whole
-  module at compile time. Runtime dispatch does not help — wasm validates the
-  entire module up front — and neither `-C target-feature=-relaxed-simd`, a
-  `wasm-opt` pass, nor any dependency feature removes them today. Measured
-  under Playwright: Chromium 151 and Firefox 153 load it, WebKit 26.5 does not.
+- README and the npm README now describe Safari and iOS/iPadOS as supported,
+  with the one caveat that applies to the crates.io crate. An earlier revision
+  of this section documented the platform as unsupported; that was accurate
+  when written and is superseded by the fix above.
 
 ## [0.1.0] — 2026-08-28 (alpha)
 
