@@ -414,7 +414,10 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
                 if y.len() != mu.len() || sigma_rows.len() != y.len() {
                     return Err(wrong_type(
                         name,
-                        &format!("mu and Sigma sized to match the variate (length {})", y.len()),
+                        &format!(
+                            "mu and Sigma sized to match the variate (length {})",
+                            y.len()
+                        ),
                         &args[0],
                     ));
                 }
@@ -439,7 +442,13 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
                 }
                 multinomial_lpmf(t, y, theta)
             }
-            _ => return Err(wrong_type(name, "an integer count array and a simplex theta", x)),
+            _ => {
+                return Err(wrong_type(
+                    name,
+                    "an integer count array and a simplex theta",
+                    x,
+                ))
+            }
         },
         "lkj_corr_cholesky" => match x {
             Val::Vec(l_rows) => lkj_corr_cholesky_lpdf(t, l_rows, &args[0]),
@@ -577,7 +586,10 @@ mod tests {
         }
         let log_coeff = (fact(6) / (fact(1) * fact(2) * fact(3))).ln();
         let expected = log_coeff + 1.0 * 0.2_f64.ln() + 2.0 * 0.3_f64.ln() + 3.0 * 0.5_f64.ln();
-        assert!((got - expected).abs() < 1e-9, "got {got}, expected {expected}");
+        assert!(
+            (got - expected).abs() < 1e-9,
+            "got {got}, expected {expected}"
+        );
     }
 
     /// `multi_normal_lpdf` Cholesky-decomposes Σ internally; check it agrees
