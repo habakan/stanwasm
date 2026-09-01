@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { StanModel } from "stanwasm";
 import { GraphicalModel } from "../graphicalModel";
+import { Collapsible } from "../Collapsible";
 
 // Neal's funnel: a hard 2D posterior with no closed form and a notoriously
 // difficult geometry (wide at large y, vanishingly narrow at small y) — the
@@ -417,17 +418,19 @@ export function McmcVisualizer() {
 
   return (
     <div className="demo-layout">
-      <div className="demo-model">
-        <div className="model-diagram">
-          <GraphicalModel stanCode={STAN_CODE} />
-        </div>
-        <div className="code-blocks">
-          <div className="code-block">
-            <h4>Stan model</h4>
-            <pre>{STAN_CODE}</pre>
+      <Collapsible label="The model">
+        <div className="demo-model">
+          <div className="model-diagram">
+            <GraphicalModel stanCode={STAN_CODE} />
+          </div>
+          <div className="code-blocks">
+            <div className="code-block">
+              <h4>Stan model</h4>
+              <pre>{STAN_CODE}</pre>
+            </div>
           </div>
         </div>
-      </div>
+      </Collapsible>
 
       <div className="demo-interactive">
         <p className="hint">
@@ -487,32 +490,36 @@ export function McmcVisualizer() {
               acceptance rate: {stepsShown > 0 ? ((totalAccept / (stepsShown * numChains)) * 100).toFixed(0) : "…"}%
             </p>
           </div>
-          <div className="mcmc-panel">
-            <h4>Ground Truth</h4>
-            <div className="canvas-stack">
-              <canvas ref={truthRef} width={PANEL_W} height={PANEL_H} className="plot-wrap" />
+          <Collapsible label="Ground truth">
+            <div className="mcmc-panel">
+              <h4>Ground Truth</h4>
+              <div className="canvas-stack">
+                <canvas ref={truthRef} width={PANEL_W} height={PANEL_H} className="plot-wrap" />
+              </div>
+              <p className="panel-stat">the funnel's actual density — no fog, nothing sampled</p>
             </div>
-            <p className="panel-stat">the funnel's actual density — no fog, nothing sampled</p>
-          </div>
+          </Collapsible>
         </div>
 
-        <pre className="wasm-log">
-          {nutsChainLog.map((entry, c) => {
-            const color = CHAIN_COLORS[c % CHAIN_COLORS.length];
-            const label = `chain ${c + 1}`.padEnd(8);
-            if (!entry) return `${label} …\n`;
-            const phaseTag = entry.tuning ? "warmup  " : "sampling";
-            const divergedTag = entry.diverging ? "  DIVERGED" : "";
-            return (
-              <span key={c} style={{ color }}>
-                {label}
-                draw {String(entry.draw).padStart(4)}/{TOTAL_ITERS}  {phaseTag}  step_size={entry.stepSize.toFixed(4)}  leapfrog_steps={String(entry.numSteps).padStart(2)}
-                {divergedTag}
-                {"\n"}
-              </span>
-            );
-          })}
-        </pre>
+        <Collapsible label="Per-chain log">
+          <pre className="wasm-log">
+            {nutsChainLog.map((entry, c) => {
+              const color = CHAIN_COLORS[c % CHAIN_COLORS.length];
+              const label = `chain ${c + 1}`.padEnd(8);
+              if (!entry) return `${label} …\n`;
+              const phaseTag = entry.tuning ? "warmup  " : "sampling";
+              const divergedTag = entry.diverging ? "  DIVERGED" : "";
+              return (
+                <span key={c} style={{ color }}>
+                  {label}
+                  draw {String(entry.draw).padStart(4)}/{TOTAL_ITERS}  {phaseTag}  step_size={entry.stepSize.toFixed(4)}  leapfrog_steps={String(entry.numSteps).padStart(2)}
+                  {divergedTag}
+                  {"\n"}
+                </span>
+              );
+            })}
+          </pre>
+        </Collapsible>
 
         <div className="legend">
           <span><i className="dot raw" style={{ background: "#c2410c", borderColor: "#c2410c" }} /> revealed (sampled)</span>
@@ -527,20 +534,22 @@ export function McmcVisualizer() {
           ))}
         </div>
 
-        <div className="note">
-          Both panels call the same underlying wasm model, one draw per animation frame, for every chain
-          — {N_WARMUP} warmup + {N_DRAWS} sampling draws each. NUTS's step-by-step API
-          (<code>startStepSampling</code>/<code>stepDraw</code>) keeps the sampler's state alive between
-          calls instead of running the whole chain in one shot, so what you're watching is the actual
-          computation happening now, not a replay of a finished run. The gray haze is fog of war: it
-          starts opaque everywhere and clears — revealing the true orange density underneath — wherever
-          a draw actually lands, recomputed from a live 2D histogram of every draw so far each frame.
-          The log below is one line per NUTS chain, straight from that chain's own <code>stepDraw()</code>
-          call each frame — <code>step_size</code> and <code>leapfrog_steps</code> are nuts-rs's own live
-          dual-averaging adaptation and trajectory-length search, not values this app computes, and they
-          vary chain to chain because each chain really is its own independent sampler instance running
-          in wasm right now, not a shared script driving identical-looking lines.
-        </div>
+        <Collapsible label="How this works">
+          <div className="note">
+            Both panels call the same underlying wasm model, one draw per animation frame, for every chain
+            — {N_WARMUP} warmup + {N_DRAWS} sampling draws each. NUTS's step-by-step API
+            (<code>startStepSampling</code>/<code>stepDraw</code>) keeps the sampler's state alive between
+            calls instead of running the whole chain in one shot, so what you're watching is the actual
+            computation happening now, not a replay of a finished run. The gray haze is fog of war: it
+            starts opaque everywhere and clears — revealing the true orange density underneath — wherever
+            a draw actually lands, recomputed from a live 2D histogram of every draw so far each frame.
+            The log below is one line per NUTS chain, straight from that chain's own <code>stepDraw()</code>
+            call each frame — <code>step_size</code> and <code>leapfrog_steps</code> are nuts-rs's own live
+            dual-averaging adaptation and trajectory-length search, not values this app computes, and they
+            vary chain to chain because each chain really is its own independent sampler instance running
+            in wasm right now, not a shared script driving identical-looking lines.
+          </div>
+        </Collapsible>
       </div>
     </div>
   );

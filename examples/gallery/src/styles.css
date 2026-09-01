@@ -27,6 +27,11 @@ body {
   max-width: 1320px;
   margin: 0 auto;
   height: 100vh;
+  /* iOS Safari counts the collapsible toolbar as part of 100vh, so the last
+     ~100px of a 100vh box sits under the chrome with no way to scroll to it —
+     .app is overflow:hidden, so that space is simply lost. dvh tracks the
+     actually-visible height. */
+  height: 100dvh;
   padding: 32px 24px 16px;
   display: flex;
   flex-direction: column;
@@ -830,4 +835,224 @@ footer a {
   background: #fff;
   color: #b91c1c;
   font-size: 0.85em;
+}
+
+/* ---- collapsible sections (narrow viewports only) --------------------- */
+
+/* Rendered by Collapsible.tsx, which only emits these on a narrow viewport —
+   on a wide one the children are rendered bare and none of this applies. */
+.collapsible {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  background: white;
+  margin: 0 0 12px;
+}
+
+.collapsible > summary {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  color: #c2410c;
+}
+
+.collapsible[open] > summary::before {
+  content: "▾";
+}
+
+.collapsible[open] > summary {
+  border-bottom: 1px solid #eee;
+}
+
+.collapsible-body {
+  padding: 12px;
+}
+
+/* The model card and the note bring their own frame; inside a collapsible
+   that frame is the collapsible's, so drop the inner one rather than nest
+   two borders. */
+.collapsible-body > .demo-model,
+.collapsible-body > .note {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+.collapsible-body > .note {
+  background: transparent;
+  border-left: 3px solid #c2410c;
+  padding-left: 12px;
+}
+
+/* ---- tablet ----------------------------------------------------------- */
+
+/* 300px model card + 340px interactive + 24px gap fits from 664px up, so an
+   iPad in portrait technically clears it — but two columns that narrow leaves
+   the plot smaller than the diagram beside it. Keep them stacked until there
+   is room for the interactive column to actually be the bigger one. */
+@media (max-width: 1024px) {
+  .demo-model,
+  .demo-interactive {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  /* Horizontal scroll inside a code block is close to undiscoverable on a
+     touch screen with no visible scrollbar — the line just looks truncated.
+     Wrapping is the lesser evil for Stan source at these widths. */
+  .code-block pre,
+  pre.wasm-log {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ---- phone ------------------------------------------------------------ */
+
+@media (max-width: 720px) {
+  /* The app shell is a fixed-height flex column, so every pixel of chrome is
+     taken straight out of the one scrollable region. At 844px tall the header,
+     tab bar, description and footer were consuming 342px of it — 40% of the
+     screen — leaving a 502px window onto content 2400px long. */
+  .app {
+    padding: 14px 14px 8px;
+  }
+
+  h1 {
+    font-size: 19px;
+  }
+
+  .tagline {
+    font-size: 12.5px;
+    margin-bottom: 12px;
+  }
+
+  /* One scrolling row rather than two wrapped ones: the second row cost 40px
+     of a 502px viewport to show tabs that are one swipe away regardless. */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-bottom: 14px;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    white-space: nowrap;
+    padding: 8px 12px;
+  }
+
+  .tab-desc {
+    margin: -8px 0 12px;
+  }
+
+  footer {
+    margin-top: 10px;
+    padding-top: 10px;
+    font-size: 11px;
+  }
+
+  /* Plots are the reason the page exists — give them the full width rather
+     than the 320px cap that suited a multi-column desktop row. */
+  .canvas-stack {
+    max-width: 100%;
+  }
+
+  /* One panel per row, each the full width. The row is a flex container and
+     one of its children is now a <details> rather than a .mcmc-panel, so the
+     `flex: 1 1 200px` shares no longer add up — stacking sidesteps the
+     arithmetic entirely and is what a phone wants regardless. */
+  .mcmc-panels {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .mcmc-panel {
+    min-width: 0;
+  }
+
+  .demo-layout {
+    gap: 14px;
+  }
+
+  .demo-model {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .model-diagram {
+    max-width: 100%;
+  }
+
+  /* Sized for a desktop editor; on a phone 60vh of a short viewport is both
+     too small to be an editor and too big to scroll past. */
+  .stan-editor-wrap {
+    min-height: 300px;
+  }
+
+  /* A translucent panel floating over the top-right of a 360px-wide editor
+     covers the code it is meant to annotate. The same diagram is available
+     in the other tabs' model cards. */
+  .diagram-overlay {
+    display: none;
+  }
+
+  /* Six fixed columns do not fit; let the row scroll as a unit instead of
+     letting it set the width of the whole page. */
+  .results {
+    overflow-x: auto;
+  }
+
+  .param-row {
+    min-width: 520px;
+  }
+
+  /* The sandbox is an IDE layout: a height:100% column whose panels divide a
+     fixed height between them. That needs a viewport tall enough to divide.
+     On a phone the shares round down to less than their own headers and the
+     panels draw on top of each other, so stop dividing a fixed height and let
+     the tab scroll like every other one. */
+  .sandbox,
+  .sandbox-side,
+  .sandbox-section:not(.collapsed),
+  .stan-editor-row {
+    height: auto;
+    min-height: 0;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .sandbox-section-body {
+    flex: 0 0 auto;
+    max-height: 320px;
+  }
+
+  .stan-editor-col {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .sandbox-side {
+    min-width: 0;
+    width: 100%;
+  }
 }

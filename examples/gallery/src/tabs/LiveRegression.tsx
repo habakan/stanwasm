@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { StanModel } from "stanwasm";
 import { GraphicalModel } from "../graphicalModel";
+import { Collapsible } from "../Collapsible";
 
 // Two likelihoods over the same data, fit side by side. `normal` has a
 // closed-form (conjugate) posterior — no sampler needed. `student_t` with a
@@ -232,36 +233,37 @@ export function LiveRegression() {
 
   return (
     <div className="demo-layout">
-      <div className="demo-model">
-        <div className="model-diagram">
-          <GraphicalModel stanCode={STAN_ROBUST} />
-        </div>
-        <div className="code-blocks">
-          <div className="code-block">
-            <h4>Stan model (both fits share everything but the last line)</h4>
-            <pre>
-{`data {
-  int<lower=0> N;
-  vector[N] x;
-  vector[N] y;
-}
-parameters {
-  real alpha;
-  real beta;
-  real<lower=0> sigma;
-}
-model {
-  alpha ~ normal(0, 10);
-  beta  ~ normal(0, 10);
-  sigma ~ exponential(1);
-`}<span style={{ color: "#c2410c", fontWeight: 600 }}>{"  y ~ student_t(4, alpha + beta * x, sigma); // robust\n"}</span>
-<span style={{ color: "#64748b" }}>{"  // y ~ normal(alpha + beta * x, sigma);   // normal\n"}</span>
-{"}"}
-            </pre>
+      <Collapsible label="The models">
+        <div className="demo-model">
+          <div className="model-diagram">
+            <GraphicalModel stanCode={STAN_ROBUST} />
+          </div>
+          <div className="code-blocks">
+            <div className="code-block">
+              <h4>Stan model (both fits share everything but the last line)</h4>
+              <pre>
+  {`data {
+    int<lower=0> N;
+    vector[N] x;
+    vector[N] y;
+  }
+  parameters {
+    real alpha;
+    real beta;
+    real<lower=0> sigma;
+  }
+  model {
+    alpha ~ normal(0, 10);
+    beta  ~ normal(0, 10);
+    sigma ~ exponential(1);
+  `}<span style={{ color: "#c2410c", fontWeight: 600 }}>{"  y ~ student_t(4, alpha + beta * x, sigma); // robust\n"}</span>
+  <span style={{ color: "#64748b" }}>{"  // y ~ normal(alpha + beta * x, sigma);   // normal\n"}</span>
+  {"}"}
+              </pre>
+            </div>
           </div>
         </div>
-      </div>
-
+      </Collapsible>
       <div className="demo-interactive">
       <p className="hint">
         Click empty space to add a point · drag a point to move it · double-click a point to remove it
@@ -354,12 +356,14 @@ model {
 
       <button onClick={() => setPoints(INITIAL_POINTS)}>Reset points</button>
 
-      <div className="note">
-        Each drag frame recompiles both models, runs {N_WARMUP} warmup + {N_DRAWS} NUTS draws for each,
-        and re-derives the constrained posteriors — all inside WebAssembly, in this tab. Nothing is sent
-        anywhere. The robust fit's Student-t likelihood has no conjugate posterior — this is a case
-        sampling is actually for.
-      </div>
+      <Collapsible label="How this works">
+        <div className="note">
+          Each drag frame recompiles both models, runs {N_WARMUP} warmup + {N_DRAWS} NUTS draws for each,
+          and re-derives the constrained posteriors — all inside WebAssembly, in this tab. Nothing is sent
+          anywhere. The robust fit's Student-t likelihood has no conjugate posterior — this is a case
+          sampling is actually for.
+        </div>
+      </Collapsible>
       </div>
     </div>
   );

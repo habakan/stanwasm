@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { StanModel } from "stanwasm";
 import { GraphicalModel } from "../graphicalModel";
+import { Collapsible } from "../Collapsible";
 
 // Classic partial-pooling model (the "eight schools" structure, non-centered
 // parameterization), framed here as six marketing campaigns' observed CTR
@@ -258,18 +259,19 @@ export function HierarchicalShrinkage() {
 
   return (
     <div className="demo-layout">
-      <div className="demo-model">
-        <div className="model-diagram">
-          <GraphicalModel stanCode={STAN_CODE} />
-        </div>
-        <div className="code-blocks">
-          <div className="code-block">
-            <h4>Stan model</h4>
-            <pre>{STAN_CODE}</pre>
+      <Collapsible label="The model">
+        <div className="demo-model">
+          <div className="model-diagram">
+            <GraphicalModel stanCode={STAN_CODE} />
+          </div>
+          <div className="code-blocks">
+            <div className="code-block">
+              <h4>Stan model</h4>
+              <pre>{STAN_CODE}</pre>
+            </div>
           </div>
         </div>
-      </div>
-
+      </Collapsible>
       <div className="demo-interactive">
       <p className="hint">
         Six A/B tests' observed CTR lift. Homepage Banner, Email Subject Line, and Checkout Redesign ran
@@ -420,19 +422,21 @@ export function HierarchicalShrinkage() {
 
       <button onClick={() => setGroups(INITIAL_GROUPS)}>Reset campaigns</button>
 
-      <div className="note">
-        Every drag frame recompiles the model and runs {N_WARMUP} warmup + {N_DRAWS} NUTS draws — all
-        inside WebAssembly, in this tab. Notice that Landing Pg's, Influencer's, and Referral's flashy
-        small-sample numbers (+22%, −8%, +14%) all sit much closer to each other's partially-pooled
-        estimate than their raw observed values do — a hierarchical model automatically discounts a
-        dramatic result that came from a few hundred visitors, without anyone hand-writing a "small
-        sample size" rule. The wide shaded curve is the population distribution N(μ, τ), and its width
-        (τ) is itself estimated from how much the six campaigns agree with each other: make them more
-        consistent and watch it narrow; spread them out and watch it widen. The small violin at each
-        campaign is that campaign's own posterior specifically — a kernel density estimate over its real
-        200 NUTS draws from this resample, not a mean±sd stand-in — so you can compare an individual
-        campaign's actual uncertainty against the population it's being shrunk toward.
-      </div>
+      <Collapsible label="How this works">
+        <div className="note">
+          Every drag frame recompiles the model and runs {N_WARMUP} warmup + {N_DRAWS} NUTS draws — all
+          inside WebAssembly, in this tab. Notice that Landing Pg's, Influencer's, and Referral's flashy
+          small-sample numbers (+22%, −8%, +14%) all sit much closer to each other's partially-pooled
+          estimate than their raw observed values do — a hierarchical model automatically discounts a
+          dramatic result that came from a few hundred visitors, without anyone hand-writing a "small
+          sample size" rule. The wide shaded curve is the population distribution N(μ, τ), and its width
+          (τ) is itself estimated from how much the six campaigns agree with each other: make them more
+          consistent and watch it narrow; spread them out and watch it widen. The small violin at each
+          campaign is that campaign's own posterior specifically — a kernel density estimate over its real
+          200 NUTS draws from this resample, not a mean±sd stand-in — so you can compare an individual
+          campaign's actual uncertainty against the population it's being shrunk toward.
+        </div>
+      </Collapsible>
       </div>
     </div>
   );
