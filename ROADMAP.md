@@ -32,6 +32,7 @@ worked through below, ordered by effort.
 | Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr` | indexed assignment (`y_rep[n] = ...`) |
 | Operators | arithmetic, comparison, logical, `^` | matrix product — `X * beta` is not one |
 | `_rng` | scalar draws for every distribution above, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | vectorized scalar `_rng`, `lkj_corr_cholesky_rng` |
+| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2` | `log10`, `dot_product`, `norm` |
 
 Four caveats the table can't carry:
 
@@ -44,6 +45,11 @@ Four caveats the table can't carry:
   error. Only `dirichlet_rng` and `multi_normal_cholesky_rng` return
   containers, because their draw *is* a vector. Both gaps are tracked in
   [`ROADMAP.md`](ROADMAP.md).
+- **The AOT path covers fewer ops than the interpreter.** `sample()` (tape
+  replay) evaluates everything the runtime produces; `compile()`/`sampleViaAot`
+  have no emitter for `tan`/`asin`/`acos`/`atan` (hence `atan2`), `erf`/`erfc`
+  or `digamma`, and report `CodegenError::UnsupportedOp` rather than emitting a
+  module that traps. Adding them needs new math imports on the host side.
 - **`transformed data` parses but does not memoize.** Its statements fold into
   `model`, so they re-run every trace and its variables are invisible from
   `generated quantities`.

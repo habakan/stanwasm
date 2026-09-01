@@ -4,12 +4,13 @@ use crate::distributions::{eval_dist, eval_sample_vec};
 use crate::env::Env;
 use crate::error::EvalError;
 use crate::ops::{
-    v_abs, v_add, v_div, v_exp, v_inv_logit, v_lgamma, v_log, v_logit, v_mul, v_neg, v_phi, v_pow,
-    v_sqrt, v_sub, v_tanh,
+    v_abs, v_acos, v_add, v_asin, v_atan, v_cos, v_div, v_exp, v_inv_logit, v_lgamma, v_log,
+    v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_sub, v_tan, v_tanh,
 };
 use crate::value::{Shape, Val};
 use stanwasm_ast::{Expr, StanType, Stmt};
 use stanwasm_autodiff::Tape;
+use std::f64::consts::PI;
 
 type Result<T> = std::result::Result<T, EvalError>;
 
@@ -173,6 +174,25 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
         ("inv_logit", [a]) | ("logistic", [a]) => v_inv_logit(t, a),
         ("logit", [a]) => v_logit(t, a),
         ("tanh", [a]) => v_tanh(t, a),
+        ("sin", [a]) => v_sin(t, a),
+        ("cos", [a]) => v_cos(t, a),
+        ("tan", [a]) => v_tan(t, a),
+        ("asin", [a]) => v_asin(t, a),
+        ("acos", [a]) => v_acos(t, a),
+        ("atan", [a]) => v_atan(t, a),
+        // Stan's two-argument arctangent. The tape has no atan2 node, so it is built
+        // from atan plus the quadrant correction, which keeps the gradient exact.
+        ("atan2", [y, x]) => {
+            let q = v_div(t, y, x);
+            let base = v_atan(t, &q);
+            let (yv, xv) = (y.to_f64(t)?, x.to_f64(t)?);
+            if xv >= 0.0 {
+                base
+            } else {
+                let pi = Val::Num(if yv >= 0.0 { PI } else { -PI });
+                v_add(t, &base, &pi)
+            }
+        }
         ("Phi", [a]) | ("std_normal_cdf", [a]) => v_phi(t, a),
         ("pow", [a, b]) => v_pow(t, a, b),
         ("square", [a]) => v_mul(t, a, a),

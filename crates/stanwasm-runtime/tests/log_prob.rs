@@ -312,3 +312,46 @@ fn finite_difference_check_linear_regression() {
         );
     }
 }
+
+#[test]
+fn trig_functions_evaluate_and_differentiate() {
+    // The tape has carried Sin/Cos/Tan/Asin/Acos/Atan since the autodiff crate was
+    // written; until now nothing in `eval_call` could reach them.
+    let src = r#"
+data { int<lower=0> N; vector[N] t; vector[N] y; }
+parameters { real amp; real phase; }
+model { for (n in 1:N) y[n] ~ normal(amp * sin(t[n] + phase), 1.0); }
+"#;
+    let mut data = Env::new();
+    data.set_scalar("N", 3.0);
+    data.set_vector("t", &[0.0, 0.5, 1.0]);
+    data.set_vector("y", &[0.0, 0.4794255386, 0.8414709848]);
+    let model = Model::parse_and_load(src, data).unwrap();
+
+    // amp=1, phase=0 reproduces y exactly, so every residual is 0 and the log
+    // density is the three normal constants.
+    let (lp, grad) = model.log_prob_grad(&[1.0, 0.0]).unwrap();
+    assert!((lp - 3.0 * -0.9189385332).abs() < 1e-9, "lp = {lp}");
+    assert!(grad.iter().all(|g| g.abs() < 1e-9), "grad = {grad:?}");
+}
+
+#[test]
+fn atan2_gives_the_quadrant_corrected_angle() {
+    let src = r#"
+data { real mx; real my; }
+parameters { real hd; }
+model { atan2(my, mx) ~ normal(hd, 1.0); }
+"#;
+    // Second quadrant: atan alone would report -pi/4, atan2 reports 3pi/4.
+    let mut data = Env::new();
+    data.set_scalar("mx", -1.0);
+    data.set_scalar("my", 1.0);
+    let model = Model::parse_and_load(src, data).unwrap();
+
+    let expected = std::f64::consts::FRAC_PI_2 + std::f64::consts::FRAC_PI_4;
+    let (_, grad) = model.log_prob_grad(&[expected]).unwrap();
+    assert!(
+        grad[0].abs() < 1e-9,
+        "hd at the true angle should be a mode: {grad:?}"
+    );
+}

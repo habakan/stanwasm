@@ -169,3 +169,33 @@ model {
     // i = 1,2,3,4,5; acc increments for every i except i==3 -> acc = 4.
     assert!((logp_of(SRC, &[0.0]) - 4.0).abs() < 1e-12);
 }
+
+#[test]
+fn vector_generated_quantity_from_scalar_rng_is_an_error_not_a_panic() {
+    // `copy_from_slice` in the wasm layer sizes the row from the declaration, so a
+    // short value used to abort the module instead of reporting anything.
+    let mut data = Env::new();
+    data.set_scalar("N", 3.0);
+    data.set_vector("y", &[0.0, 1.0, 2.0]);
+    let model = Model::parse_and_load(
+        r#"
+data { int<lower=0> N; vector[N] y; }
+parameters { real mu; real<lower=0> sigma; }
+model { y ~ normal(mu, sigma); }
+generated quantities { vector[N] y_rep = normal_rng(mu, sigma); }
+"#,
+        data,
+    )
+    .unwrap();
+
+    let rng = Rc::new(RefCell::new(ChaCha8Rng::seed_from_u64(1)));
+    let err = model
+        .generated_quantities(&[0.0, 0.0], rng)
+        .expect_err("a scalar _rng cannot fill vector[N]")
+        .to_string();
+    assert!(err.contains("y_rep"), "{err}");
+    assert!(
+        err.contains("3 value(s)") && err.contains("produced 1"),
+        "{err}"
+    );
+}

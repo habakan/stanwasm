@@ -415,11 +415,24 @@ impl Model {
         }
         let mut out = Vec::new();
         for stmt in &self.prog.gen_quantities {
-            if let Stmt::LocalDecl(_typ, name, _) = stmt {
+            if let Stmt::LocalDecl(typ, name, _) = stmt {
                 let v = env
                     .get(name)
                     .unwrap_or_else(|| panic!("internal: missing generated quantity {name}"));
+                let before = out.len();
                 flatten_val(&tape, v, &mut out)?;
+
+                // `gen_quantity_names` sizes the output from the declaration, so a value
+                // of a different length would land as a length-mismatch panic downstream.
+                let mut names = Vec::new();
+                push_names_for(&mut names, name, typ, &self.data_env);
+                if out.len() - before != names.len() {
+                    return Err(EvalError::GenQuantityShape {
+                        name: name.clone(),
+                        expected: names.len(),
+                        got: out.len() - before,
+                    });
+                }
             }
         }
         Ok(out)

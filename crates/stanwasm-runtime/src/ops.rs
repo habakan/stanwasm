@@ -124,6 +124,25 @@ pub fn v_log(t: &mut Tape, a: &Val) -> Val {
     }
 }
 
+macro_rules! v_unary {
+    ($name:ident, $prim:ident, $tape:ident) => {
+        pub fn $name(t: &mut Tape, a: &Val) -> Val {
+            match a {
+                Val::Num(x) => Val::Num(x.$prim()),
+                Val::Tape(i) => Val::Tape(t.$tape(*i)),
+                Val::Vec(xs) => Val::Vec(map_unary(t, xs, $name)),
+            }
+        }
+    };
+}
+
+v_unary!(v_sin, sin, sin);
+v_unary!(v_cos, cos, cos);
+v_unary!(v_tan, tan, tan);
+v_unary!(v_asin, asin, asin);
+v_unary!(v_acos, acos, acos);
+v_unary!(v_atan, atan, atan);
+
 pub fn v_sqrt(t: &mut Tape, a: &Val) -> Val {
     v_pow(t, a, &Val::Num(0.5))
 }

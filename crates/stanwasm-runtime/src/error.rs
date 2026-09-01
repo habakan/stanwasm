@@ -96,4 +96,16 @@ pub enum EvalError {
          doesn't have this limitation — it re-evaluates natively per draw)."
     )]
     ParamDependentBranch,
+    #[error(
+        "generated quantity `{name}` is declared to hold {expected} value(s) but its \
+         expression produced {got}. A scalar `_rng` does not fill a container — \
+         vectorized `_rng` and indexed assignment (`y_rep[n] = ...`) are both \
+         unimplemented, so a `vector[N]` generated quantity has no way to be \
+         populated yet."
+    )]
+    GenQuantityShape {
+        name: String,
+        expected: usize,
+        got: usize,
+    },
 }
