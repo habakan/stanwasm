@@ -2,12 +2,12 @@
 
 [![npm](https://img.shields.io/npm/v/stanwasm?logo=npm&color=cb3837)](https://www.npmjs.com/package/stanwasm)
 [![crates.io](https://img.shields.io/crates/v/stanwasm?logo=rust&color=e43717)](https://crates.io/crates/stanwasm)
-[![bundle](https://img.shields.io/badge/wasm-482%20KB%20%7C%20180%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](docs/en/BENCHMARKS.md)
+[![bundle](https://img.shields.io/badge/wasm-488%20KB%20%7C%20183%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](docs/en/BENCHMARKS.md)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 > **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
-Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~482 KB` wasm bundle (`~180 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
+Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~488 KB` wasm bundle (`~183 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
 ![stanwasm examples gallery demo](examples/gallery/demo.gif)
 
@@ -22,11 +22,11 @@ iPadOS. Verified by loading the gallery under Playwright's three engines:
 Chromium 151, Firefox 153 and WebKit 26.5 all instantiate the module and
 sample, and the posterior means agree across them.
 
-> **Safari support depends on a dependency fix that has not shipped yet.** The
-> npm package is unaffected — it carries the prebuilt wasm, so
-> `npm install stanwasm` gets it. If you depend on the `stanwasm` **crate** from
-> crates.io and build the wasm yourself, you need the same patch in your own
-> workspace (below) until the fix is released.
+> **From npm this needs nothing: `stanwasm@0.1.1` and later ship the fixed
+> wasm.** The caveat is the Rust crate — `stanwasm` on crates.io is still 0.1.0
+> and resolves an unfixed `nuts-rs`, because Cargo does not carry `[patch]` into
+> a published crate. Building the wasm yourself means copying the patch below
+> until the fix reaches crates.io.
 
 WebKit rejects a module containing
 [relaxed SIMD](https://github.com/WebAssembly/relaxed-simd) opcodes at
@@ -130,8 +130,11 @@ regression, hierarchical models, and Cholesky-parameterised multivariate ones.
 Anything outside it is a clean load-time or evaluation error, never a model
 that silently samples something else.
 
+Trigonometry (`sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`) is there
+too, which is what orientation and periodic-signal models need.
+
 [`ROADMAP.md`](ROADMAP.md) has the full table of what is supported and what is
-not, the four behavioural caveats a table cannot carry, and the remaining gaps
+not, the behavioural caveats a table cannot carry, and the remaining gaps
 ordered by effort.
 
 ## Architecture

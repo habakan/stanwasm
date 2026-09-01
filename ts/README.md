@@ -2,11 +2,11 @@
 
 [![npm](https://img.shields.io/npm/v/stanwasm?logo=npm&color=cb3837)](https://www.npmjs.com/package/stanwasm)
 [![crates.io](https://img.shields.io/crates/v/stanwasm?logo=rust&color=e43717)](https://crates.io/crates/stanwasm)
-[![bundle](https://img.shields.io/badge/wasm-482%20KB%20%7C%20180%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](https://github.com/habakan/stanwasm/blob/main/docs/en/BENCHMARKS.md)
+[![bundle](https://img.shields.io/badge/wasm-488%20KB%20%7C%20183%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](https://github.com/habakan/stanwasm/blob/main/docs/en/BENCHMARKS.md)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/habakan/stanwasm/blob/main/LICENSE)
 
 Stan probabilistic models compiled and sampled **entirely in the browser**.
-Pure Rust compiled to WebAssembly, a single ~482 KB bundle (~180 KB gzipped),
+Pure Rust compiled to WebAssembly, a single ~488 KB bundle (~183 KB gzipped),
 with [nuts-rs](https://github.com/pymc-devs/nuts-rs) embedded as the sampler.
 No server, no cmdstan, no round trip.
 
@@ -22,7 +22,7 @@ Chrome, Edge, Firefox, Safari and Node.js, plus every browser on iOS and
 iPadOS. Verified under Playwright's three engines: Chromium 151, Firefox 153
 and WebKit 26.5 all instantiate the module and sample.
 
-Safari used to fail outright — WebKit rejects a module containing
+Safari failed outright before 0.1.1 — WebKit rejects a module containing
 [relaxed SIMD](https://github.com/WebAssembly/relaxed-simd) opcodes at
 validation time, and `pulp` emitted them. This package ships the prebuilt wasm
 with that resolved, so nothing is required of you; see
