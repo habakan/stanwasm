@@ -47,7 +47,7 @@ panic = "abort"
 [profile.release.package."stanwasm"]
 opt-level = "z"
 
-# nuts-rs is the last crate pulling pulp's relaxed-simd, which WebKit rejects — see
-# README. Workspace builds only; drop once pymc-devs/nuts-rs#76 is released.
+# nuts-rs pulled pulp's relaxed-simd, which WebKit rejects — see README. #76 fixed it
+# upstream; this points at that commit until it reaches crates.io, then drop the block.
 [patch.crates-io]
-nuts-rs = { git = "https://github.com/habakan/nuts-rs", rev = "61f261b26815be8cb21d5eef0840ba9f869d3af4" }
+nuts-rs = { git = "https://github.com/pymc-devs/nuts-rs", rev = "fa647966938ce4116fb4ced8584229e654ca9035" }

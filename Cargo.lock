@@ -472,7 +472,7 @@ dependencies = [
 [[package]]
 name = "nuts-derive"
 version = "0.2.0"
-source = "git+https://github.com/habakan/nuts-rs?rev=61f261b26815be8cb21d5eef0840ba9f869d3af4#61f261b26815be8cb21d5eef0840ba9f869d3af4"
+source = "git+https://github.com/pymc-devs/nuts-rs?rev=fa647966938ce4116fb4ced8584229e654ca9035#fa647966938ce4116fb4ced8584229e654ca9035"
 dependencies = [
  "nuts-storable",
  "proc-macro2",
@@ -483,7 +483,7 @@ dependencies = [
 [[package]]
 name = "nuts-rs"
 version = "0.18.3"
-source = "git+https://github.com/habakan/nuts-rs?rev=61f261b26815be8cb21d5eef0840ba9f869d3af4#61f261b26815be8cb21d5eef0840ba9f869d3af4"
+source = "git+https://github.com/pymc-devs/nuts-rs?rev=fa647966938ce4116fb4ced8584229e654ca9035#fa647966938ce4116fb4ced8584229e654ca9035"
 dependencies = [
  "anyhow",
  "faer",
@@ -502,7 +502,7 @@ dependencies = [
 [[package]]
 name = "nuts-storable"
 version = "0.3.0"
-source = "git+https://github.com/habakan/nuts-rs?rev=61f261b26815be8cb21d5eef0840ba9f869d3af4#61f261b26815be8cb21d5eef0840ba9f869d3af4"
+source = "git+https://github.com/pymc-devs/nuts-rs?rev=fa647966938ce4116fb4ced8584229e654ca9035#fa647966938ce4116fb4ced8584229e654ca9035"
 
 [[package]]
 name = "once_cell"

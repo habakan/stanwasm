@@ -16,9 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [pulp#30](https://github.com/sarah-quinones/pulp/pull/30) (a `relaxed-simd`
   feature, on by default) and released it in 0.22.3; faer already opts out.
   nuts-rs was the last crate in the graph pulling pulp's default features, and
-  Cargo cannot subtract a transitive default feature, so the workspace pins a
-  fork by rev until [nuts-rs#76](https://github.com/pymc-devs/nuts-rs/pull/76)
-  is merged and released. The pin covers workspace builds and therefore the npm
+  Cargo cannot subtract a transitive default feature.
+  [nuts-rs#76](https://github.com/pymc-devs/nuts-rs/pull/76) fixed that upstream
+  and was merged; the workspace points at the merge commit until it reaches
+  crates.io. The pin covers workspace builds and therefore the npm
   package, which ships the prebuilt wasm; the `stanwasm` crate published to
   crates.io still resolves plain nuts-rs, because Cargo does not carry
   `[patch]` into a published crate.

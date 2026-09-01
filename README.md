@@ -39,14 +39,14 @@ never instantiates and nothing on the page works. The opcodes come from
 pulp made this optional in [pulp#30](https://github.com/sarah-quinones/pulp/pull/30)
 (a `relaxed-simd` feature, on by default), released in 0.22.3, and faer already
 opts out. nuts-rs is the last crate in the graph pulling pulp's default
-features, and Cargo cannot subtract a transitive default feature, so this
-workspace pins a fork until
-[nuts-rs#76](https://github.com/pymc-devs/nuts-rs/pull/76) is merged and
-released:
+features, and Cargo cannot subtract a transitive default feature.
+[nuts-rs#76](https://github.com/pymc-devs/nuts-rs/pull/76) fixed that upstream
+and is merged; until it reaches crates.io this workspace points at the merge
+commit:
 
 ```toml
 [patch.crates-io]
-nuts-rs = { git = "https://github.com/habakan/nuts-rs", rev = "61f261b26815be8cb21d5eef0840ba9f869d3af4" }
+nuts-rs = { git = "https://github.com/pymc-devs/nuts-rs", rev = "fa647966938ce4116fb4ced8584229e654ca9035" }
 ```
 
 Dropping relaxed SIMD costs nothing measurable at these parameter dimensions:
