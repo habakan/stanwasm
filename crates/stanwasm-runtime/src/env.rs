@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use crate::value::Val;
 use rand::rngs::ChaCha8Rng;
+use stanwasm_ast::FuncDef;
 
 /// One binding, carrying whether the *declared* Stan type is integral. It lives
 /// here and not in `Val` because it is static, and only `/` cares.
@@ -24,6 +25,11 @@ pub struct Env {
     /// Set while tracing for the one-shot `Compiled` tape, which is replayed for
     /// every draw — a parameter-dependent branch would freeze at its trace-time value.
     strict_no_param_branch: bool,
+    /// User-defined functions, shared by `Rc` because `Env` is cloned per scope.
+    funcs: Option<Rc<Vec<(String, FuncDef)>>>,
+    /// Names currently being inlined. Calls are unrolled into the tape, so a
+    /// recursive one would expand forever rather than loop.
+    call_stack: Vec<String>,
 }
 
 impl Env {
@@ -120,6 +126,23 @@ impl Env {
 
     pub fn set_strict_no_param_branch(&mut self, v: bool) {
         self.strict_no_param_branch = v;
+    }
+
+    pub fn set_funcs(&mut self, funcs: Rc<Vec<(String, FuncDef)>>) {
+        self.funcs = Some(funcs);
+    }
+
+    pub fn func(&self, name: &str) -> Option<FuncDef> {
+        let fs = self.funcs.as_ref()?;
+        fs.iter().find(|(n, _)| n == name).map(|(_, f)| f.clone())
+    }
+
+    pub fn in_call(&self, name: &str) -> bool {
+        self.call_stack.iter().any(|n| n == name)
+    }
+
+    pub fn enter_call(&mut self, name: &str) {
+        self.call_stack.push(name.to_string());
     }
 
     pub fn strict_no_param_branch(&self) -> bool {

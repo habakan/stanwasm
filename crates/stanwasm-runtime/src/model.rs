@@ -303,6 +303,11 @@ pub struct Model {
 
 impl Model {
     pub fn new(prog: StanProgram, data_env: Env) -> Self {
+        // Held on the data env so every later scope inherits it by clone.
+        let mut data_env = data_env;
+        if !prog.functions.is_empty() {
+            data_env.set_funcs(std::rc::Rc::new(prog.functions.clone()));
+        }
         let n_params: usize = prog
             .parameters
             .iter()

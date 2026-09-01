@@ -9,7 +9,7 @@ use crate::ops::{
     v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_sub, v_tan, v_tanh,
 };
 use crate::value::{Shape, Val};
-use stanwasm_ast::{Expr, StanType, Stmt};
+use stanwasm_ast::{Expr, FuncDef, StanType, Stmt};
 use stanwasm_autodiff::Tape;
 use std::f64::consts::PI;
 
@@ -188,11 +188,53 @@ fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
     })
 }
 
+/// Inlines a user-defined call: binds the arguments into a scope of their own,
+/// runs the body, and evaluates the return expression there.
+///
+/// Stan passes by constant reference, and this scope is discarded afterwards, so an
+/// assignment to a parameter inside the body cannot reach the caller either way.
+fn eval_user_call(
+    t: &mut Tape,
+    name: &str,
+    def: &FuncDef,
+    argv: Vec<Val>,
+    env: &Env,
+) -> Result<Val> {
+    if env.in_call(name) {
+        return Err(EvalError::RecursiveCall(name.to_string()));
+    }
+    if def.params.len() != argv.len() {
+        return Err(EvalError::WrongArity {
+            name: name.to_string(),
+            expected: def.params.len(),
+            got: argv.len(),
+        });
+    }
+
+    // Starts from the caller's env so data and earlier declarations stay visible;
+    // Stan scopes function bodies that way too.
+    let mut local = env.clone();
+    local.enter_call(name);
+    for ((typ, pname), v) in def.params.iter().zip(argv) {
+        match typ {
+            StanType::Int(_) => local.set_int_typed(pname, v),
+            _ => local.set(pname, v),
+        }
+    }
+    for stmt in &def.body {
+        eval_stmt(t, stmt, &mut local)?.into_val();
+    }
+    eval_expr(t, &def.ret_expr, &local)
+}
+
 fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> {
     let evaled: Vec<Val> = args
         .iter()
         .map(|a| eval_expr(t, a, env))
         .collect::<Result<_>>()?;
+    if let Some(def) = env.func(name) {
+        return eval_user_call(t, name, &def, evaled, env);
+    }
     Ok(match (name, evaled.as_slice()) {
         ("log", [a]) => v_log(t, a),
         ("exp", [a]) => v_exp(t, a),

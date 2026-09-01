@@ -184,6 +184,50 @@ impl Parser {
         self.parse_base_type()
     }
 
+    /// Types as they appear in a function signature, where Stan omits the sizes
+    /// (`vector v`, not `vector[N] v`) because the argument carries its own length.
+    fn parse_param_type(&mut self) -> Result<StanType> {
+        if self.check_kw("array") {
+            self.consume();
+            self.expect_tok(&Token::LBrack)?;
+            // `array[] real x` and `array[,] real x` — the dimensions are unsized.
+            while !self.check_tok(&Token::RBrack) && !self.check_tok(&Token::Eof) {
+                self.consume();
+            }
+            self.expect_tok(&Token::RBrack)?;
+            let elem = self.parse_param_type()?;
+            return Ok(StanType::Array(Expr::Num(0.0), Box::new(elem)));
+        }
+        for (kw, build) in [
+            ("vector", 1usize),
+            ("row_vector", 1),
+            ("matrix", 2),
+            ("simplex", 1),
+            ("ordered", 1),
+        ] {
+            if self.check_kw(kw) {
+                self.consume();
+                let c = self.parse_constraints()?;
+                if self.check_tok(&Token::LBrack) {
+                    // A sized signature is not Stan, but accepting it costs nothing
+                    // and keeps the error away from a merely unusual spelling.
+                    while !self.check_tok(&Token::RBrack) && !self.check_tok(&Token::Eof) {
+                        self.consume();
+                    }
+                    self.expect_tok(&Token::RBrack)?;
+                }
+                let zero = Expr::Num(0.0);
+                return Ok(match (kw, build) {
+                    ("matrix", _) => StanType::Matrix(zero.clone(), zero),
+                    ("simplex", _) => StanType::Simplex(zero),
+                    ("ordered", _) => StanType::Ordered(zero),
+                    _ => StanType::Vector(zero, c),
+                });
+            }
+        }
+        self.parse_base_type()
+    }
+
     fn parse_base_type(&mut self) -> Result<StanType> {
         let tok = self.consume();
         match &tok {
@@ -604,7 +648,7 @@ impl Parser {
             self.expect_tok(&Token::LParen)?;
             let mut params: Vec<(StanType, String)> = Vec::new();
             while !self.check_tok(&Token::RParen) && !self.check_tok(&Token::Eof) {
-                let ptype = self.parse_type()?;
+                let ptype = self.parse_param_type()?;
                 let pname = self.expect_id()?;
                 params.push((ptype, pname));
                 let _ = self.try_tok(&Token::Comma);

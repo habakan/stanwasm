@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **User-defined `functions`.** Calls are inlined while tracing, so the AOT path
+  supports them without changes — it works from the tape, not the AST. Scalar,
+  `vector` and `matrix` arguments, unsized in the signature as Stan writes them;
+  locals; one function calling another; gradients through the call. Recursion, `void`,
+  the `data` qualifier and the `_lp`/`_rng` suffix rules are not supported and each
+  fails with a message — see `ROADMAP.md`.
+
 - **Matrix products.** `*` now dispatches on operand shape, so `X * beta` and `A * B`
   work in model code instead of erroring; anything else stays element-wise. Verified
   against the hand-expanded loop form, which produces identical estimates, and the AOT

@@ -108,4 +108,16 @@ pub enum EvalError {
         expected: usize,
         got: usize,
     },
+    #[error(
+        "user-defined function `{0}` calls itself. Calls are inlined into one recorded \
+         computation graph, which a recursive one would expand forever — rewrite it as \
+         a loop."
+    )]
+    RecursiveCall(String),
+    #[error("user-defined function `{name}` takes {expected} argument(s), got {got}")]
+    WrongArity {
+        name: String,
+        expected: usize,
+        got: usize,
+    },
 }

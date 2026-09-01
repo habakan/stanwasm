@@ -28,7 +28,7 @@ worked through below, ordered by effort.
 | Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors | |
 | Vector shape | `simplex`, `ordered`, `positive_ordered` | `unit_vector` |
 | Matrix constraints | `cholesky_factor_corr` | `cov_matrix`, `cholesky_factor_cov`, `corr_matrix` |
-| Blocks | `data`, `parameters`, `transformed parameters`, `model`, `generated quantities` | `functions { ... }` |
+| Blocks | `data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, `functions` | |
 | Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr` | indexed assignment (`y_rep[n] = ...`) |
 | Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`) | element-wise `.*` `./` |
 | `_rng` | scalar draws for every distribution above, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | vectorized scalar `_rng`, `lkj_corr_cholesky_rng` |
@@ -67,22 +67,22 @@ the wrong thing.
 
 ## Remaining language gaps, roughly ordered by effort
 
-### `functions { ... }` (user-defined functions) — the hard one
+### `functions { ... }` — what is and is not supported
 
-- Parser/AST already capture this block (`StanProgram.functions`); nothing
-  downstream consumes it yet.
-- The engine's whole model is "trace once, fully unroll" (both the AST-eval
-  tape-replay path and AOT codegen). As long as recursion isn't supported,
-  a function call can just be inlined at its call site during tracing —
-  this fits the existing design, no architectural rework needed. Stan
-  models essentially never rely on recursion, so that restriction should be
-  fine in practice.
-- The real work is the type system: binding `real/vector/matrix/int` (+
-  array/size) arguments, return values, and function-local scoping, in
-  **both** `stanwasm-runtime::eval` (interpreter) and the AOT tape-unrolling
-  path in `stanwasm-codegen`.
-- Rough size: comparable to or a bit larger than the `generated quantities`
-  work (spans parser → runtime → codegen → wasm-api).
+Calls are inlined at the call site while tracing, which fits the "trace once, fully
+unroll" design and means the AOT path gets them for free — it consumes the tape, not
+the AST. Supported: scalar, `vector` and `matrix` arguments (unsized in the signature,
+as Stan writes them), local variables, one function calling another, and gradients
+flowing through the call.
+
+Not supported, each a clean error rather than a wrong answer:
+
+- **Recursion**, which Stan allows. Inlining a recursive call expands forever, so
+  self- and mutual recursion are rejected with `EvalError::RecursiveCall`.
+- **`void` functions** and the **`data` qualifier** on arguments, both parse errors.
+- The **`_lp` / `_rng` / `_lupdf` suffix rules**. A user function ending in `_rng` is
+  not given the RNG, and one ending in `_lp` has no access to the accumulator, so
+  neither does what its name promises in Stan.
 
 ### Missing constraint transforms — incremental, not hard
 
