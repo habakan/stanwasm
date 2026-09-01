@@ -27,10 +27,8 @@ body {
   max-width: 1320px;
   margin: 0 auto;
   height: 100vh;
-  /* iOS Safari counts the collapsible toolbar as part of 100vh, so the last
-     ~100px of a 100vh box sits under the chrome with no way to scroll to it —
-     .app is overflow:hidden, so that space is simply lost. dvh tracks the
-     actually-visible height. */
+  /* iOS counts its toolbar inside 100vh; .app is overflow:hidden, so that
+     space is unreachable rather than merely below the fold. */
   height: 100dvh;
   padding: 32px 24px 16px;
   display: flex;
@@ -839,8 +837,7 @@ footer a {
 
 /* ---- collapsible sections (narrow viewports only) --------------------- */
 
-/* Rendered by Collapsible.tsx, which only emits these on a narrow viewport —
-   on a wide one the children are rendered bare and none of this applies. */
+/* Emitted by Collapsible.tsx on narrow viewports only. */
 .collapsible {
   border: 1px solid #e5e5e5;
   border-radius: 6px;
@@ -882,9 +879,7 @@ footer a {
   padding: 12px;
 }
 
-/* The model card and the note bring their own frame; inside a collapsible
-   that frame is the collapsible's, so drop the inner one rather than nest
-   two borders. */
+/* Don't nest two frames. */
 .collapsible-body > .demo-model,
 .collapsible-body > .note {
   margin: 0;
@@ -901,10 +896,8 @@ footer a {
 
 /* ---- tablet ----------------------------------------------------------- */
 
-/* 300px model card + 340px interactive + 24px gap fits from 664px up, so an
-   iPad in portrait technically clears it — but two columns that narrow leaves
-   the plot smaller than the diagram beside it. Keep them stacked until there
-   is room for the interactive column to actually be the bigger one. */
+/* The two columns fit from 664px, but below 1024 that leaves the plot
+   narrower than the diagram beside it. Stack instead. */
 @media (max-width: 1024px) {
   .demo-model,
   .demo-interactive {
@@ -912,9 +905,7 @@ footer a {
     min-width: 0;
   }
 
-  /* Horizontal scroll inside a code block is close to undiscoverable on a
-     touch screen with no visible scrollbar — the line just looks truncated.
-     Wrapping is the lesser evil for Stan source at these widths. */
+  /* A scrollbar-less horizontal scroll reads as truncation on touch. */
   .code-block pre,
   pre.wasm-log {
     white-space: pre-wrap;
@@ -925,10 +916,8 @@ footer a {
 /* ---- phone ------------------------------------------------------------ */
 
 @media (max-width: 720px) {
-  /* The app shell is a fixed-height flex column, so every pixel of chrome is
-     taken straight out of the one scrollable region. At 844px tall the header,
-     tab bar, description and footer were consuming 342px of it — 40% of the
-     screen — leaving a 502px window onto content 2400px long. */
+  /* The shell is fixed-height, so chrome comes straight out of the one
+     scrollable region — it was taking 342px of 844. */
   .app {
     padding: 14px 14px 8px;
   }
@@ -942,8 +931,7 @@ footer a {
     margin-bottom: 12px;
   }
 
-  /* One scrolling row rather than two wrapped ones: the second row cost 40px
-     of a 502px viewport to show tabs that are one swipe away regardless. */
+  /* One scrolling row: the wrapped second row cost 40px of a 502px window. */
   .tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -970,22 +958,15 @@ footer a {
     font-size: 11px;
   }
 
-  /* Plots are the reason the page exists — give them the full width rather
-     than the 320px cap that suited a multi-column desktop row. */
+  /* The 320px cap suits a multi-column desktop row, not this. */
   .canvas-stack {
     max-width: 100%;
   }
 
-  /* NUTS and Random-Walk Metropolis stay side by side even here: the whole
-     point of the tab is watching one sampler outrun the other on the same
-     posterior, and that comparison dies the moment the two are a scroll
-     apart. ~175px each at 390px wide is small, but the funnel's shape and
-     how much of it each chain reaches both survive it.
-
-     `flex: 1 1 0` rather than the desktop `1 1 200px`: at this width a
-     200px basis plus the gap exceeds the row, so the two would wrap. The
-     row's third child is a <details> (ground truth), which takes a full
-     row of its own below them. */
+  /* The two samplers stay side by side — the comparison is the point, and it
+     dies if they are a scroll apart. `1 1 0` because the desktop 200px basis
+     plus the gap would wrap them; the third child (ground truth) gets its own
+     row via flex-basis below. */
   .mcmc-panels {
     gap: 10px;
   }
@@ -999,10 +980,8 @@ footer a {
     flex-basis: 100%;
   }
 
-  /* "Random-Walk Metropolis" wraps to two lines where "NUTS" takes one, and
-     the plots below them would start at different heights — which is exactly
-     the misalignment a side-by-side comparison cannot afford. Reserve both
-     lines for both. */
+  /* "Random-Walk Metropolis" wraps where "NUTS" does not; reserve both lines
+     so the plots start level. */
   .mcmc-panel h4 {
     font-size: 12px;
     line-height: 1.25;
@@ -1027,21 +1006,17 @@ footer a {
     max-width: 100%;
   }
 
-  /* Sized for a desktop editor; on a phone 60vh of a short viewport is both
-     too small to be an editor and too big to scroll past. */
+  /* 60vh of a short viewport is too small to edit in and too big to scroll past. */
   .stan-editor-wrap {
     min-height: 300px;
   }
 
-  /* A translucent panel floating over the top-right of a 360px-wide editor
-     covers the code it is meant to annotate. The same diagram is available
-     in the other tabs' model cards. */
+  /* Floating over a 360px editor, it covers the code it annotates. */
   .diagram-overlay {
     display: none;
   }
 
-  /* Six fixed columns do not fit; let the row scroll as a unit instead of
-     letting it set the width of the whole page. */
+  /* Six fixed columns don't fit; scroll the row rather than the page. */
   .results {
     overflow-x: auto;
   }
@@ -1050,11 +1025,8 @@ footer a {
     min-width: 520px;
   }
 
-  /* The sandbox is an IDE layout: a height:100% column whose panels divide a
-     fixed height between them. That needs a viewport tall enough to divide.
-     On a phone the shares round down to less than their own headers and the
-     panels draw on top of each other, so stop dividing a fixed height and let
-     the tab scroll like every other one. */
+  /* The IDE layout divides a fixed height between panels; on a short viewport
+     the shares fall below their own headers and the panels overlap. */
   .sandbox,
   .sandbox-side,
   .sandbox-section:not(.collapsed),

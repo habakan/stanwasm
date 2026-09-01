@@ -1,9 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-/** Matches the `max-width: 720px` breakpoint in styles.css. Kept in sync by
- *  hand rather than read from CSS, because the collapse below is a change of
- *  markup, not of styling — a phone gets fewer things open at once, and that
- *  decision has to be made in React, not in a media query. */
+// Kept in sync by hand with the media queries in styles.css.
 const NARROW = "(max-width: 720px)";
 
 export function useIsNarrow(): boolean {
@@ -20,15 +17,9 @@ export function useIsNarrow(): boolean {
 }
 
 /**
- * On a narrow viewport, hides `children` behind a `<details>` the reader can
- * open; on a wide one, renders them bare so the desktop layout is byte-for-byte
- * what it was before this component existed.
- *
- * The point is not to save pixels for their own sake. On a phone the scroll
- * area is roughly 500px tall, so anything above the plots is something the
- * reader has to scroll past before seeing the thing the tab is *for*. Supporting
- * material (the model source, the log, the long explanation) stays reachable,
- * just not in the way.
+ * Hides `children` behind a `<details>` on a narrow viewport, renders them bare
+ * on a wide one. The phone scroll area is ~500px tall, so anything above the
+ * plots is something to scroll past before reaching what the tab is for.
  */
 export function Collapsible({
   label,

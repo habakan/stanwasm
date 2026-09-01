@@ -60,19 +60,9 @@ panic = "abort"
 [profile.release.package."stanwasm"]
 opt-level = "z"
 
-# Temporary, until pymc-devs/nuts-rs#76 is merged and released. nuts-rs is the
-# only crate in the graph that pulls pulp's default features, which include
-# `relaxed-simd`; WebKit rejects a module carrying those opcodes at validation
-# time, so Safari and every browser on iOS/iPadOS fail to instantiate the
-# bundle at all. The fork is 0.18.3 plus a three-line Cargo.toml change that
-# forwards the feature instead. Pinned by rev rather than branch so a
-# force-push during review cannot change what this builds.
-#
-# This applies to workspace builds only -- the npm package (which ships the
-# prebuilt wasm) and local development. Cargo does not carry `[patch]` into a
-# published crate, so `stanwasm` on crates.io still resolves plain nuts-rs;
-# see the Browser support section of README.md.
-#
-# Drop this block and bump the nuts-rs requirement once the fix is on crates.io.
+# nuts-rs is the last crate pulling pulp's relaxed-simd, which WebKit rejects at
+# validation — without this, Safari and iOS cannot instantiate the bundle at all.
+# Workspace builds only: a published crate does not carry [patch]. See README.
+# Drop once pymc-devs/nuts-rs#76 is released.
 [patch.crates-io]
 nuts-rs = { git = "https://github.com/habakan/nuts-rs", rev = "61f261b26815be8cb21d5eef0840ba9f869d3af4" }
