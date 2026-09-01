@@ -237,18 +237,11 @@ impl StanModel {
         self.model.gen_quantity_names()
     }
 
-    /// Evaluate `generated quantities` for a batch of unconstrained draws
-    /// (e.g. `sample()`'s output). `draws` is a flat row-major buffer of
-    /// shape `(n_draws, n_params)`; the result is `(n_draws, n_gen_quantities)`,
-    /// row-major, in `genQuantityNames()` order. A single RNG stream (seeded
-    /// by `seed`) is shared across all draws so repeated `_rng` calls don't
-    /// repeat the same values draw-to-draw.
-    ///
-    /// Note: unlike `sampleViaAot`, there is no AOT-compiled counterpart of
-    /// this method — `compileToWasm` only exports `log_prob_grad`. Generated
-    /// quantities involve RNG and branching that the flat-tape AOT codegen
-    /// doesn't model, and (running once per draw rather than once per NUTS
-    /// leapfrog step) don't need it for performance.
+    /// Evaluate `generated quantities` over a batch of unconstrained draws
+    /// (e.g. `sample()`'s output). `draws` is row-major `(n_draws, n_params)`;
+    /// the result is row-major `(n_draws, n_gen_quantities)` in
+    /// `genQuantityNames()` order. One `seed`ed RNG stream is shared across the
+    /// whole batch, so `_rng` calls don't repeat draw-to-draw.
     #[wasm_bindgen(js_name = generatedQuantities)]
     pub fn generated_quantities(
         &self,
@@ -278,14 +271,11 @@ impl StanModel {
         Ok(out)
     }
 
-    /// Start a step-by-step NUTS run: unlike `sample()`, which runs the whole
-    /// chain inside one wasm call and returns only at the end, this leaves
-    /// the sampler's state alive in the `StanModel` instance so `stepDraw()`
-    /// can advance it one draw at a time — genuinely watching the sampler
-    /// work, not replaying an already-finished chain. Consumes the internal
-    /// `Compiled` the same way `sample()` does; call `finishStepSampling()`
-    /// (or exhaust `stepDraw()` up to `num_warmup + num_draws` calls, which
-    /// does it automatically) before using `logProbGrad`/`sample` again.
+    /// Start a NUTS run that `stepDraw()` advances one draw at a time, keeping
+    /// the sampler's state alive between calls rather than running the chain
+    /// inside a single `sample()` call. Consumes the internal `Compiled`: call
+    /// `finishStepSampling()`, or exhaust `stepDraw()`, before using
+    /// `logProbGrad`/`sample` again.
     #[wasm_bindgen(js_name = startStepSampling)]
     pub fn start_step_sampling(
         &mut self,
@@ -327,19 +317,14 @@ impl StanModel {
         Ok(())
     }
 
-    /// Advance the step-sampling chain started by `startStepSampling` by
-    /// exactly one draw. Returns a flat array: `n_params` position values,
-    /// then `1.0`/`0.0` for whether this draw was still in the warmup
-    /// (tuning) phase, then `1.0`/`0.0` for whether it diverged, then the
-    /// leapfrog `step_size` and `num_steps` nuts-rs actually used for this
-    /// draw — these come straight out of nuts-rs's own dual-averaging
-    /// adaptation and trajectory-length search, not anything this crate
-    /// computes, so they're a way to show the real sampler internals at
-    /// work rather than just the resulting draw. Once the requested
-    /// `num_warmup + num_draws` draws have all been returned, this
-    /// automatically restores `logProbGrad`/`sample` (by re-tracing, same as
-    /// `sample()` does) and further calls fail until `startStepSampling` runs
-    /// again.
+    /// Advance the chain by one draw. Returns a flat array: `n_params`
+    /// positions, then tuning and diverging as `1.0`/`0.0`, then the
+    /// `step_size` and `num_steps` nuts-rs used for this draw (its own
+    /// adaptation state, not values this crate computes).
+    ///
+    /// After `num_warmup + num_draws` draws this restores
+    /// `logProbGrad`/`sample` and further calls fail until
+    /// `startStepSampling` runs again.
     #[wasm_bindgen(js_name = stepDraw)]
     pub fn step_draw(&mut self) -> Result<Vec<f64>, JsError> {
         let done;

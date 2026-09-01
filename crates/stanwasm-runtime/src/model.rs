@@ -460,16 +460,11 @@ impl Model {
     /// One-shot forward trace on the supplied tape; returns the root tape index
     /// so codegen can walk the recorded ops. Caller controls tape lifetime.
     ///
-    /// Set `strict` when this ONE trace will be recorded and then replayed
-    /// (or, for AOT, compiled to wasm and called) for many later parameter
-    /// values without re-running this evaluator — `Compiled::from` and
-    /// `stanwasm-codegen::compile` both do this. In that mode, an `if`/`while`
-    /// in `model`/`transformed parameters` whose condition depends on a
-    /// parameter is rejected with `EvalError::ParamDependentBranch` rather
-    /// than silently freezing whichever branch this one trace happened to
-    /// take. Pass `false` when tracing fresh for the actual parameter values
-    /// every call (e.g. `Model::log_prob_grad`), where branching is already
-    /// evaluated correctly and the restriction would just be noise.
+    /// Set `strict` when this one trace will be replayed for later parameter
+    /// values (`Compiled::from`, `stanwasm-codegen::compile`): a
+    /// parameter-dependent `if`/`while` is then rejected with
+    /// `EvalError::ParamDependentBranch` rather than freezing whichever branch
+    /// this trace happened to take. Pass `false` when re-tracing every call.
     pub fn trace_forward(
         &self,
         tape: &mut Tape,

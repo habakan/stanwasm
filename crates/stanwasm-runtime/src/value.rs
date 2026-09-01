@@ -18,12 +18,9 @@ pub enum Val {
 impl Val {
     /// Coerce to a plain f64 (Tape values read their primal off the tape).
     ///
-    /// A `Vec` here means the model used a container where a scalar was
-    /// required (`if (x == y)` on two vectors, a matrix product fed to a
-    /// scalar lpdf, ...). That is user-reachable from hand-written Stan, so it
-    /// is an `EvalError` rather than the panic it used to be — a panic
-    /// compiles to a wasm trap, which kills the whole module instance and
-    /// forces a page reload in the browser.
+    /// A `Vec` means the model used a container where a scalar was required,
+    /// which hand-written Stan can reach — hence an `EvalError` and not a
+    /// panic, which would trap and take the whole wasm instance down.
     pub fn to_f64(&self, tape: &Tape) -> Result<f64, EvalError> {
         match self {
             Val::Num(v) => Ok(*v),

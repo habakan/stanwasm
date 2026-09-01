@@ -267,19 +267,12 @@ pub fn dirichlet_lpdf(t: &mut Tape, theta: &[Val], alpha: &[Val]) -> Val {
 ///
 /// log p = Σ_{k=0..K-1} [(K − 1 − k) + (2η − 2)] · log Lₖₖ
 ///
-/// The `(K-1-k)` term is the Jacobian of Σ=LLᵀ restricted to the
-/// correlation-Cholesky manifold (why `lkj_corr_cholesky` is a distinct
-/// distribution from `lkj_corr`, not just a change of variables); `(2η-2)`
-/// is the LKJ density's own `det(Σ)^(η-1)` term, since det(Σ) = Π Lₖₖ².
-/// These combine additively per row (same base, summed exponents), NOT as
-/// a single `(2η-2)` factor applied to the whole weighted sum — that former
-/// structure is wrong: for K=2 it always evaluates to exactly 0, since the
-/// only row with a free diagonal (row 1) has `(K-1-k) = 0`, so multiplying
-/// by `(2η-2)` afterward can't undo that. Row 0's diagonal is always the
-/// fixed constant 1 (`log(1) = 0`), so including it in the sum is harmless
-/// regardless of its weight. Omits the η,K-only normalizing constant
-/// (doesn't affect gradients w.r.t. `L`; would matter only if `eta` itself
-/// were a sampled parameter).
+/// `(K-1-k)` is the Jacobian of Σ=LLᵀ on the correlation-Cholesky manifold;
+/// `(2η-2)` is the LKJ density's own `det(Σ)^(η-1)`, since det(Σ) = Π Lₖₖ².
+/// The two are summed exponents on a shared base, not a `(2η-2)` factor over
+/// the weighted sum: that form is identically 0 at K=2, where the only row
+/// with a free diagonal has `(K-1-k) = 0`. Omits the η,K-only normalizing
+/// constant, which does not affect gradients w.r.t. `L`.
 pub fn lkj_corr_cholesky_lpdf(t: &mut Tape, l_rows: &[Val], eta: &Val) -> Val {
     let kk = l_rows.len();
     let two_eta = v_mul(t, &Val::Num(2.0), eta);
