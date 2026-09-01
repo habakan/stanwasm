@@ -1,16 +1,8 @@
 import { memo, useId, useMemo, type ReactNode } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 
-/** Wrap once at the app root. MathJax is served from a locally-copied
- *  bundle (see `copy-mathjax` in package.json), not a CDN — every other
- *  part of this app runs offline, and a runtime fetch to a third-party
- *  CDN just to typeset a formula would quietly break that. Uses the SVG
- *  output component specifically (not the more common CHTML one): CHTML
- *  draws glyphs via @font-face files referenced relative to the loaded
- *  script, which we'd have to vendor and keep path-matched separately —
- *  miss that and it silently falls back to the browser's default font
- *  instead of MathJax's. SVG embeds glyph outlines directly in the output,
- *  so a single self-contained JS file is enough. */
+/** Wrap once at the app root. MathJax is served from a local bundle, not a CDN, so
+ *  the app stays offline; the SVG output embeds glyphs and needs no vendored fonts. */
 export function MathJaxProvider({ children }: { children: ReactNode }) {
   const src = `${import.meta.env.BASE_URL}mathjax-tex-svg.js`;
   return (
@@ -20,12 +12,8 @@ export function MathJaxProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// ============================================================================
-// Stan source -> graphical-model graph. Every diagram in this app (including
-// Wasm Sandbox's live editor) is derived from this parser rather than
-// hand-drawn, so the diagram can never drift out of sync with the actual
-// model being sampled.
-// ============================================================================
+// Stan source -> graphical-model graph. Every diagram in this app is derived from
+// this parser, so it cannot drift out of sync with the model being sampled.
 
 const GREEK: Record<string, string> = {
   alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", zeta: "ζ",
@@ -286,12 +274,8 @@ export interface Graph { nodes: GNode[]; edges: GEdge[]; plates: { bound: string
 
 interface PlateCtx { plateBound: string | null; loopVar: string | null; members: string[]; }
 
-/** Parses `src` into a Bayesian-network graph: nodes are data/parameter/
- *  transformed-parameter declarations, edges come from what each sampling
- *  statement's (or deterministic transform's) arguments reference. Returns
- *  `null` for anything that doesn't parse as a plausible Stan program —
- *  callers should treat that as "no diagram to show" rather than an error,
- *  since e.g. Wasm Sandbox's editor is mid-edit most of the time. */
+/** Parses `src` into a Bayesian-network graph. Returns `null` for anything that
+ *  doesn't parse — callers show no diagram rather than an error (the editor mid-edit). */
 export function parseStanGraph(src: string): Graph | null {
   try {
     const clean = stripComments(src);
@@ -441,9 +425,8 @@ export function parseStanGraph(src: string): Graph | null {
 const NODE_R = 18;
 const SQ = 26;
 const ROW_GAP = 90;
-// Wide enough that two adjacent same-row nodes' formula boxes (FORMULA_W
-// below, each centered on its node) never overlap — with FORMULA_W=140,
-// anything under ~150 lets neighboring labels visually collide.
+// Wide enough that two adjacent same-row formula boxes never overlap — under
+// ~150 with FORMULA_W=140, neighboring labels collide.
 const COL_GAP = 156;
 const TOP_PAD = 34;
 const SIDE_PAD = 44;
@@ -458,13 +441,8 @@ function rowsFor(list: GNode[]): GNode[][] {
   return depths.map((d) => list.filter((n) => n.depth === d).sort((a, b) => a.order - b.order));
 }
 
-/** Population-level (unplated) nodes form row(s) at the top; each plate's
- *  members get their own self-contained rows in a box below, spanning the
- *  full width — this is the standard plate-notation layout, and keeping the
- *  two node populations in separate row systems (rather than one global grid)
- *  is what stops an unplated root like `alpha` from ending up sharing a row,
- *  and hence x-coordinate range, with plated data nodes it has nothing to do
- *  with positionally. */
+/** Standard plate notation: unplated nodes form rows at the top, each plate gets
+ *  its own rows below. Separate row systems keep the two populations off each other. */
 function layout(graph: Graph): Layout {
   const outside = graph.nodes.filter((n) => !n.plate);
   const outsideRows = rowsFor(outside);
@@ -497,9 +475,8 @@ function layout(graph: Graph): Layout {
       );
       y += ROW_GAP;
     }
-    // +78 leaves room below the last row's nodes for both a formula
-    // (foreignObject, ~34px) and an "observed" tag under it (~14px) — the
-    // worst case, when the row's node is both filled and has a formula.
+    // +78 leaves room under the last row for a formula (~34px) and an "observed"
+    // tag (~14px) — the worst case, a filled node that also has a formula.
     const boxBottom = y - ROW_GAP + 78;
     plateBoxes.push({ plate, loopVar, x: SIDE_PAD - 22, y: boxTop - 28, w: width - 2 * (SIDE_PAD - 22), h: boxBottom - (boxTop - 28) });
     y = boxBottom + 4;
@@ -584,8 +561,6 @@ function GraphicalModelInner({ stanCode }: { stanCode: string }) {
   );
 }
 
-/** Memoized on `stanCode` alone: tabs with static Stan source (all but Get
- *  Started) pass the same string reference on every render, so this never
- *  re-parses or re-typesets — important since those tabs re-render at
- *  animation-frame rates and MathJax typesetting is not cheap. */
+/** Memoized on `stanCode` alone: static tabs pass the same reference every render,
+ *  so animation-rate re-renders never re-parse or re-typeset. */
 export const GraphicalModel = memo(GraphicalModelInner);

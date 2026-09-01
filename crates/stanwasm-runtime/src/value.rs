@@ -16,11 +16,8 @@ pub enum Val {
 }
 
 impl Val {
-    /// Coerce to a plain f64 (Tape values read their primal off the tape).
-    ///
-    /// A `Vec` means the model used a container where a scalar was required,
-    /// which hand-written Stan can reach — hence an `EvalError` and not a
-    /// panic, which would trap and take the whole wasm instance down.
+    /// Coerce to a plain f64. A `Vec` means a container where a scalar was required,
+    /// which hand-written Stan can reach — an `EvalError`, not a wasm-trapping panic.
     pub fn to_f64(&self, tape: &Tape) -> Result<f64, EvalError> {
         match self {
             Val::Num(v) => Ok(*v),
@@ -50,11 +47,8 @@ impl Val {
                 if !xs.iter().any(|x| matches!(x, Val::Vec(_))) {
                     return Shape::Vector(xs.len());
                 }
-                // Rows must all be containers of the same length for this to
-                // be a well-formed matrix. `cols: None` marks a ragged value,
-                // which never compares equal to anything — the alternative is
-                // to compare row counts alone and let the columns be zipped
-                // down to the shorter operand.
+                // Rows must be equal-length containers to be a matrix. `cols: None`
+                // marks a ragged value, which never compares equal to anything.
                 let mut cols = None;
                 for x in xs {
                     match (x, cols) {

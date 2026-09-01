@@ -32,11 +32,8 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 op.as_str(),
                 "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||"
             ) {
-                // Comparison/logical results always collapse to a plain
-                // Val::Num (see bool_val below) — checking the *result* for
-                // Val::Tape can never catch a parameter-dependent condition,
-                // since the taint is lost right here. Check the operands
-                // instead, before that collapse happens.
+                // Comparison results collapse to `Val::Num`, so checking the result
+                // can never catch a parameter-dependent condition. Check the operands.
                 check_no_param_branch(env, &lv)?;
                 check_no_param_branch(env, &rv)?;
             }
@@ -45,10 +42,8 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 "+" => v_add(t, &lv, &rv),
                 "-" => v_sub(t, &lv, &rv),
                 "*" => v_mul(t, &lv, &rv),
-                // Stan is statically typed and `int / int` truncates toward
-                // zero (`N / 2` with `N = 3` is 1, not 1.5). Int-ness is a
-                // property of the *declarations*, not of the runtime value,
-                // so it's decided from the expression tree.
+                // `int / int` truncates toward zero (`N / 2` with `N = 3` is 1).
+                // Int-ness is a property of the declarations, so it comes from the tree.
                 "/" if is_int_expr(l, env) && is_int_expr(r, env) => {
                     let denom = rv.to_f64(t)?;
                     if denom == 0.0 {
@@ -106,9 +101,8 @@ fn bool_val(b: bool) -> Val {
     Val::Num(if b { 1.0 } else { 0.0 })
 }
 
-/// Whether an expression has an integral Stan type. Only `/` cares (integer
-/// division), but the answer has to propagate through the arithmetic that
-/// feeds it: `(N + 1) / 2` is still integer division.
+/// Whether an expression has an integral Stan type. Only `/` cares, but it has to
+/// propagate through the arithmetic feeding it: `(N + 1) / 2` is still integer.
 fn is_int_expr(e: &Expr, env: &Env) -> bool {
     match e {
         Expr::IntNum(_) => true,
@@ -137,12 +131,8 @@ pub fn stan_type_is_int(typ: &StanType) -> bool {
     }
 }
 
-/// Reject operand shapes this runtime would otherwise answer *wrongly*.
-///
-/// `ops::v_*` broadcast element-wise and `zip` silently truncates, so without
-/// this check `vector[3] + vector[2]` quietly returns a length-2 vector and
-/// `X * beta` (matrix × vector) quietly returns the matrix with each row
-/// scaled by one element of `beta` — neither is what Stan computes.
+/// Reject operand shapes this runtime would otherwise answer wrongly: `ops::v_*`
+/// broadcast and `zip` truncates, so `vector[3] + vector[2]` would quietly work.
 fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
     use Shape::*;
     let (ls, rs) = (lhs.shape(), rhs.shape());
@@ -238,9 +228,8 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
     })
 }
 
-/// Result of evaluating a statement: either a plain log-prob contribution, or
-/// a loop-control signal (each still carrying the log-prob accumulated up to
-/// the point of exit, e.g. from statements executed before a `break`).
+/// Either a log-prob contribution or a loop-control signal, each carrying the
+/// log-prob accumulated up to the point of exit.
 pub enum Flow {
     Val(Val),
     Break(Val),
@@ -255,10 +244,8 @@ impl Flow {
     }
 }
 
-/// Evaluate a statement list as a scoped block: locals declared inside are
-/// visible only for the duration of the block, and a `break`/`continue`
-/// short-circuits the remaining statements while propagating the signal (and
-/// the log-prob accumulated so far) to the caller.
+/// Evaluate a statement list as a scoped block: locals stay local, and
+/// `break`/`continue` short-circuits while propagating the signal and log-prob.
 fn eval_block(t: &mut Tape, stmts: &[Stmt], env: &mut Env) -> Result<Flow> {
     let saved = env.len();
     let mut acc = Val::Num(0.0);
@@ -393,10 +380,8 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
     }
 }
 
-/// Zero value matching a declaration's shape, used when a local is declared
-/// without an initializer (`vector[N] y_rep;`). Sizing it correctly matters
-/// for `generated quantities`, where the declared shape decides how many
-/// columns the draw matrix gets.
+/// Zero value matching a declaration's shape, for a local declared without an
+/// initializer. The shape decides `generated quantities`' column count.
 fn default_for_type(t: &mut Tape, typ: &StanType, env: &Env) -> Result<Val> {
     fn size_of(t: &mut Tape, e: &Expr, env: &Env) -> Result<usize> {
         Ok(eval_expr(t, e, env)?.to_i32(t)?.max(0) as usize)

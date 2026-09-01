@@ -16,11 +16,8 @@ export function useIsNarrow(): boolean {
   return narrow;
 }
 
-/**
- * Hides `children` behind a `<details>` on a narrow viewport, renders them bare
- * on a wide one. The phone scroll area is ~500px tall, so anything above the
- * plots is something to scroll past before reaching what the tab is for.
- */
+/** Hides `children` behind a `<details>` on a narrow viewport, bare on a wide one.
+ *  The phone scroll area is ~500px, so anything above the plots is scrolled past. */
 export function Collapsible({
   label,
   children,

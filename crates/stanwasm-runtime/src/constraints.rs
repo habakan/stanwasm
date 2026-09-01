@@ -44,10 +44,8 @@ pub fn param_dims(typ: &StanType, env: &Env) -> usize {
     }
 }
 
-/// Used only for sizing (`vector[N]`, etc.) — falls back to 0 on any
-/// evaluation error rather than propagating one, since a bad size surfaces
-/// clearly downstream (wrong param count, empty vector) rather than as a
-/// silently-wrong log density.
+/// Sizing only; falls back to 0 on an evaluation error, since a bad size shows
+/// up downstream as a wrong param count, not a silently-wrong log density.
 fn eval_plain_int(expr: &stanwasm_ast::Expr, env: &Env) -> usize {
     let mut tape = Tape::new();
     match eval_plain(&mut tape, expr, env) {
@@ -56,10 +54,8 @@ fn eval_plain_int(expr: &stanwasm_ast::Expr, env: &Env) -> usize {
     }
 }
 
-/// Apply the constraint transform to a slice of unconstrained tape leaves.
-/// Returns `(constrained_value, log_jacobian)`.
-///
-/// `name` is only used to say which declaration an error is about.
+/// Apply the constraint transform to unconstrained tape leaves, returning
+/// `(constrained_value, log_jacobian)`. `name` only labels errors.
 pub fn constrain(
     t: &mut Tape,
     name: &str,
@@ -121,9 +117,8 @@ pub fn constrain(
             }
             (Val::Vec(cs), jac)
         }
-        // simplex[K]: K-1 unconstrained → K-dim simplex (∑ θᵢ = 1, θᵢ > 0)
-        // Uses Stan's stick-breaking transform with the (K-1-i) shift so the
-        // unconstrained zero vector maps to the uniform simplex (1/K, ..., 1/K).
+        // simplex[K]: K-1 raw → K-dim simplex. Stick-breaking with the (K-1-i)
+        // shift, so the zero vector maps to the uniform simplex (1/K, ..., 1/K).
         StanType::Simplex(_) => {
             let k = raw.len() + 1;
             let mut theta = vec![Val::Num(0.0); k];
@@ -174,14 +169,8 @@ pub fn constrain(
             }
             (Val::Vec(cs), log_jac)
         }
-        // cholesky_factor_corr[K]:
-        //   K*(K-1)/2 unconstrained → K×K lower-triangular L (Cholesky of corr matrix).
-        //   Spherical parameterization: row i, col j < i:
-        //     z = tanh(raw[idx])
-        //     L[i][j] = z * sqrt(rem)
-        //     log_jac += 0.5*log(rem) + log(1 - z²)
-        //     rem *= (1 - z²)
-        //   L[i][i] = sqrt(rem). Row 0: L[0][0] = 1.
+        // cholesky_factor_corr[K]: K*(K-1)/2 raw → lower-triangular L. Spherical,
+        // per row: z = tanh(raw); L[i][j] = z·√rem; jac += ½log rem + log(1−z²); rem *= 1−z².
         StanType::CholeskyFactorCorr(k_e) => {
             let kk = match eval_plain(t, k_e, env)? {
                 Val::Num(v) => v as usize,
@@ -217,10 +206,8 @@ pub fn constrain(
             }
             (Val::Vec(mat), log_jac)
         }
-        // array[N] T — constrain each element independently and sum the
-        // Jacobians. Without this, `array[N] real<lower=0> s;` fell through to
-        // the old pass-through arm: no transform, no Jacobian, negative values
-        // accepted as if they were positive.
+        // array[N] T — constrain each element and sum the Jacobians. Without this,
+        // `array[N] real<lower=0> s;` passed through untransformed and unjacobianed.
         StanType::Array(_, elem) => {
             // `param_dims` is 0 for an element type with no unconstrained
             // representation — `int` (rejected below) or a zero-sized vector.
@@ -247,9 +234,8 @@ pub fn constrain(
             }
             (Val::Vec(out), log_jac)
         }
-        // matrix[R, C] — unconstrained, but still needs reshaping into rows so
-        // that indexing (`M[i, j]`) and the matrix-shaped distributions see the
-        // structure they expect instead of one flat vector.
+        // matrix[R, C] — unconstrained, but reshaped into rows so indexing and the
+        // matrix-shaped distributions see structure rather than one flat vector.
         StanType::Matrix(r_e, c_e) => {
             let cols = match eval_plain(t, c_e, env)? {
                 Val::Num(v) => v as usize,
@@ -318,8 +304,7 @@ fn apply_upper(t: &mut Tape, raw: &Val, upper: &Val) -> (Val, Val) {
 }
 
 fn apply_lower_upper(t: &mut Tape, raw: &Val, lower: &Val, upper: &Val) -> (Val, Val) {
-    // p = inv_logit(raw)
-    // c = lower + (upper - lower) * p
+    // p = inv_logit(raw); c = lower + (upper - lower) * p
     // log_jac = log(upper - lower) + log(p) + log(1 - p)
     let range = v_sub(t, upper, lower);
     let p = v_inv_logit(t, raw);

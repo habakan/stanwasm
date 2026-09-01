@@ -38,14 +38,8 @@ function summarize(name: string, samples: number[]): ParamSummary {
   };
 }
 
-/** A right-column panel that can collapse to just its header. Open panels
- *  share the column's height by `grow` weight (default 1, so equal shares)
- *  so however many are open, they always fit without the column itself
- *  needing to scroll; only an individual panel's own body scrolls, if its
- *  content outgrows the share it's been given. `fixed` opts a panel out of
- *  sharing entirely — sized to its own content instead (for controls like
- *  Compile/Run that must never be the thing squeezed out and hidden behind
- *  a scroll); the remaining panels split whatever height is left. */
+/** A collapsible right-column panel. Open panels share the column height by `grow`
+ *  weight; `fixed` sizes to content instead, for controls that must stay visible. */
 function CollapsibleSection({
   title,
   open,
@@ -100,12 +94,8 @@ export function WasmSandbox() {
   // one viewport without ever needing to scroll the page itself.
   const [showData, setShowData] = useState(true);
   const [showResults, setShowResults] = useState(false);
-  // The graphical model lives as a floating, semi-transparent overlay in
-  // the editor's top-right corner instead of a sidebar panel — it doesn't
-  // have to compete with Data/Posterior summary for height that way. Click
-  // to expand it large and opaque for a proper look; click again — or click
-  // anywhere outside it — to shrink it back down out of the way of the code
-  // underneath.
+  // The diagram floats semi-transparent over the editor rather than taking sidebar
+  // height from Data/Posterior. Click to expand, click again or outside to shrink.
   const [diagramExpanded, setDiagramExpanded] = useState(false);
   const diagramOverlayRef = useRef<HTMLDivElement>(null);
 
@@ -124,9 +114,8 @@ export function WasmSandbox() {
   const effectiveData = customData ?? preset.data;
   const effectiveStan = customStan ?? preset.stanCode;
 
-  // Debounced so the graphical-model diagram (which re-parses the Stan
-  // source and re-typesets MathJax) doesn't redo that work on every
-  // keystroke while editing.
+  // Debounced so re-parsing the Stan source and re-typesetting MathJax don't run
+  // on every keystroke.
   const [debouncedStan, setDebouncedStan] = useState(effectiveStan);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedStan(effectiveStan), 250);
@@ -218,10 +207,8 @@ export function WasmSandbox() {
       const n = compiledModel.n_params;
       const names = compiledModel.paramNames();
       const post = samples.subarray(nWarmup * n);
-      // `sample()` returns unconstrained draws (e.g. sigma on the log scale);
-      // constrainDraw() maps each draw back to the natural scale and also
-      // fills in transformed parameters, which paramNames() includes but the
-      // raw draw doesn't carry.
+      // `sample()` returns unconstrained draws; constrainDraw() maps them back and
+      // fills in transformed parameters, which paramNames() includes.
       const draws: number[][] = Array.from({ length: names.length }, () => []);
       for (let i = 0; i < nDraws; i++) {
         const row = post.subarray(i * n, (i + 1) * n);

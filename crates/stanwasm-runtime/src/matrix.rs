@@ -15,9 +15,8 @@ pub fn vec_dot_self(t: &mut Tape, v: &[Val]) -> Val {
     acc
 }
 
-/// Forward substitution: solve `L x = b` where `l_rows` is lower-triangular
-/// (each row is `Val::Vec`; only entries [0..=i] of row i are read).
-/// Returns x as a Vec of scalars.
+/// Forward substitution: solve `L x = b`, `l_rows` lower-triangular (only
+/// entries [0..=i] of row i are read). Returns x as a Vec of scalars.
 pub fn mat_mdiv_ltri_low(t: &mut Tape, l_rows: &[Val], b: &[Val]) -> Vec<Val> {
     let n = b.len();
     let mut x = Vec::with_capacity(n);
@@ -41,11 +40,8 @@ pub fn mat_mdiv_ltri_low(t: &mut Tape, l_rows: &[Val], b: &[Val]) -> Vec<Val> {
     x
 }
 
-/// Cholesky decomposition of a symmetric positive-definite matrix (`sigma_rows`,
-/// a vec of rows): returns the lower-triangular `L` with `Σ = L Lᵀ`, in the
-/// same rows-of-`Val::Vec` shape used elsewhere. Used to turn a full-covariance
-/// `multi_normal` into the same math as `multi_normal_cholesky`, since
-/// `log det Σ = 2 Σ log Lᵢᵢ`.
+/// Cholesky decomposition of a symmetric positive-definite matrix: `Σ = L Lᵀ`,
+/// rows of `Val::Vec`. Lets full-covariance `multi_normal` reuse the Cholesky math.
 pub fn cholesky_decompose(t: &mut Tape, sigma_rows: &[Val]) -> Vec<Val> {
     let n = sigma_rows.len();
     let mut l: Vec<Vec<Val>> = vec![Vec::new(); n];
@@ -56,9 +52,8 @@ pub fn cholesky_decompose(t: &mut Tape, sigma_rows: &[Val]) -> Vec<Val> {
         };
         for j in 0..=i {
             let mut sum = row_i.get(j).cloned().unwrap_or(Val::Num(0.0));
-            // Both `l[i]` and `l[j]` are indexed by `k`, so this isn't a
-            // single-container iteration clippy's needless_range_loop lint
-            // has in mind.
+            // `l[i]` and `l[j]` are both indexed by `k`, so this is not the
+            // single-container iteration needless_range_loop has in mind.
             #[allow(clippy::needless_range_loop)]
             for k in 0..j {
                 let prod = v_mul(t, &l[i][k], &l[j][k]);

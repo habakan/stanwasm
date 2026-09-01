@@ -14,9 +14,8 @@ use stanwasm_ast::{Constraint, StanProgram, StanType, Stmt};
 use stanwasm_autodiff::Tape;
 use thiserror::Error;
 
-/// Flatten a `Val` (scalar / vector / matrix-as-vec-of-rows) into `out`,
-/// reading tape-node primals through `tape`. Matches the flattening order
-/// used by `param_names`/`gen_quantity_names`.
+/// Flatten a `Val` into `out`, reading primals through `tape`. Matches the
+/// order used by `param_names`/`gen_quantity_names`.
 fn flatten_val(tape: &Tape, v: &Val, out: &mut Vec<f64>) -> Result<(), EvalError> {
     match v {
         Val::Vec(xs) => {
@@ -29,9 +28,8 @@ fn flatten_val(tape: &Tape, v: &Val, out: &mut Vec<f64>) -> Result<(), EvalError
     Ok(())
 }
 
-/// Push flattened names for one declared variable, matching Stan's naming
-/// convention: scalar → `name`; vector(N) → `name[1]`..`name[N]`; matrix →
-/// `name[i,j]`. Shared by `param_names` and `gen_quantity_names`.
+/// Push flattened names for one variable: scalar → `name`; vector(N) →
+/// `name[1]`..`name[N]`; matrix → `name[i,j]`.
 fn push_names_for(out: &mut Vec<String>, name: &str, typ: &StanType, env: &Env) {
     match typ {
         StanType::Matrix(r_e, c_e) => {
@@ -56,9 +54,8 @@ fn push_names_for(out: &mut Vec<String>, name: &str, typ: &StanType, env: &Env) 
     }
 }
 
-/// Used only for generating display names (`param_names`/`gen_quantity_names`);
-/// falls back to 0 on any evaluation error rather than propagating one, since
-/// a wrong label here is a display-only affect, not an incorrect posterior.
+/// Display names only; falls back to 0 on an evaluation error, since a wrong
+/// label is cosmetic rather than a wrong posterior.
 fn eval_int(expr: &stanwasm_ast::Expr, env: &Env) -> usize {
     let mut t = Tape::new();
     match eval_expr(&mut t, expr, env) {
@@ -75,13 +72,8 @@ pub enum ModelError {
     Data(#[from] DataMismatch),
 }
 
-/// A `data { ... }` declaration the supplied JSON doesn't satisfy.
-///
-/// Every one of these used to be accepted silently: a missing field read as
-/// `undefined variable` only if the model happened to use it, a wrong-length
-/// vector was zipped down to the shorter of the two, and `int<lower=0> N`
-/// accepted `-5`. All of them produce a wrong answer rather than an error, so
-/// they are checked once at load.
+/// A `data { ... }` declaration the supplied JSON doesn't satisfy. Each of these
+/// used to be accepted silently and give a wrong answer, so they are checked at load.
 #[derive(Debug, Error)]
 pub enum DataMismatch {
     #[error("`{name}` is declared in the data block but missing from the data")]
@@ -141,8 +133,7 @@ fn describe(v: &Val) -> String {
 }
 
 /// Resolve a declared type's sizes against the data bound so far. Sizes may
-/// reference earlier data declarations (`int N; vector[N] x;`), which is why
-/// this runs in declaration order.
+/// reference earlier declarations (`int N; vector[N] x;`), hence declaration order.
 fn shape_of(name: &str, typ: &StanType, env: &Env) -> Result<Shaped, DataMismatch> {
     let size = |e: &stanwasm_ast::Expr| -> Result<usize, DataMismatch> {
         let mut t = Tape::new();
@@ -334,9 +325,8 @@ impl Model {
         self.n_params
     }
 
-    /// Constrained parameter names matching `constrained_params` order.
-    /// Scalar → `name`; vector(N) → `name[1]`..`name[N]`; matrix → `name[i,j]`.
-    /// Includes both `parameters` and `transformed parameters`.
+    /// Constrained parameter names in `constrained_params` order, covering both
+    /// `parameters` and `transformed parameters`.
     pub fn param_names(&self) -> Vec<String> {
         let mut out = Vec::new();
         let env = &self.data_env;
@@ -361,11 +351,8 @@ impl Model {
         out
     }
 
-    /// Build an `Env` with data bound and `parameters`/`transformed parameters`
-    /// evaluated from `unconstrained` (constraint transforms applied). Shared
-    /// by `constrained_draw` and `generated_quantities`, which — unlike
-    /// `trace_forward` — don't need the constraint Jacobian (no log_prob is
-    /// being computed).
+    /// `Env` with data bound and parameters evaluated from `unconstrained`. Shared
+    /// by `constrained_draw`/`generated_quantities`, which need no Jacobian.
     fn build_env(&self, tape: &mut Tape, leaves: &[u32]) -> Result<Env, EvalError> {
         let mut env = self.data_env.clone();
         let mut leaf_idx = 0usize;
@@ -390,9 +377,8 @@ impl Model {
         Ok(env)
     }
 
-    /// Constrained values of `parameters` + `transformed parameters` for one
-    /// unconstrained draw, flattened in the same order as `param_names()`.
-    /// No gradient is computed — the tape here is a disposable value scratchpad.
+    /// Constrained `parameters` + `transformed parameters` for one draw, in
+    /// `param_names()` order. No gradient — the tape is a scratchpad.
     pub fn constrained_draw(&self, unconstrained: &[f64]) -> Result<Vec<f64>, EvalError> {
         let mut tape = Tape::new();
         let leaves: Vec<u32> = unconstrained.iter().map(|p| tape.new_var(*p)).collect();
@@ -413,10 +399,8 @@ impl Model {
         Ok(out)
     }
 
-    /// Evaluate the `generated quantities` block for one unconstrained draw.
-    /// `rng` is shared (via `Rc<RefCell<_>>`) across draws so the RNG stream
-    /// advances across a batch instead of resetting every call. Returns the
-    /// top-level declared values flattened in `gen_quantity_names()` order.
+    /// `generated quantities` for one draw, flattened in `gen_quantity_names()`
+    /// order. `rng` is shared across draws so the stream advances over a batch.
     pub fn generated_quantities(
         &self,
         unconstrained: &[f64],
@@ -441,12 +425,8 @@ impl Model {
         Ok(out)
     }
 
-    /// Compute log_prob and gradient at the given unconstrained parameters.
-    /// Traces fresh every call (the native "golden oracle" / AST-eval path),
-    /// so — unlike `Compiled`/AOT, which trace once and replay — a
-    /// parameter-dependent `if`/`while` is evaluated correctly here every
-    /// time and doesn't need the `strict` check `trace_forward` applies for
-    /// those other callers.
+    /// log_prob and gradient at the given unconstrained parameters. Traces fresh
+    /// every call, so a parameter-dependent `if`/`while` evaluates correctly here.
     pub fn log_prob_grad(&self, params: &[f64]) -> Result<(f64, Vec<f64>), EvalError> {
         let mut tape = Tape::new();
         let leaves: Vec<u32> = params.iter().map(|p| tape.new_var(*p)).collect();
@@ -457,14 +437,8 @@ impl Model {
         Ok((lp, grads))
     }
 
-    /// One-shot forward trace on the supplied tape; returns the root tape index
-    /// so codegen can walk the recorded ops. Caller controls tape lifetime.
-    ///
-    /// Set `strict` when this one trace will be replayed for later parameter
-    /// values (`Compiled::from`, `stanwasm-codegen::compile`): a
-    /// parameter-dependent `if`/`while` is then rejected with
-    /// `EvalError::ParamDependentBranch` rather than freezing whichever branch
-    /// this trace happened to take. Pass `false` when re-tracing every call.
+    /// One-shot forward trace; returns the root tape index. Set `strict` when this
+    /// trace will be replayed, to reject parameter-dependent branches, not freeze them.
     pub fn trace_forward(
         &self,
         tape: &mut Tape,

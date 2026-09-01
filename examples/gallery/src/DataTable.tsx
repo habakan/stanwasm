@@ -2,11 +2,8 @@ interface Props {
   data: Record<string, number | number[]>;
 }
 
-/**
- * Renders Stan data in a spreadsheet-style layout:
- * - scalar fields appear as `name = value` badges at the top
- * - vector fields of equal length become columns of a single table
- */
+/** Scalar fields become `name = value` badges; equal-length vector fields become
+ *  columns of one table. */
 export function DataTable({ data }: Props) {
   const scalars = Object.entries(data).filter(
     ([, v]) => typeof v === "number",

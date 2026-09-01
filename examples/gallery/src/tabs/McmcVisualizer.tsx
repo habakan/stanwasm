@@ -3,10 +3,8 @@ import { StanModel } from "stanwasm";
 import { GraphicalModel } from "../graphicalModel";
 import { Collapsible } from "../Collapsible";
 
-// Neal's funnel: a hard 2D posterior with no closed form and a notoriously
-// difficult geometry (wide at large y, vanishingly narrow at small y) — the
-// canonical illustration of why a naive random-walk proposal struggles and
-// gradient-informed samplers like NUTS matter.
+// Neal's funnel: a hard 2D posterior, wide at large y and vanishingly narrow at
+// small y — the canonical case for why a random walk struggles and NUTS matters.
 const STAN_CODE = `parameters {
   real y;
   real x;
@@ -16,9 +14,8 @@ model {
   x ~ normal(0, exp(y / 2));
 }`;
 
-// [0,0] has a zero gradient in x (the mean of x's conditional distribution)
-// and nuts-rs rejects exactly-zero-gradient initial points — same reason
-// other demos in this gallery seed away from zero.
+// [0,0] has a zero gradient in x and nuts-rs rejects exactly-zero-gradient inits,
+// same as the other demos here.
 const INIT: [number, number] = [0.3, 0.3];
 
 const Y_DOMAIN: [number, number] = [-9, 9]; // vertical: top = wide mouth, bottom = narrow neck
@@ -101,10 +98,8 @@ function computeHeatmap(model: StanModel): ImageData {
       const xVal = X_DOMAIN[0] + (i / (GRID_N - 1)) * (X_DOMAIN[1] - X_DOMAIN[0]);
       rowLp.push(model.logProbGrad(new Float64Array([yVal, xVal]))[0]);
     }
-    // Row-normalized (per y-slice), not globally: the funnel's true density
-    // scale varies by orders of magnitude across rows (sigma_x = exp(y/2)),
-    // which would make a global-max heatmap look blank except at one row.
-    // This shows the funnel's *shape*, which is the pedagogical point.
+    // Row-normalized per y-slice, not globally: sigma_x = exp(y/2) spans orders of
+    // magnitude, so a global max would render every row but one blank.
     const rowMax = Math.max(...rowLp);
     for (let i = 0; i < GRID_N; i++) {
       const rel = Math.min(1, Math.max(0, (rowLp[i] - rowMax) / 8 + 1));
@@ -118,16 +113,8 @@ function computeHeatmap(model: StanModel): ImageData {
   return img;
 }
 
-/** "Fog of war" veil over the true-density panel: a light gray haze that
- *  starts opaque everywhere and clears wherever draws have actually landed,
- *  revealing the orange truth underneath. (An earlier version tinted
- *  covered cells blue instead — additively mixing a color on top of the
- *  funnel's already-saturated orange neck just produced murky purple there,
- *  unreadable exactly where coverage mattered most. A brightness veil never
- *  has that problem: it only ever *un-obscures*, never mixes hues.)
- *  Computed on the same grid as the true-density heatmap so the two line up
- *  pixel-for-pixel; recomputed from scratch every frame — cheap, at most a
- *  few hundred points per chain into a small grid. */
+/** Fog-of-war veil: gray haze that starts opaque and clears where draws land. A
+ *  brightness veil never mixes hues, unlike the earlier blue tint over orange. */
 const VEIL_SPLAT = [
   [0, 0, 1], [-1, 0, 0.5], [1, 0, 0.5], [0, -1, 0.5], [0, 1, 0.5],
   [-1, -1, 0.25], [-1, 1, 0.25], [1, -1, 0.25], [1, 1, 0.25],
@@ -141,9 +128,8 @@ function computeExplorationVeil(paths: Point[][]): ImageData {
       if (yv < Y_DOMAIN[0] || yv > Y_DOMAIN[1] || xv < X_DOMAIN[0] || xv > X_DOMAIN[1]) continue;
       const j = Math.min(GRID_N - 1, Math.floor(((Y_DOMAIN[1] - yv) / (Y_DOMAIN[1] - Y_DOMAIN[0])) * GRID_N));
       const i = Math.min(GRID_N - 1, Math.floor(((xv - X_DOMAIN[0]) / (X_DOMAIN[1] - X_DOMAIN[0])) * GRID_N));
-      // Splat each draw over its 3x3 neighborhood, not just its exact cell —
-      // a lone visited cell reads as a nearly invisible fleck at this grid
-      // resolution; a small blob is what actually looks "revealed".
+      // Splat each draw over its 3x3 neighborhood — a lone cell is an invisible
+      // fleck at this resolution, a small blob reads as "revealed".
       for (const [di, dj, w] of VEIL_SPLAT) {
         const ni = i + di;
         const nj = j + dj;
@@ -157,10 +143,8 @@ function computeExplorationVeil(paths: Point[][]): ImageData {
   const img = new ImageData(GRID_N, GRID_N);
   for (let k = 0; k < counts.length; k++) {
     const rel = maxCount > 0 ? counts[k] / maxCount : 0;
-    // Any visited cell jumps to at least half-revealed immediately — sqrt
-    // alone left a single early visit almost imperceptible against a
-    // hundred-plus-cell hot spot, which read as "too faint to tell anything
-    // happened here" rather than "lightly explored".
+    // Any visited cell jumps to half-revealed at once; sqrt alone left an early
+    // visit imperceptible beside a hot spot, reading as nothing having happened.
     const revealed = counts[k] > 0 ? Math.min(1, 0.5 + 0.5 * Math.sqrt(rel)) : 0;
     const idx = k * 4;
     img.data[idx] = 245;
@@ -191,9 +175,8 @@ function drawForeground(canvas: HTMLCanvasElement | null, paths: Point[][]) {
     if (path.length === 0) return;
     const color = CHAIN_COLORS[c % CHAIN_COLORS.length];
 
-    // Where every draw so far landed is already shown by the fog-of-war
-    // veil (see computeExplorationVeil) — this layer only needs the
-    // recent trail, so it doesn't re-encode the same information twice.
+    // The fog veil already shows every draw so far, so this layer only needs the
+    // recent trail rather than re-encoding the same information.
     const start = Math.max(0, path.length - TRAIL_LEN);
     ctx.beginPath();
     for (let i = start; i < path.length; i++) {
@@ -226,12 +209,8 @@ export function McmcVisualizer() {
   const [frame, setFrame] = useState(0);
   const [rwmAccepts, setRwmAccepts] = useState<number[]>([]);
   const [nutsDivergences, setNutsDivergences] = useState<number[]>([]);
-  // One line of live status per NUTS chain, read straight off each chain's
-  // own stepDraw() return — step_size/num_steps are nuts-rs's own
-  // dual-averaging adaptation and trajectory-length search, not a value
-  // this app computes. A JS reimplementation of "a NUTS demo" would have to
-  // fake these; the real sampler produces them, independently per chain, as
-  // a side effect of actually running.
+  // One status line per chain, read off its own stepDraw(). step_size/num_steps are
+  // nuts-rs's own adaptation, which a JS reimplementation would have to fake.
   const [nutsChainLog, setNutsChainLog] = useState<Array<ChainLogEntry | null>>([]);
   const nutsChainLogRef = useRef<Array<ChainLogEntry | null>>([]);
 
@@ -316,28 +295,8 @@ export function McmcVisualizer() {
     if (!anyActive) setPlaying(false);
   }
 
-  // One effect builds the chains AND drives the whole animation loop, rather
-  // than a setup effect plus a separate ready/playing-driven "start the raf
-  // loop" effect — simpler to reason about, and scheduling/cancelling the
-  // animation frame happen inside one synchronous setup/cleanup pair.
-  // Play/Pause reads `playingRef` (not a dependency), so toggling it never
-  // tears down and rebuilds this effect — it only skips calling `tick()`
-  // while paused.
-  //
-  // Freeing a `StanModel` while its step-sampling chain is mid-flight can
-  // occasionally throw a wasm-level trap (a real fault, not just a "null
-  // pointer" JS error) — reproducible by unmounting this component while it
-  // is actively animating. `tick()` already catches per-chain so one bad
-  // draw doesn't take down the others; the cleanup's `free()` calls must be
-  // caught the same way, since an uncaught exception in a React effect
-  // cleanup is treated as fatal and unmounts the whole tree. Note: React
-  // StrictMode's dev-only mount→cleanup→remount simulation creates and
-  // immediately discards one throwaway generation of these models on every
-  // mount, which visibly triggers this far more often in `npm run dev` than
-  // `npm run build` ever would (verified clean in a production build across
-  // repeated full runs and repeated tab-switches mid-animation) — the catch
-  // here is what keeps a dev-mode trap from being visibly disruptive either
-  // way.
+  // Chains and animation loop in one effect, so setup/cleanup pair up; `playingRef`
+  // keeps Play/Pause out of the deps. Freeing a chain mid-flight traps, hence catch.
   useEffect(() => {
     let cancelled = false;
 
@@ -394,10 +353,8 @@ export function McmcVisualizer() {
         try {
           m.free();
         } catch {
-          // See the comment above this effect — freeing a mid-flight chain
-          // can trap; already-caught inside tick() calls, must also be
-          // caught here so an uncaught cleanup exception doesn't take down
-          // the whole React tree.
+          // Freeing a mid-flight chain can trap; catch here too so an uncaught
+          // cleanup exception doesn't take down the React tree.
         }
       });
       try {

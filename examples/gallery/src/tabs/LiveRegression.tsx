@@ -3,12 +3,8 @@ import { StanModel } from "stanwasm";
 import { GraphicalModel } from "../graphicalModel";
 import { Collapsible } from "../Collapsible";
 
-// Two likelihoods over the same data, fit side by side. `normal` has a
-// closed-form (conjugate) posterior — no sampler needed. `student_t` with a
-// small nu (heavy tails) does not: it's genuinely a case where you need
-// NUTS. Dragging one point far from the rest makes the difference obvious —
-// the normal fit gets dragged toward the outlier, the robust fit barely
-// moves.
+// Two likelihoods over the same data. `normal` is conjugate; `student_t` with small
+// nu is not, so it genuinely needs NUTS — and it barely moves for an outlier.
 const STAN_ROBUST = `data {
   int<lower=0> N;
   vector[N] x;
@@ -83,10 +79,8 @@ const INITIAL_POINTS: Point[] = [
   { x: 2.4, y: 4.8 },
 ];
 
-/** One model's worth of persistent wasm state: the compiled StanModel (freed
- *  and rebuilt every resample, since data changes) and the previous
- *  posterior mean, reused as the next `sample()` call's `init` so NUTS
- *  starts close to where it'll end up. */
+/** One model's persistent wasm state: the StanModel (rebuilt every resample) and
+ *  the previous posterior mean, reused as the next `init`. */
 function useModelSlot() {
   const modelRef = useRef<StanModel | null>(null);
   const warmStart = useRef<number[] | null>(null);

@@ -44,32 +44,16 @@ export function App() {
   const [tab, setTab] = useState<TabKey>(TABS[0].key);
 
   useEffect(() => {
-    // No explicit URL: wasm-bindgen's default resolution is
-    // `new URL("stanwasm_bg.wasm", import.meta.url)`, relative to the glue
-    // in ../../ts/pkg/. Vite rewrites that to a content-hashed asset at build
-    // time, and `server.fs.allow` (vite.config.ts) covers it during `dev`.
-    //
-    // Passing a URL out of public/ instead used to ship the wasm twice: Vite
-    // emits an asset for that `new URL` whether or not the branch ever runs,
-    // so the bundle carried both copies — ~477 KB of dead weight, and a
-    // filename with no content hash for the copy actually fetched.
-    //
-    // Loaded once here, shared by every tab, so switching tabs never
-    // re-instantiates the wasm module.
-    // `.catch` is not optional here. Without it a rejected init leaves
-    // `loaded` false forever and the page sits on "Loading…" with nothing
-    // said — which is exactly how the relaxed-SIMD failure below presented
-    // on iOS: a permanent spinner and no clue why.
+    // No explicit URL: wasm-bindgen resolves the wasm relative to the glue, which
+    // Vite content-hashes. `.catch` is required or a failed init sits on "Loading…".
     init()
       .then(() => setLoaded(true))
       .catch((e: unknown) => setInitError(String((e as Error)?.message ?? e)));
   }, []);
 
   const active = TABS.find((t) => t.key === tab)!;
-  // Wasm Sandbox is a full IDE-style tool in its own right — the gallery
-  // chrome above it (title, tagline, tab bar, description) just eats into
-  // its already-tight one-viewport layout for no benefit once you're
-  // actually using it. Collapse to a single "back" affordance instead.
+  // Wasm Sandbox is a full IDE in its own right; the gallery chrome above it just
+  // eats into its one-viewport layout. Collapse to a single "back" affordance.
   const isSandbox = tab === "wasm-sandbox";
 
   return (

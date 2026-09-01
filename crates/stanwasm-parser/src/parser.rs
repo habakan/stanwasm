@@ -298,13 +298,8 @@ impl Parser {
         }
     }
 
-    /// `^` is handled here rather than in the `prec` table because Stan gives
-    /// it two properties the precedence-climbing loop can't express:
-    /// it binds *tighter than unary minus* (`-a^2` is `-(a^2)`, not `(-a)^2`)
-    /// and it is *right-associative* (`2^3^2` is `2^(3^2)` = 512, not 64).
-    /// Recursing into `parse_unary` for the exponent gives both: the base
-    /// comes from `parse_postfix` (so a leading `-` never gets swallowed into
-    /// it), and the exponent may itself be a signed power (`a^-b`, `2^3^2`).
+    /// `^` is handled here rather than in `prec`: it binds tighter than unary minus
+    /// (`-a^2` is `-(a^2)`) and is right-associative (`2^3^2` is 512).
     fn parse_power(&mut self) -> Result<Expr> {
         let base = self.parse_postfix()?;
         if matches!(self.peek(), Token::Caret) {
@@ -327,9 +322,8 @@ impl Parser {
             if self.try_tok(&Token::Colon) {
                 let hi = self.parse_expr(0)?;
                 self.expect_tok(&Token::RBrack)?;
-                // `IntNum(1)`, not `Num(1.0)`: the length has to stay
-                // int-typed so `/` inside a slice bound keeps Stan's integer
-                // division semantics.
+                // `IntNum(1)`, not `Num(1.0)`: the length must stay int-typed so `/`
+                // in a slice bound keeps integer division.
                 let len = Expr::BinOp(
                     "+".into(),
                     Box::new(Expr::BinOp("-".into(), Box::new(hi), Box::new(idx.clone()))),

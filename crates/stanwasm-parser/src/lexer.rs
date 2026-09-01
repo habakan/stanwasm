@@ -2,11 +2,8 @@
 
 use crate::token::{is_keyword, Token};
 
-/// A byte the tokenizer doesn't recognize as the start of any token, comment,
-/// or whitespace. Previously silently dropped — which meant, notably, that
-/// `.` in `.*`/`./`/`.^` (Stan's elementwise operators, not yet implemented)
-/// vanished and left the following `*`/`/`/`^` looking like a normal,
-/// valid — but silently wrong — matrix operator.
+/// A byte that starts no token, comment or whitespace. Previously dropped, which
+/// made `.` in `.*`/`./`/`.^` vanish and leave a silently wrong matrix operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnknownChar(pub char);
 
@@ -94,9 +91,8 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
                 }
             }
             let s = std::str::from_utf8(&bytes[start..i]).expect("ascii numeric");
-            // A literal with no `.` and no exponent is an *int* in Stan, which
-            // changes what `/` means (integer division). Anything that doesn't
-            // fit i64 falls back to the real path rather than wrapping.
+            // No `.` and no exponent means an *int* in Stan, which changes what `/`
+            // does. Anything past i64 falls back to the real path rather than wrapping.
             let is_int = !s.contains(['.', 'e', 'E']);
             match (is_int, s.parse::<i64>()) {
                 (true, Ok(iv)) => tokens.push(Token::IntNum(iv)),
@@ -146,9 +142,8 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
         };
         match tok {
             Some(t) => tokens.push(t),
-            // `c as char` would render a non-ASCII byte as mojibake (a UTF-8
-            // continuation byte reads as a Latin-1 glyph), so decode the whole
-            // character from the source instead.
+            // `c as char` renders a UTF-8 continuation byte as a Latin-1 glyph, so
+            // decode the whole character from the source.
             None => return Err(UnknownChar(src[i..].chars().next().unwrap_or('\u{fffd}'))),
         }
         i += 1;

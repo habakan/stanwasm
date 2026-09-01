@@ -20,21 +20,8 @@ license = "Apache-2.0"
 repository = "https://github.com/habakan/stanwasm"
 
 [workspace.dependencies]
-# Each internal dependency carries both `path` and `version`. The path is what
-# every local build resolves; the version is what `cargo publish` rewrites the
-# dependency to on crates.io, and cargo refuses to package a crate whose
-# dependency has no version requirement. `version.workspace` is not accepted
-# inside `[workspace.dependencies]`, so a bump means editing these six lines
-# alongside `workspace.package.version`.
-#
-# Every published name is prefixed `stanwasm`, matching the npm package —
-# never a bare `stan-*`, which on a flat registry namespace would read as a
-# crate belonging to Stan itself.
-#
-# First publish has to go in dependency order, since each crate resolves the
-# previous one from the registry:
-#   stanwasm-ast -> stanwasm-autodiff -> stanwasm-parser -> stanwasm-runtime
-#     -> stanwasm-codegen -> stanwasm
+# Each internal dep carries `path` (what local builds resolve) and `version` (what
+# `cargo publish` rewrites to). Bumping means these six lines plus workspace.package.
 stanwasm-ast = { path = "crates/stanwasm-ast", version = "0.1.0" }
 stanwasm-parser = { path = "crates/stanwasm-parser", version = "0.1.0" }
 stanwasm-autodiff = { path = "crates/stanwasm-autodiff", version = "0.1.0" }
@@ -60,9 +47,7 @@ panic = "abort"
 [profile.release.package."stanwasm"]
 opt-level = "z"
 
-# nuts-rs is the last crate pulling pulp's relaxed-simd, which WebKit rejects at
-# validation — without this, Safari and iOS cannot instantiate the bundle at all.
-# Workspace builds only: a published crate does not carry [patch]. See README.
-# Drop once pymc-devs/nuts-rs#76 is released.
+# nuts-rs is the last crate pulling pulp's relaxed-simd, which WebKit rejects — see
+# README. Workspace builds only; drop once pymc-devs/nuts-rs#76 is released.
 [patch.crates-io]
 nuts-rs = { git = "https://github.com/habakan/nuts-rs", rev = "61f261b26815be8cb21d5eef0840ba9f869d3af4" }

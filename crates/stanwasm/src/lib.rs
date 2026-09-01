@@ -36,10 +36,8 @@ impl LogpError for SamplerError {
     }
 }
 
-/// nuts-rs adapter that replays the recorded autodiff tape.
-/// Owns the `Compiled` for the duration of one `sample()` call so that
-/// `CpuMath` can take it by value; subsequent calls re-build via the public
-/// API which holds the `Compiled` separately.
+/// nuts-rs adapter that replays the recorded autodiff tape. Owns the
+/// `Compiled` for one `sample()` call so `CpuMath` can take it by value.
 struct LogpAdapter {
     compiled: Compiled,
 }
@@ -82,13 +80,8 @@ impl CpuLogpFunc for LogpAdapter {
     }
 }
 
-/// Concrete type nuts-rs returns from `DiagNutsSettings::new_chain`. Its
-/// `draw()` method advances the chain by exactly one iteration and is what
-/// makes true step-by-step (not precompute-then-replay) sampling possible:
-/// unlike `sample_sequentially`'s iterator, this type owns its RNG outright
-/// (seeded once from ours at construction — see nuts-rs's `new_chain`), so
-/// it has no borrow tying it to a shorter-lived stack frame and can be
-/// stored in `StanModel` across separate wasm-bindgen calls.
+/// Concrete type nuts-rs returns from `DiagNutsSettings::new_chain`. It owns
+/// its RNG, so it survives across wasm-bindgen calls and can be stepped.
 type StepChain = <DiagNutsSettings as Settings>::Chain<CpuMath<LogpAdapter>>;
 
 struct StepSampler {
@@ -99,10 +92,8 @@ struct StepSampler {
 
 // ---- Public wasm-bindgen surface --------------------------------------------
 
-/// One compiled Stan model. Holds both the parsed AST (`Model`) and a
-/// pre-traced `Compiled` for fast log-prob evaluation. Sampling consumes
-/// the `Compiled` and re-builds it from the retained AST afterwards, so
-/// the same `StanModel` instance can be sampled repeatedly.
+/// One compiled Stan model: the parsed AST plus a pre-traced `Compiled`.
+/// Sampling consumes the `Compiled` and rebuilds it from the AST after.
 #[wasm_bindgen]
 pub struct StanModel {
     model: Model,
@@ -185,11 +176,8 @@ impl StanModel {
             .take()
             .ok_or_else(|| compiled_checked_out("sample"))?;
 
-        // Run sampling in a closure so we can restore `self.compiled` on
-        // *any* exit path below, not just success — a rejected `init` (a
-        // common nuts-rs failure: it refuses a zero initial gradient) used
-        // to return early and leave the model unable to sample or evaluate
-        // logProbGrad ever again.
+        // Closure so `self.compiled` is restored on every exit path: a
+        // rejected `init` used to leave the model unable to sample again.
         let result: Result<Vec<f64>, JsError> = (|| {
             let math = CpuMath::new(LogpAdapter { compiled });
             let settings = DiagNutsSettings {
@@ -215,9 +203,8 @@ impl StanModel {
         result
     }
 
-    /// Constrained values of `parameters` + `transformed parameters` for one
-    /// unconstrained draw (e.g. one row out of `sample()`'s output), flattened
-    /// in `paramNames()` order.
+    /// Constrained `parameters` + `transformed parameters` for one
+    /// unconstrained draw, flattened in `paramNames()` order.
     #[wasm_bindgen(js_name = constrainDraw)]
     pub fn constrain_draw(&self, unconstrained: &[f64]) -> Result<Vec<f64>, JsError> {
         let n = self.model.n_params();
@@ -237,11 +224,8 @@ impl StanModel {
         self.model.gen_quantity_names()
     }
 
-    /// Evaluate `generated quantities` over a batch of unconstrained draws
-    /// (e.g. `sample()`'s output). `draws` is row-major `(n_draws, n_params)`;
-    /// the result is row-major `(n_draws, n_gen_quantities)` in
-    /// `genQuantityNames()` order. One `seed`ed RNG stream is shared across the
-    /// whole batch, so `_rng` calls don't repeat draw-to-draw.
+    /// `generated quantities` over row-major `(n_draws, n_params)` draws.
+    /// Result is row-major in `genQuantityNames()` order; one seeded RNG stream.
     #[wasm_bindgen(js_name = generatedQuantities)]
     pub fn generated_quantities(
         &self,
@@ -271,11 +255,8 @@ impl StanModel {
         Ok(out)
     }
 
-    /// Start a NUTS run that `stepDraw()` advances one draw at a time, keeping
-    /// the sampler's state alive between calls rather than running the chain
-    /// inside a single `sample()` call. Consumes the internal `Compiled`: call
-    /// `finishStepSampling()`, or exhaust `stepDraw()`, before using
-    /// `logProbGrad`/`sample` again.
+    /// Start a NUTS run that `stepDraw()` advances one draw at a time. Consumes
+    /// the `Compiled`: call `finishStepSampling()` before `logProbGrad`/`sample`.
     #[wasm_bindgen(js_name = startStepSampling)]
     pub fn start_step_sampling(
         &mut self,
@@ -317,14 +298,8 @@ impl StanModel {
         Ok(())
     }
 
-    /// Advance the chain by one draw. Returns a flat array: `n_params`
-    /// positions, then tuning and diverging as `1.0`/`0.0`, then the
-    /// `step_size` and `num_steps` nuts-rs used for this draw (its own
-    /// adaptation state, not values this crate computes).
-    ///
-    /// After `num_warmup + num_draws` draws this restores
-    /// `logProbGrad`/`sample` and further calls fail until
-    /// `startStepSampling` runs again.
+    /// Advance one draw: `n_params` positions, tuning and diverging as `1.0`/`0.0`,
+    /// then nuts-rs's own `step_size` and `num_steps`. Restores `sample` when done.
     #[wasm_bindgen(js_name = stepDraw)]
     pub fn step_draw(&mut self) -> Result<Vec<f64>, JsError> {
         let done;
@@ -352,9 +327,8 @@ impl StanModel {
         Ok(out)
     }
 
-    /// Stop step-sampling early (or clean up after it finished naturally —
-    /// safe to call either way) and restore `logProbGrad`/`sample` by
-    /// re-tracing, same as `sample()` does at the end of a run.
+    /// Stop step-sampling (safe after it ended naturally too) and restore
+    /// `logProbGrad`/`sample` by re-tracing.
     #[wasm_bindgen(js_name = finishStepSampling)]
     pub fn finish_step_sampling(&mut self) {
         if self.step.take().is_some() {
@@ -365,10 +339,8 @@ impl StanModel {
         }
     }
 
-    /// AOT-compile this model to a self-contained wasm module. Returns the
-    /// wasm bytes (callers can pass these to `WebAssembly.instantiate` to
-    /// obtain an independent log_prob_grad runtime — useful for Web Workers
-    /// or for inspection).
+    /// AOT-compile this model to a self-contained wasm module. Pass the bytes to
+    /// `WebAssembly.instantiate` for an independent log_prob_grad runtime.
     #[wasm_bindgen(js_name = compileToWasm)]
     pub fn compile_to_wasm(&self) -> Result<Vec<u8>, JsError> {
         let dummy = vec![0.1_f64; self.model.n_params()];
@@ -396,13 +368,8 @@ fn compiled_checked_out(method: &str) -> JsError {
     ))
 }
 
-/// Runs once when the wasm module is instantiated. Forwards Rust panics
-/// (Stan-typo'd names and invalid RNG parameters are now clean `JsError`s
-/// instead, but a handful of internal-invariant panics remain, e.g. index
-/// out of bounds on a malformed AST) to `console.error` with a real message
-/// and backtrace, instead of an opaque `RuntimeError: unreachable`. The
-/// panicking call still traps the instance — this is diagnostics, not
-/// recovery — but it means a bug report can include what actually broke.
+/// Forwards Rust panics to `console.error` with a message and backtrace rather
+/// than an opaque `RuntimeError: unreachable`. Diagnostics: the instance still traps.
 #[wasm_bindgen(start)]
 pub fn init_panic_hook() {
     #[cfg(target_arch = "wasm32")]
@@ -414,16 +381,8 @@ pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-// ---- AOT bridge --------------------------------------------------------------
-//
-// `sample_via_aot` runs the same NUTS sampling driver as `sample`, but
-// substitutes the in-process tape replay (`Compiled::log_prob_grad`) with a
-// call out to a host-provided AOT-compiled model wasm. The AOT module shares
-// `stanwasm`'s linear memory (imported, not its own), so handing it a
-// (params_ptr, grads_ptr) is zero-copy.
-//
-// The host is responsible for instantiating the AOT wasm and binding it via
-// `setAotExports` before calling `sampleViaAot`. See `js/aot_bridge.js`.
+// AOT bridge: `sample_via_aot` swaps tape replay for a host-provided AOT wasm
+// sharing this module's linear memory. Bind it via `setAotExports` first.
 
 #[wasm_bindgen(module = "/js/aot_bridge.js")]
 extern "C" {
@@ -450,9 +409,8 @@ pub fn clear_aot_exports() {
     js_clear_aot_exports();
 }
 
-/// Returns the linear memory backing this wasm module. Pass to
-/// `WebAssembly.instantiate` as the `stan.memory` import when bringing up an
-/// AOT model so the two modules share buffers (zero-copy bridge).
+/// The linear memory backing this module. Pass as the `stan.memory` import when
+/// instantiating an AOT model so the two share buffers.
 #[wasm_bindgen(js_name = sharedMemory)]
 pub fn shared_memory() -> JsValue {
     wasm_bindgen::memory()
@@ -511,11 +469,8 @@ impl CpuLogpFunc for AotLogp {
 
 #[wasm_bindgen]
 impl StanModel {
-    /// Same as `sample`, but evaluates `log_prob_grad` through a
-    /// pre-instantiated AOT-compiled model wasm bound via `setAotExports`.
-    /// V8 JITs the unrolled forward+backward pass in the AOT module, which
-    /// can be substantially faster than the in-process tape replay used by
-    /// `sample`. Both produce identical samples for a given seed.
+    /// `sample` through a `setAotExports`-bound AOT wasm instead of tape replay;
+    /// V8 JITs the unrolled pass. Identical samples for a given seed.
     #[wasm_bindgen(js_name = sampleViaAot)]
     pub fn sample_via_aot(
         &mut self,

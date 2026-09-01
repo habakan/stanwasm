@@ -3,17 +3,8 @@ import { StanModel } from "stanwasm";
 import { GraphicalModel } from "../graphicalModel";
 import { Collapsible } from "../Collapsible";
 
-// Classic partial-pooling model (the "eight schools" structure, non-centered
-// parameterization), framed here as six marketing campaigns' observed CTR
-// lift (y_j) with known standard error (sigma_j, driven by each campaign's
-// sample size — a handful of visitors gives a noisy estimate, tens of
-// thousands gives a tight one). theta_j is the partially-pooled estimate,
-// shrunk toward the population mean mu by an amount that grows with
-// sigma_j relative to tau (the between-campaign SD) — this is the concrete
-// business case for partial pooling: a flashy lift number from a
-// small-sample pilot shouldn't be trusted at face value the way a
-// well-powered campaign's number is. No closed form; this is what NUTS is
-// for.
+// Eight-schools partial pooling (non-centered), framed as six campaigns' observed
+// CTR lift y_j with known sigma_j. No closed form; this is what NUTS is for.
 const STAN_CODE = `data {
   int<lower=0> J;
   vector[J] y;
@@ -41,10 +32,8 @@ interface Group {
   n: string;
   /** Observed CTR lift, percentage points. */
   y: number;
-  /** Known standard error — fixed per group, not draggable. Three campaigns
-   *  are well-powered (small sigma), three are small pilots (large sigma),
-   *  so the contrast in how hard each shrinks is visible without any
-   *  interaction. */
+  /** Known standard error, fixed per group. Three campaigns are well-powered and
+   *  three are small pilots, so the contrast in shrinkage shows without interaction. */
   sigma: number;
 }
 
@@ -80,19 +69,16 @@ interface Fit {
   tau: number;
   thetaMean: number[];
   thetaSd: number[];
-  /** Every theta_j draw this resample produced, kept per group so the UI can
-   *  show each group's actual posterior shape (a KDE over these) rather than
-   *  just its mean/sd. */
+  /** Every theta_j draw from this resample, kept per group so the UI can show each
+   *  group's posterior shape rather than just its mean/sd. */
   thetaDraws: number[][];
   elapsedMs: number;
 }
 
 type PopView = "band" | "curve";
 
-/** Normal density, used only to draw the population distribution N(mu, tau)
- *  that every group's theta is pooled toward — not part of the model or the
- *  sampler, purely a visualization of the posterior mu/tau this tab already
- *  computes. */
+/** Normal density for drawing the population N(mu, tau) that theta is pooled
+ *  toward — visualization only, not part of the model. */
 function normalPdf(y: number, mu: number, tau: number): number {
   if (tau <= 0) return 0;
   const z = (y - mu) / tau;
@@ -102,10 +88,8 @@ function normalPdf(y: number, mu: number, tau: number): number {
 const CURVE_SAMPLES = 48;
 const CURVE_MAX_HALF_WIDTH = (W / 2 - PAD) * 0.9;
 
-/** A violin-style outline: width at each y is the population density there,
- *  normalized so the peak (at y = mu) spans CURVE_MAX_HALF_WIDTH on each
- *  side — this is what makes "how much does tau narrow/widen this" visible
- *  at a glance, the same way a wider or narrower bell curve would. */
+/** Violin outline: width at each y is the population density, normalized so the
+ *  peak spans CURVE_MAX_HALF_WIDTH — makes tau's effect visible at a glance. */
 function populationCurvePath(mu: number, tau: number): string {
   const peak = normalPdf(mu, mu, tau);
   if (peak <= 0) return "";
@@ -126,11 +110,8 @@ function populationCurvePath(mu: number, tau: number): string {
   return `M${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L")} Z`;
 }
 
-/** Gaussian-kernel density estimate — used only for the per-group violin
- *  below, evaluated directly over that group's own posterior draws (not a
- *  normal-distribution approximation from mean/sd, the way the population
- *  curve above necessarily is — theta_j's actual posterior needn't be
- *  symmetric, and this shows whatever shape 200 real NUTS draws produced). */
+/** Gaussian KDE over a group's own draws, for the per-group violin: theta_j's
+ *  posterior needn't be symmetric, unlike the normal curve above. */
 function kde(draws: number[], y: number, bandwidth: number): number {
   let sum = 0;
   for (const d of draws) {

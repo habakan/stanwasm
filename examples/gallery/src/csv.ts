@@ -10,20 +10,13 @@ export interface CsvParseResult {
   columns: string[];
   /** Columns whose values are all numeric and that ended up in `data`. */
   numericColumns: string[];
-  /** Columns dropped from `data` because at least one value wasn't numeric
-   *  (Stan only accepts numbers; text columns become metadata in the table
-   *  view but aren't passed to the model). */
+  /** Columns dropped from `data` for holding a non-numeric value — kept as table
+   *  metadata, not passed to the model. */
   skippedColumns: string[];
 }
 
-/**
- * Parse a CSV string into Stan data. The CSV must have:
- *   - a header row (column names become Stan vector names)
- *   - data rows whose numeric columns can be parsed by `Number(...)`
- *
- * Text columns (non-numeric) are kept in `columns` for display but
- * skipped from `data`. Row count is auto-published as N / J / K.
- */
+/** Parse a CSV (header row of column names, numeric rows) into Stan data. Text
+ *  columns stay in `columns` for display; row count is published as N / J / K. */
 export function csvToData(text: string): CsvParseResult | CsvParseError {
   // Strip UTF-8 BOM that Excel and some editors add to CSV exports.
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);

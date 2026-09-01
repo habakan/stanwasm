@@ -40,15 +40,8 @@ fn linear_regression_logp_at_known_point() {
     let params = vec![0.0, 1.0, 0.0];
     let (lp, grads) = model.log_prob_grad(&params).unwrap();
 
-    // Hand-computed components:
-    //   prior: normal_lpdf(0; 0, 10)
-    //          = -log(sqrt(2π)) - log(10) = -0.918938... - 2.302585... = -3.221523...
-    //   prior: normal_lpdf(1; 0, 10)
-    //          = -log(sqrt(2π)) - log(10) - 0.5 * (1/10)² = -3.221523 - 0.005 = -3.226523
-    //   prior: exponential_lpdf(1; 1) = log(1) - 1 = -1
-    //   likelihood: y[0]=0 ~ N(0, 1) = -log(sqrt(2π)) = -0.918938
-    //               y[1]=1 ~ N(1, 1) = -log(sqrt(2π)) = -0.918938
-    //   jacobian: log|d sigma/d log_sigma| = log_sigma = 0
+    // Hand-computed: priors -3.221523 (alpha), -3.226523 (beta), -1 (sigma);
+    // likelihood -0.918938 twice; jacobian log|d sigma/d log_sigma| = log_sigma = 0.
     let log_sqrt_2pi = 0.918_938_533_204_672_8;
     let expected_lp = -log_sqrt_2pi - 10f64.ln() // prior alpha
         + (-log_sqrt_2pi - 10f64.ln() - 0.5 * (1.0 / 10.0_f64).powi(2)) // prior beta
@@ -63,17 +56,12 @@ fn linear_regression_logp_at_known_point() {
     );
     assert_eq!(grads.len(), 3, "grad length");
 
-    // Sanity: gradient w.r.t. alpha at (0, 1, 1) with x=[0,1], y=[0,1]:
-    //   d/d alpha [normal(α; 0, 10)] = -α/100 = 0
-    //   d/d alpha sum normal(y_i; α + β x_i, σ) = sum (y_i - α - β x_i)/σ²
-    //                                            = (0-0-0) + (1-0-1) = 0
-    //   total: 0
+    // d/d alpha at (0, 1, 1): prior -alpha/100 = 0, likelihood
+    // sum (y_i - alpha - beta x_i)/sigma² = (0-0-0) + (1-0-1) = 0. Total 0.
     assert!(close(grads[0], 0.0, 1e-9), "d/dalpha = {}", grads[0]);
 
-    // d/d beta:
-    //   prior: -β/100 = -0.01
-    //   likelihood: sum (y - α - β x) * x / σ² = 0*0 + (1-0-1)*1 = 0
-    //   total: -0.01
+    // d/d beta: prior -beta/100 = -0.01, likelihood
+    // sum (y - alpha - beta x)·x/sigma² = 0*0 + (1-0-1)*1 = 0. Total -0.01.
     assert!(close(grads[1], -0.01, 1e-9), "d/dbeta = {}", grads[1]);
 }
 

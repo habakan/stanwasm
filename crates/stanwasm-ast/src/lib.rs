@@ -39,9 +39,8 @@ pub enum StanType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Num(f64),
-    /// Integer literal (`3`, not `3.0`). Kept distinct from `Num` because Stan
-    /// is statically typed and `/` on two ints is *integer* division: `3 / 2`
-    /// is `1`, while `3.0 / 2` is `1.5`.
+    /// Integer literal (`3`, not `3.0`). Distinct from `Num` because `/` on two
+    /// ints is integer division: `3 / 2` is `1`, `3.0 / 2` is `1.5`.
     IntNum(i64),
     Var(String),
     /// op, left, right

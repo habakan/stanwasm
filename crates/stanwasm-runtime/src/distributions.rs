@@ -165,9 +165,8 @@ pub fn neg_binomial_2_lpmf(t: &mut Tape, y: &Val, mu: &Val, phi: &Val) -> Val {
     v_add(t, &combo_plus_phi, &y_term)
 }
 
-/// `multi_normal_cholesky_lpdf(y | μ, L)` — y, μ are vectors, L is the
-/// Cholesky factor of the covariance (lower-triangular K×K).
-/// log p = -K/2 · log(2π) − Σ log Lᵢᵢ − 0.5 · ||L⁻¹(y − μ)||²
+/// `multi_normal_cholesky_lpdf(y | μ, L)`, L lower-triangular K×K:
+/// log p = -K/2·log(2π) − Σ log Lᵢᵢ − 0.5·||L⁻¹(y − μ)||²
 pub fn multi_normal_cholesky_lpdf(t: &mut Tape, y: &[Val], mu: &[Val], l_rows: &[Val]) -> Val {
     let kk = y.len();
     let mut diff = Vec::with_capacity(kk);
@@ -192,18 +191,15 @@ pub fn multi_normal_cholesky_lpdf(t: &mut Tape, y: &[Val], mu: &[Val], l_rows: &
     v_sub(t, &prefix_minus_diag, &half_ds)
 }
 
-/// `multi_normal_lpdf(y | μ, Σ)` — y, μ are vectors, Σ is the full K×K
-/// covariance matrix (as opposed to `multi_normal_cholesky`, which takes its
-/// Cholesky factor directly). Cholesky-decomposes Σ and reuses the same
-/// math as `multi_normal_cholesky_lpdf`.
+/// `multi_normal_lpdf(y | μ, Σ)` with the full K×K covariance: Cholesky-decomposes
+/// Σ and reuses `multi_normal_cholesky_lpdf`'s math.
 pub fn multi_normal_lpdf(t: &mut Tape, y: &[Val], mu: &[Val], sigma_rows: &[Val]) -> Val {
     let l_rows = cholesky_decompose(t, sigma_rows);
     multi_normal_cholesky_lpdf(t, y, mu, &l_rows)
 }
 
-/// `multinomial_lpmf(y | θ)` — y is an integer count array of length K,
-/// θ a simplex of length K. log p = lgamma(N+1) − Σ lgamma(yᵢ+1) + Σ yᵢ log θᵢ,
-/// where N = Σ yᵢ.
+/// `multinomial_lpmf(y | θ)`, y an integer count array, θ a simplex of length K:
+/// log p = lgamma(N+1) − Σ lgamma(yᵢ+1) + Σ yᵢ log θᵢ, N = Σ yᵢ.
 pub fn multinomial_lpmf(t: &mut Tape, y: &[Val], theta: &[Val]) -> Val {
     let mut sum_y = Val::Num(0.0);
     let mut sum_lg_yp1 = Val::Num(0.0);
@@ -225,11 +221,8 @@ pub fn multinomial_lpmf(t: &mut Tape, y: &[Val], theta: &[Val]) -> Val {
     lp
 }
 
-/// `categorical_lpmf(y | θ)` — y is a 1-indexed category label, θ a simplex
-/// of length K. log p = log θ_y. Unlike the other distributions here, θ is a
-/// vector argument shared across every element when vectorized (`y ~
-/// categorical(theta)` over an `array[N] int y`), not a per-observation
-/// value — see the special case in `eval_sample_vec`.
+/// `categorical_lpmf(y | θ)`, y a 1-indexed label: log p = log θ_y. Vectorized, θ is
+/// shared across every element rather than per-observation — see `eval_sample_vec`.
 pub fn categorical_lpmf(t: &mut Tape, y: &Val, theta: &[Val]) -> Result<Val> {
     let label = y.to_i32(t)?;
     let zero_based = label - 1;
@@ -262,17 +255,8 @@ pub fn dirichlet_lpdf(t: &mut Tape, theta: &[Val], alpha: &[Val]) -> Val {
     lp
 }
 
-/// `lkj_corr_cholesky_lpdf(L | η)` — L is the Cholesky factor of a K×K
-/// correlation matrix.
-///
-/// log p = Σ_{k=0..K-1} [(K − 1 − k) + (2η − 2)] · log Lₖₖ
-///
-/// `(K-1-k)` is the Jacobian of Σ=LLᵀ on the correlation-Cholesky manifold;
-/// `(2η-2)` is the LKJ density's own `det(Σ)^(η-1)`, since det(Σ) = Π Lₖₖ².
-/// The two are summed exponents on a shared base, not a `(2η-2)` factor over
-/// the weighted sum: that form is identically 0 at K=2, where the only row
-/// with a free diagonal has `(K-1-k) = 0`. Omits the η,K-only normalizing
-/// constant, which does not affect gradients w.r.t. `L`.
+/// `lkj_corr_cholesky_lpdf(L | η)`: log p = Σₖ [(K−1−k) + (2η−2)]·log Lₖₖ, exponents
+/// summed on a shared base (a `(2η−2)` factor over the sum is 0 at K=2). Unnormalized.
 pub fn lkj_corr_cholesky_lpdf(t: &mut Tape, l_rows: &[Val], eta: &Val) -> Val {
     let kk = l_rows.len();
     let two_eta = v_mul(t, &Val::Num(2.0), eta);
@@ -292,9 +276,8 @@ pub fn lkj_corr_cholesky_lpdf(t: &mut Tape, l_rows: &[Val], eta: &Val) -> Val {
     lp
 }
 
-/// Distributions whose first argument is a *whole* vector / matrix (not a
-/// scalar element). For these, sampling a `Val::Vec` does NOT broadcast the
-/// scalar lpdf over elements — the entire structure is the observation.
+/// Distributions whose first argument is a whole vector / matrix. Sampling a
+/// `Val::Vec` does not broadcast the scalar lpdf — the structure is the observation.
 fn is_multivariate(name: &str) -> bool {
     matches!(
         name,
@@ -306,9 +289,8 @@ fn is_multivariate(name: &str) -> bool {
     )
 }
 
-/// How many arguments each supported distribution takes after the variate.
-/// Checked before dispatch so `a ~ normal(0);` is a clean error instead of the
-/// out-of-bounds `args[1]` panic (a wasm trap in the browser) it used to be.
+/// Argument count after the variate, checked before dispatch so `a ~ normal(0);`
+/// is a clean error rather than an out-of-bounds panic.
 fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "std_normal" => 0,
@@ -363,15 +345,12 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
             Val::Vec(theta) => categorical_lpmf(t, x, theta)?,
             _ => return Err(wrong_type(name, "a simplex vector theta", &args[0])),
         },
-        // The multivariate forms below used to fall back to `Val::Num(0.0)` on
-        // a shape they didn't recognize, i.e. contribute nothing to the log
-        // density and silently return a wrong posterior. They are errors now.
+        // These used to fall back to `Val::Num(0.0)` on an unrecognized shape,
+        // contributing nothing and returning a silently wrong posterior.
         "multi_normal_cholesky" => match (x, &args[0], &args[1]) {
             (Val::Vec(y), Val::Vec(mu), Val::Vec(l_rows)) => {
-                // `array[N] vector[K] y; y ~ multi_normal_cholesky(mu, L);` is
-                // legal Stan but arrives here as one N-row container, so it
-                // would otherwise be reported as a confusing size mismatch
-                // between the N rows and the K-long mu.
+                // `array[N] vector[K] y; y ~ multi_normal_cholesky(mu, L);` is legal
+                // Stan but arrives as one N-row container, not N observations.
                 if matches!(y.first(), Some(Val::Vec(_))) {
                     return Err(EvalError::MultivariateNotVectorized {
                         name: name.to_string(),
@@ -465,19 +444,14 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
     })
 }
 
-/// Sample statement (`y ~ dist(...)`) on a vector observation. Behaviour:
-/// - For multivariate distributions, the whole vector / matrix is the
-///   observation and we delegate to `eval_dist` once with `x = Val::Vec(xs)`.
-/// - For scalar distributions, sums the scalar lpdf over each element with
-///   element-wise argument broadcast.
+/// `y ~ dist(...)` on a vector observation: multivariate distributions take the
+/// whole structure; scalar ones sum element-wise with argument broadcast.
 pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Result<Val> {
     if is_multivariate(name) {
         return eval_dist(t, name, &Val::Vec(xs.to_vec()), args);
     }
-    // `categorical`'s vector argument (theta) is the simplex shared by every
-    // element of the variate, not a per-observation value like every other
-    // vectorized distribution's arguments — so it skips the element-wise
-    // broadcast below and is passed through unchanged to each call.
+    // `categorical`'s theta is the simplex shared by every element of the variate,
+    // not a per-observation argument, so it skips the broadcast below.
     if name == "categorical" {
         let mut acc = Val::Num(0.0);
         for x in xs {
@@ -486,9 +460,8 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Re
         }
         return Ok(acc);
     }
-    // Every vectorized argument must line up with the variate element-wise.
-    // Indexing without this check panicked (wasm trap) on a short argument and
-    // silently ignored the tail of a long one.
+    // Vectorized arguments must line up element-wise. Indexing without this check
+    // panicked on a short argument and ignored the tail of a long one.
     for a in args {
         if let Val::Vec(av) = a {
             if av.len() != xs.len() {
@@ -525,12 +498,8 @@ fn broadcast_elem(v: &Val, i: usize) -> Val {
 mod tests {
     use super::*;
 
-    /// For K=2, a correlation matrix has one free parameter ρ; its Cholesky
-    /// factor is `L = [[1, 0], [ρ, sqrt(1-ρ²)]]`. The LKJ(η) density is
-    /// `p(Σ|η) ∝ det(Σ)^(η-1) = (1-ρ²)^(η-1) = L[1][1]^(2η-2)`, so
-    /// `log p(L|η) = (2η-2)·log(L[1][1])` exactly (K=2 has no Cholesky
-    /// Jacobian contribution beyond this). Regression test for the
-    /// structural bug where this always evaluated to exactly 0.
+    /// K=2 has one free parameter ρ, so `log p(L|η) = (2η-2)·log(L[1][1])` exactly.
+    /// Regression test for the structural bug where this always evaluated to 0.
     #[test]
     fn lkj_corr_cholesky_k2_matches_analytic_formula() {
         let mut t = Tape::new();
@@ -585,9 +554,8 @@ mod tests {
         );
     }
 
-    /// `multi_normal_lpdf` Cholesky-decomposes Σ internally; check it agrees
-    /// with `multi_normal_cholesky_lpdf` fed the hand-computed factor
-    /// `Σ = [[4,2],[2,3]] = L Lᵀ`, `L = [[2,0],[1,√2]]`.
+    /// `multi_normal_lpdf` decomposes Σ internally; check it matches
+    /// `multi_normal_cholesky_lpdf` on `Σ = [[4,2],[2,3]]`, `L = [[2,0],[1,√2]]`.
     #[test]
     fn multi_normal_matches_manual_cholesky_factor() {
         let y = [Val::Num(1.0), Val::Num(2.0)];

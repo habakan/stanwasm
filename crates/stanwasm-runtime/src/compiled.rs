@@ -18,10 +18,8 @@ pub struct Compiled {
 }
 
 impl Compiled {
-    /// Trace `model` once at `dummy_params` to populate the tape.
-    ///
-    /// Caller is responsible for ensuring the model has no parameter-dependent
-    /// control flow — the recorded tape is reused for every subsequent call.
+    /// Trace `model` once at `dummy_params` to populate the tape. Caller must ensure
+    /// no parameter-dependent control flow — the tape is reused for every call.
     pub fn from(model: &Model, dummy_params: &[f64]) -> Result<Self, EvalError> {
         assert_eq!(dummy_params.len(), model.n_params());
         let mut tape = Tape::new();

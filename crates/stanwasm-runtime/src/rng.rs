@@ -15,10 +15,8 @@ use stanwasm_autodiff::Tape;
 
 type Result<T> = std::result::Result<T, EvalError>;
 
-/// Build a distribution or turn its rejection (e.g. non-positive scale) into
-/// a clean `EvalError` instead of the `.unwrap()` panic this used to be —
-/// invalid RNG parameters are an easy mistake in hand-edited Stan source
-/// (e.g. the Wasm Sandbox tab), not an internal bug.
+/// Build a distribution, turning its rejection (e.g. non-positive scale) into an
+/// `EvalError` — invalid RNG parameters are an easy mistake in hand-edited Stan.
 fn invalid(call: &str, e: impl std::fmt::Display) -> EvalError {
     EvalError::InvalidRngParams(format!("{call}: {e}"))
 }
@@ -105,9 +103,8 @@ pub fn dirichlet_rng(rng: &mut impl Rng, alpha: &[f64]) -> Result<Vec<f64>> {
     Ok(draws.iter().map(|x| x / sum).collect())
 }
 
-/// `mu + L * z`, `z ~ iid N(0, 1)`. `l` is the lower-triangular Cholesky
-/// factor as a vec of rows (matches how `multi_normal_cholesky_lpdf` in
-/// `distributions.rs` receives it).
+/// `mu + L * z`, `z ~ iid N(0, 1)`. `l` is the lower-triangular Cholesky factor
+/// as a vec of rows, as `multi_normal_cholesky_lpdf` receives it.
 pub fn multi_normal_cholesky_rng(
     rng: &mut impl Rng,
     mu: &[f64],
@@ -128,11 +125,8 @@ pub fn multi_normal_cholesky_rng(
         .collect())
 }
 
-/// Dispatch a `<base>_rng(args...)` call. `env` must carry an RNG (set only
-/// while evaluating `generated quantities`); calling this outside that
-/// context, or with an unknown name / wrong arity, is a clean error rather
-/// than a panic — both are easy mistakes to make from hand-edited Stan
-/// source (e.g. the Wasm Sandbox tab).
+/// Dispatch `<base>_rng(args...)`. `env` must carry an RNG (set only during
+/// `generated quantities`); missing RNG, unknown name and wrong arity are errors.
 pub fn dispatch(t: &Tape, base: &str, args: &[Val], env: &Env) -> Result<Val> {
     let rng_handle = env
         .rng()

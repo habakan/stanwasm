@@ -6,11 +6,8 @@ use std::rc::Rc;
 use crate::value::Val;
 use rand::rngs::ChaCha8Rng;
 
-/// One binding: name, value, and whether the *declared Stan type* is integral
-/// (`int`, `array[...] int`, a loop counter). Kept alongside the value rather
-/// than inside `Val` because it's a static property of the declaration, and
-/// because only one operator cares: `/` is integer division when both operands
-/// are int-typed.
+/// One binding, carrying whether the *declared* Stan type is integral. It lives
+/// here and not in `Val` because it is static, and only `/` cares.
 #[derive(Debug, Clone)]
 struct Binding {
     name: String,
@@ -21,17 +18,11 @@ struct Binding {
 #[derive(Debug, Default, Clone)]
 pub struct Env {
     vars: Vec<Binding>,
-    /// Shared RNG handle for `_rng` calls (only set while evaluating
-    /// `generated quantities`; `Rc` sharing means a clone of `Env` still
-    /// advances the same underlying stream).
+    /// Shared RNG for `_rng` calls, set only while evaluating `generated
+    /// quantities`. `Rc` means a cloned `Env` advances the same stream.
     rng: Option<Rc<RefCell<ChaCha8Rng>>>,
-    /// Set while tracing `model`/`transformed parameters` for the one-shot
-    /// `Compiled` tape (see `Model::trace_forward`). That tape is recorded
-    /// once and replayed for every draw, so an `if`/`while` condition that
-    /// depends on a parameter can't be honored per-draw — it would silently
-    /// keep whichever branch the trace-time value happened to take. Not set
-    /// for `generated quantities`/`constrained_draw`, which re-evaluate the
-    /// AST fresh every call and have no such freezing issue.
+    /// Set while tracing for the one-shot `Compiled` tape, which is replayed for
+    /// every draw — a parameter-dependent branch would freeze at its trace-time value.
     strict_no_param_branch: bool,
 }
 

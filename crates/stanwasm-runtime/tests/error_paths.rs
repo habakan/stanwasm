@@ -181,9 +181,8 @@ fn unsupported_constraint_names_the_parameter() {
 
 #[test]
 fn array_of_vectors_variate_points_at_the_loop_form() {
-    // Legal Stan, but this runtime doesn't vectorize a multivariate variate.
-    // The message has to name the loop form; reporting a size mismatch between
-    // the N array rows and the K-long mu sends the reader the wrong way.
+    // Legal Stan, but not vectorized here. The message must name the loop form;
+    // a size mismatch between N rows and a K-long mu sends the reader the wrong way.
     let e = err(
         "data { int N; int K; array[N] vector[K] y; vector[K] mu; } \
          parameters { cholesky_factor_corr[K] L; } \

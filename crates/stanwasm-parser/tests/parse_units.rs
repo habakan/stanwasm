@@ -144,9 +144,8 @@ model {
 
 #[test]
 fn unknown_non_ascii_character_is_reported_verbatim() {
-    // The byte-to-`char` cast this used to do rendered a UTF-8 continuation
-    // byte as a Latin-1 glyph, so the message named a character that isn't in
-    // the source.
+    // The old byte-to-`char` cast rendered a UTF-8 continuation byte as Latin-1,
+    // so the message named a character that isn't in the source.
     let err = parse("parameters { real α; }").unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains('α'), "{msg}");

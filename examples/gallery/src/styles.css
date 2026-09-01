@@ -18,11 +18,8 @@ body {
   padding: 0;
 }
 
-/* The page itself never scrolls — .tab-body is the one scrollable region
-   shared by every tab, so the header/tab bar stay pinned and visible. Tabs
-   that want a genuinely non-scrolling experience (Wasm Sandbox) size their
-   own content to fit height:100% instead of relying on this; for the
-   others, this is just "the content area scrolls, not the whole page." */
+/* The page never scrolls; .tab-body is the one scrollable region, so the header
+   and tab bar stay pinned. Wasm Sandbox sizes itself to height:100% instead. */
 .app {
   max-width: 1320px;
   margin: 0 auto;
@@ -200,14 +197,8 @@ footer a {
   margin-left: 4px;
 }
 
-/* IDE-style: the whole tab fits one viewport, no page scrolling — see
-   .app/.tab-body in the base rules above. .sandbox is the tab's own fixed-
-   height flex column; the Stan editor takes the full height on the left,
-   and the right column stacks independently collapsible panels (graphical
-   model / data / posterior summary) that share the column's height —
-   only an individual panel's own body scrolls, and only when its content
-   (e.g. a many-parameter posterior summary) actually outgrows the share
-   of the column it's been given. */
+/* IDE-style: the tab fits one viewport. .sandbox is a fixed-height flex column —
+   the editor left, collapsible panels right, sharing the column's height. */
 .sandbox {
   height: 100%;
   min-height: 0;
@@ -232,10 +223,8 @@ footer a {
 }
 
 .stan-editor-col {
-  /* flex-grow ratio (3:2), not percentage basis — a percentage basis on
-     both columns summing to 100% plus the row's gap overflows the
-     container under flex-wrap, which silently wraps .sandbox-side onto
-     its own row below instead of beside the editor. */
+  /* A 3:2 grow ratio, not a percentage basis: percentages summing to 100% plus the
+     gap overflow under flex-wrap and drop .sandbox-side onto its own row. */
   flex: 3 1 420px;
   min-width: 320px;
   display: flex;
@@ -277,9 +266,8 @@ footer a {
   min-height: 0;
 }
 
-/* Controls that must stay visible (Compile/Run) rather than get squeezed
-   into an equal share and hidden behind a scroll — sized to content,
-   remaining panels split whatever height is left over. */
+/* Controls that must stay visible (Compile/Run) are sized to content; the rest
+   split whatever height is left. */
 .sandbox-section.fixed:not(.collapsed) {
   flex: 0 0 auto;
 }
@@ -388,10 +376,8 @@ footer a {
   tab-size: 2;
 }
 
-/* A floating, semi-transparent reference to the model structure sitting
-   over the editor's top-right corner instead of a sidebar panel — that
-   sidebar space goes to Data/Posterior summary instead, and this stays out
-   of the way of the code until you actually want to look at it. */
+/* A semi-transparent model reference floating over the editor's top-right rather
+   than a sidebar panel, so the sidebar height goes to Data/Posterior summary. */
 .diagram-overlay {
   position: absolute;
   top: 10px;
@@ -519,9 +505,8 @@ footer a {
 
 /* ---- Live Regression / Hierarchical Shrinkage tabs (SVG demos) -------- */
 
-/* Wide viewport: model card and interactive plot sit side by side. Narrow
-   viewport: not enough room for both min-widths, so they wrap — model card
-   first (it's first in document order), interactive plot below it. */
+/* Wide: model card and plot side by side. Narrow: not enough room for both
+   min-widths, so they wrap, model card first. */
 .demo-layout {
   display: flex;
   gap: 24px;
@@ -550,20 +535,13 @@ footer a {
 
 .model-diagram {
   flex: 0 1 auto;
-  /* Caps how wide a wide diagram (many top-level nodes) is allowed to force
-     this box — without it, flex:0 0 auto lets the SVG's native width push
-     .demo-model past its flex-basis and overlap .demo-interactive instead
-     of wrapping, since that decision is made from flex-basis, not from
-     content overflowing afterward. max-width:100% on the svg itself then
-     shrinks it responsively to fit. */
+  /* Caps how wide a many-node diagram can force this box: flex decides from
+     flex-basis, not from content overflowing afterward. */
   max-width: 340px;
 }
 
-/* Used only inside Wasm Sandbox's collapsible "Graphical model" panel,
-   whose height varies with how many other panels are open — shrink the
-   diagram to fit whatever space that leaves rather than ever clipping it,
-   since seeing the whole diagram matters more here than seeing it at a
-   fixed size the way the other tabs' fixed-height cards do. */
+/* Only inside Wasm Sandbox's collapsible panel, whose height varies with how many
+   others are open — shrink the diagram to fit rather than clip it. */
 .model-diagram-card {
   padding: 16px;
   background: white;
@@ -594,9 +572,8 @@ footer a {
   font-size: 11px;
   line-height: 1.15;
   color: #1a1a1a;
-  /* Opaque backing so an edge line that happens to pass behind the label
-     (the layout is a simple grid, not an edge-avoiding router) is hidden
-     rather than drawn through the text. */
+  /* Opaque backing so an edge line passing behind the label is hidden rather than
+     drawn through the text — the layout is a grid, not an edge-avoiding router. */
   background: white;
 }
 
@@ -814,9 +791,8 @@ footer a {
   font-variant-numeric: tabular-nums;
 }
 
-/* Shown when the wasm bundle fails to compile — currently the relaxed-SIMD
-   rejection on Safari/iOS. Loud on purpose: the previous behaviour was a
-   permanent "Loading…" with the CompileError swallowed by a missing catch. */
+/* Shown when the bundle fails to compile. Loud on purpose: this used to be a
+   permanent "Loading…" with the CompileError swallowed. */
 .init-error {
   max-width: 46rem;
   margin: 2rem auto;
@@ -963,10 +939,8 @@ footer a {
     max-width: 100%;
   }
 
-  /* The two samplers stay side by side — the comparison is the point, and it
-     dies if they are a scroll apart. `1 1 0` because the desktop 200px basis
-     plus the gap would wrap them; the third child (ground truth) gets its own
-     row via flex-basis below. */
+  /* The two samplers stay side by side — the comparison dies if they are a scroll
+     apart. `1 1 0` because the desktop 200px basis plus the gap would wrap them. */
   .mcmc-panels {
     gap: 10px;
   }
