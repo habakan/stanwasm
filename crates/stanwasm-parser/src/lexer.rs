@@ -127,6 +127,24 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
             b';' => Some(Token::Semi),
             b',' => Some(Token::Comma),
             b':' => Some(Token::Colon),
+            // `.5` was already taken as a number above, so a `.` here starts an
+            // elementwise operator.
+            b'.' if i + 1 < n => match bytes[i + 1] {
+                b'*' => {
+                    i += 1;
+                    Some(Token::DotStar)
+                }
+                b'/' => {
+                    i += 1;
+                    Some(Token::DotSlash)
+                }
+                b'^' => {
+                    i += 1;
+                    Some(Token::DotCaret)
+                }
+                _ => None,
+            },
+            b'?' => Some(Token::Question),
             b'<' => Some(Token::Lt),
             b'>' => Some(Token::Gt),
             b'+' => Some(Token::Plus),

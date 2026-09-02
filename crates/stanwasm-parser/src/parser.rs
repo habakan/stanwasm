@@ -321,6 +321,18 @@ impl Parser {
             let right = self.parse_expr(p)?;
             left = Expr::BinOp(op_str.to_string(), Box::new(left), Box::new(right));
         }
+        // Lowest precedence and right-associative, so it binds after every binary
+        // operator and `a ? b : c ? d : e` groups to the right the way Stan does.
+        if min_prec <= 0 && self.try_tok(&Token::Question) {
+            let then_e = self.parse_expr(0)?;
+            self.expect_tok(&Token::Colon)?;
+            let else_e = self.parse_expr(0)?;
+            return Ok(Expr::Ternary(
+                Box::new(left),
+                Box::new(then_e),
+                Box::new(else_e),
+            ));
+        }
         Ok(left)
     }
 
@@ -346,10 +358,16 @@ impl Parser {
     /// (`-a^2` is `-(a^2)`) and is right-associative (`2^3^2` is 512).
     fn parse_power(&mut self) -> Result<Expr> {
         let base = self.parse_postfix()?;
-        if matches!(self.peek(), Token::Caret) {
+        // `.^` shares `^`'s shape: right-associative and tighter than unary minus.
+        if matches!(self.peek(), Token::Caret | Token::DotCaret) {
+            let op = if matches!(self.peek(), Token::DotCaret) {
+                ".^"
+            } else {
+                "^"
+            };
             self.consume();
             let exp = self.parse_unary()?;
-            return Ok(Expr::BinOp("^".into(), Box::new(base), Box::new(exp)));
+            return Ok(Expr::BinOp(op.into(), Box::new(base), Box::new(exp)));
         }
         Ok(base)
     }
@@ -729,7 +747,7 @@ fn prec(tok: &Token) -> i32 {
         Token::EqEq | Token::Ne => 3,
         Token::Lt | Token::Gt | Token::Le | Token::Ge => 4,
         Token::Plus | Token::Minus => 6,
-        Token::Star | Token::Slash => 7,
+        Token::Star | Token::Slash | Token::DotStar | Token::DotSlash => 7,
         // `Token::Caret` is deliberately absent: see `parse_power`.
         _ => -1,
     }
@@ -745,6 +763,9 @@ fn tok_op_str(tok: &Token) -> &'static str {
         Token::Gt => ">",
         Token::Le => "<=",
         Token::Ge => ">=",
+        Token::DotStar => ".*",
+        Token::DotSlash => "./",
+        Token::DotCaret => ".^",
         Token::Plus => "+",
         Token::Minus => "-",
         Token::Star => "*",

@@ -51,6 +51,8 @@ pub enum Expr {
     Index(Box<Expr>, Box<Expr>),
     /// func(args)
     Call(String, Vec<Expr>),
+    /// cond ? a : b
+    Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

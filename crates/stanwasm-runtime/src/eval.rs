@@ -44,6 +44,11 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 "+" => v_add(t, &lv, &rv),
                 "-" => v_sub(t, &lv, &rv),
                 "*" => mul_or_matmul(t, &lv, &rv)?,
+                // Always element-wise, whatever the ranks — that is the whole point
+                // of the dotted spelling.
+                ".*" => v_mul(t, &lv, &rv),
+                "./" => v_div(t, &lv, &rv),
+                ".^" => v_pow(t, &lv, &rv),
                 // `int / int` truncates toward zero (`N / 2` with `N = 3` is 1).
                 // Int-ness is a property of the declarations, so it comes from the tree.
                 "/" if is_int_expr(l, env) && is_int_expr(r, env) => {
@@ -75,6 +80,18 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 "!" => bool_val(v.to_f64(t)? == 0.0),
                 _ => v,
             })
+        }
+        // Both branches would be recorded if this were built from arithmetic, so it
+        // evaluates only the taken one — and the condition follows the same
+        // parameter-dependence rule as `if`.
+        Expr::Ternary(cond_e, then_e, else_e) => {
+            let c = eval_expr(t, cond_e, env)?;
+            check_no_param_branch(env, &c)?;
+            if c.to_f64(t)? != 0.0 {
+                eval_expr(t, then_e, env)
+            } else {
+                eval_expr(t, else_e, env)
+            }
         }
         Expr::Index(arr_e, idx_e) => {
             let one_based = eval_expr(t, idx_e, env)?.to_i32(t)?;
@@ -112,6 +129,8 @@ fn is_int_expr(e: &Expr, env: &Env) -> bool {
         Expr::Var(n) => env.is_int(n),
         // `y[i]` is an int exactly when `y` is an `array[...] int`.
         Expr::Index(base, _) => is_int_expr(base, env),
+        // Int only if it is int whichever way the condition goes.
+        Expr::Ternary(_, a, b) => is_int_expr(a, env) && is_int_expr(b, env),
         Expr::UnOp(op, a) => op == "-" && is_int_expr(a, env),
         Expr::BinOp(op, l, r) => match op.as_str() {
             // `^` yields a real in Stan even for int operands.
@@ -331,6 +350,41 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 acc = v_add(t, &acc, x);
             }
             v_div(t, &acc, &Val::Num(n))
+        }
+        // Sizes are structural, so they read off the container rather than the tape.
+        ("size", [Val::Vec(xs)]) | ("num_elements", [Val::Vec(xs)]) | ("rows", [Val::Vec(xs)]) => {
+            Val::Num(xs.len() as f64)
+        }
+        ("size", [_]) | ("num_elements", [_]) => Val::Num(1.0),
+        ("cols", [Val::Vec(xs)]) => Val::Num(match xs.first() {
+            Some(Val::Vec(row)) => row.len() as f64,
+            _ => 1.0,
+        }),
+        ("rep_vector", [v, n_e]) | ("rep_array", [v, n_e]) => {
+            let n = n_e.to_i32(t)?.max(0) as usize;
+            Val::Vec(vec![v.clone(); n])
+        }
+        ("rep_matrix", [v, r_e, c_e]) => {
+            let (r, c) = (
+                r_e.to_i32(t)?.max(0) as usize,
+                c_e.to_i32(t)?.max(0) as usize,
+            );
+            Val::Vec(vec![Val::Vec(vec![v.clone(); c]); r])
+        }
+        ("dot_product", [Val::Vec(a), Val::Vec(b)]) => {
+            if a.len() != b.len() {
+                return Err(EvalError::ShapeMismatch {
+                    op: "dot_product".into(),
+                    lhs: Shape::Vector(a.len()).to_string(),
+                    rhs: Shape::Vector(b.len()).to_string(),
+                });
+            }
+            let mut acc = Val::Num(0.0);
+            for (x, y) in a.iter().zip(b) {
+                let p = v_mul(t, x, y);
+                acc = v_add(t, &acc, &p);
+            }
+            acc
         }
         ("segment", [Val::Vec(xs), start_v, len_v]) => {
             let start_1b = start_v.to_i32(t)?;

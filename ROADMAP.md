@@ -29,10 +29,10 @@ worked through below, ordered by effort.
 | Vector shape | `simplex`, `ordered`, `positive_ordered`, `unit_vector` | |
 | Matrix constraints | `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix`, `corr_matrix` | |
 | Blocks | `data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, `functions` | |
-| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed assignment | ternary `?:` |
-| Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`) | element-wise `.*` `./` |
-| `_rng` | scalar draws for every distribution above, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | vectorized scalar `_rng`, `lkj_corr_cholesky_rng` |
-| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2` | `log10`, `dot_product`, `norm` |
+| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed assignment, ternary `?:` | |
+| Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`), element-wise `.*` `./` `.^` | |
+| `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
+| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix` | `log10`, `norm` |
 
 Four caveats the table can't carry:
 
@@ -40,10 +40,9 @@ Four caveats the table can't carry:
   parameter work in `generated quantities` (re-evaluated natively per draw) but
   are a compile-time error in `model`/`transformed parameters` — NUTS traces
   that block once and replays the same graph for every draw.
-- **The posterior-predictive loop works; the vectorized spelling does not.**
-  `for (n in 1:N) y_rep[n] = normal_rng(...)` is fine now that indexed assignment
-  exists, but `vector[N] y_rep = normal_rng(mu, sigma);` still errors, because scalar
-  `_rng` does not broadcast.
+- **Posterior prediction works both ways.** The loop form and the vectorized
+  `normal_rng(rep_vector(mu, N), sigma)` both do. As in Stan, a scalar `_rng` given
+  only scalars returns a scalar — it is the container argument that vectorizes.
 - **The AOT path covers fewer ops than the interpreter.** `sample()` (tape
   replay) evaluates everything the runtime produces; `compile()`/`sampleViaAot`
   have no emitter for `tan`/`asin`/`acos`/`atan` (hence `atan2`), `erf`/`erfc`

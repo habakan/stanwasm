@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three labels for four values, so every name after it reported its neighbour's number.
   `cholesky_factor_corr` and `simplex` had the same defect.
 
+- **The gaps a Maxwell-constrained magnetic-field GP ran into**: the ternary `?:`,
+  elementwise `.*` `./` `.^`, `_rng` vectorized over container arguments the way Stan
+  does, and `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`,
+  `dot_product`. That model now runs as ordinary Stan, with no rewriting.
+
 - **Indexed assignment**, `y[i] = ...` and `M[i, j] = ...`. This unblocks the standard
   posterior-predictive loop, and building a covariance matrix inside a function — which
   is what a Maxwell-constrained magnetic-field GP needs. Function return types may also

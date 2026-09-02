@@ -125,9 +125,50 @@ pub fn multi_normal_cholesky_rng(
         .collect())
 }
 
+/// `_rng` functions whose arguments are whole containers rather than elements to
+/// broadcast over.
+const CONTAINER_ARG_RNGS: &[&str] = &[
+    "dirichlet",
+    "multi_normal_cholesky",
+    "multi_normal",
+    "multinomial",
+];
+
 /// Dispatch `<base>_rng(args...)`. `env` must carry an RNG (set only during
 /// `generated quantities`); missing RNG, unknown name and wrong arity are errors.
 pub fn dispatch(t: &Tape, base: &str, args: &[Val], env: &Env) -> Result<Val> {
+    // Stan vectorizes a scalar `_rng` over container arguments, one draw per element.
+    // The multivariate ones take containers as a single value, so they are excluded.
+    if !CONTAINER_ARG_RNGS.contains(&base) {
+        if let Some(n) = args.iter().find_map(|a| match a {
+            Val::Vec(xs) => Some(xs.len()),
+            _ => None,
+        }) {
+            for a in args {
+                if let Val::Vec(xs) = a {
+                    if xs.len() != n {
+                        return Err(EvalError::ShapeMismatch {
+                            op: format!("{base}_rng"),
+                            lhs: format!("vector[{n}]"),
+                            rhs: format!("vector[{}]", xs.len()),
+                        });
+                    }
+                }
+            }
+            let mut out = Vec::with_capacity(n);
+            for i in 0..n {
+                let slice: Vec<Val> = args
+                    .iter()
+                    .map(|a| match a {
+                        Val::Vec(xs) => xs[i].clone(),
+                        other => other.clone(),
+                    })
+                    .collect();
+                out.push(dispatch(t, base, &slice, env)?);
+            }
+            return Ok(Val::Vec(out));
+        }
+    }
     let rng_handle = env
         .rng()
         .ok_or_else(|| EvalError::RngOutsideGeneratedQuantities(base.to_string()))?;

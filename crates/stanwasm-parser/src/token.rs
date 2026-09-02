@@ -17,26 +17,30 @@ pub enum Token {
     OrOr,   // ||
     Arrow,  // ->
     // Single-char tokens
-    LBrace, // {
-    RBrace, // }
-    LParen, // (
-    RParen, // )
-    LBrack, // [
-    RBrack, // ]
-    Semi,   // ;
-    Comma,  // ,
-    Colon,  // :
-    Lt,     // <
-    Gt,     // >
-    Plus,   // +
-    Minus,  // -
-    Star,   // *
-    Slash,  // /
-    Caret,  // ^
-    Tilde,  // ~
-    Equals, // =
-    Pipe,   // |
-    Bang,   // !
+    LBrace,   // {
+    RBrace,   // }
+    LParen,   // (
+    RParen,   // )
+    LBrack,   // [
+    RBrack,   // ]
+    Semi,     // ;
+    Comma,    // ,
+    Colon,    // :
+    Question, // ?
+    Lt,       // <
+    Gt,       // >
+    Plus,     // +
+    Minus,    // -
+    Star,     // *
+    Slash,    // /
+    Caret,    // ^
+    DotStar,  // .*
+    DotSlash, // ./
+    DotCaret, // .^
+    Tilde,    // ~
+    Equals,   // =
+    Pipe,     // |
+    Bang,     // !
     Eof,
 }
 
