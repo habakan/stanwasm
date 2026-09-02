@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three labels for four values, so every name after it reported its neighbour's number.
   `cholesky_factor_corr` and `simplex` had the same defect.
 
+- **Indexed assignment**, `y[i] = ...` and `M[i, j] = ...`. This unblocks the standard
+  posterior-predictive loop, and building a covariance matrix inside a function — which
+  is what a Maxwell-constrained magnetic-field GP needs. Function return types may also
+  be unsized (`matrix f(...)`) now, as Stan writes them.
+
 - **User-defined `functions`.** Calls are inlined while tracing, so the AOT path
   supports them without changes — it works from the tape, not the AST. Scalar,
   `vector` and `matrix` arguments, unsized in the signature as Stan writes them;

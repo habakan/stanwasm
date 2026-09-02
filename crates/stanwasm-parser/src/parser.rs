@@ -643,7 +643,9 @@ impl Parser {
     fn parse_functions_block(&mut self) -> Result<Vec<(String, FuncDef)>> {
         let mut funcs: Vec<(String, FuncDef)> = Vec::new();
         while !self.check_tok(&Token::RBrace) && !self.check_tok(&Token::Eof) {
-            let _ret = self.parse_type()?; // ignored: scalar
+            // The return type is unsized too (`matrix f(...)`), and nothing downstream
+            // needs it — the returned value carries its own shape.
+            let _ret = self.parse_param_type()?;
             let fname = self.expect_id()?;
             self.expect_tok(&Token::LParen)?;
             let mut params: Vec<(StanType, String)> = Vec::new();

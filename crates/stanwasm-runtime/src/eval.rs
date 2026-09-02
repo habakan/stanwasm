@@ -227,6 +227,57 @@ fn eval_user_call(
     eval_expr(t, &def.ret_expr, &local)
 }
 
+/// Writes `val` into `y[i]` / `M[i, j]`, which the parser nests as
+/// `Index(Index(M, i), j)`. Walks down to the root binding, collecting the indices,
+/// then rebuilds the containers on the way back out — `Val` is a tree of owned
+/// vectors, so the write has to replace each level rather than mutate in place.
+fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<()> {
+    let mut idxs: Vec<usize> = Vec::new();
+    let mut cur = lhs;
+    let root = loop {
+        match cur {
+            Expr::Index(base, idx_e) => {
+                let one_based = eval_expr(t, idx_e, env)?.to_i32(t)?;
+                if one_based < 1 {
+                    return Err(EvalError::IndexOutOfBounds {
+                        index: one_based,
+                        len: 0,
+                    });
+                }
+                idxs.push((one_based - 1) as usize);
+                cur = base;
+            }
+            Expr::Var(name) => break name,
+            _ => return Err(EvalError::UnsupportedAssignmentTarget),
+        }
+    };
+    idxs.reverse();
+
+    fn put(container: &mut Val, idxs: &[usize], val: Val) -> Result<()> {
+        let Some((&i, rest)) = idxs.split_first() else {
+            *container = val;
+            return Ok(());
+        };
+        let Val::Vec(xs) = container else {
+            return Err(EvalError::NotAScalar);
+        };
+        let len = xs.len();
+        let slot = xs.get_mut(i).ok_or(EvalError::IndexOutOfBounds {
+            index: i as i32 + 1,
+            len,
+        })?;
+        put(slot, rest, val)
+    }
+
+    let mut updated = env
+        .get(root)
+        .cloned()
+        .ok_or_else(|| EvalError::UndefinedVariable(root.clone()))?;
+    put(&mut updated, &idxs, val)?;
+    env.set(root, updated);
+    Ok(())
+}
+
 fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> {
     let evaled: Vec<Val> = args
         .iter()
@@ -379,6 +430,13 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
         Stmt::IncrAssign(lhs, rhs) => {
             // For target += rhs (lhs is `target`), already handled above.
             // Generic form: lhs += rhs.
+            if let Expr::Index(..) = lhs {
+                let cur = eval_expr(t, lhs, env)?;
+                let r = eval_expr(t, rhs, env)?;
+                let sum = v_add(t, &cur, &r);
+                assign_indexed(t, lhs, sum, env)?;
+                return Ok(Flow::Val(Val::Num(0.0)));
+            }
             let Expr::Var(name) = lhs else {
                 return Err(EvalError::UnsupportedAssignmentTarget);
             };
@@ -393,10 +451,11 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
         }
         Stmt::Assign(lhs, rhs) => {
             let r = eval_expr(t, rhs, env)?;
-            let Expr::Var(name) = lhs else {
-                return Err(EvalError::UnsupportedAssignmentTarget);
-            };
-            env.set(name, r);
+            match lhs {
+                Expr::Var(name) => env.set(name, r),
+                Expr::Index(..) => assign_indexed(t, lhs, r, env)?,
+                _ => return Err(EvalError::UnsupportedAssignmentTarget),
+            }
             Ok(Flow::Val(Val::Num(0.0)))
         }
         Stmt::LocalDecl(typ, name, init) => {
