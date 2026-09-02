@@ -172,7 +172,7 @@ fn bench_case(case: &Case) -> anyhow::Result<Row> {
 
     // C) AOT wasm via wasmi
     let aot = aot_compile(&model, &vec![0.1; n])?;
-    let aot_us = bench_aot_via_wasmi(&aot.wasm, n, case.init, aot.scratch_len)?;
+    let aot_us = bench_aot_via_wasmi(&aot.wasm, n, case.init, aot.scratch_len, &aot.const_table)?;
 
     // D) End-to-end sampling
     let mut sm = StanModel::new(case.src, case.data).map_err(|e| anyhow::anyhow!("{e:?}"))?;
@@ -246,6 +246,7 @@ fn bench_aot_via_wasmi(
     n_params: usize,
     params: &[f64],
     scratch_len: usize,
+    const_table: &[f64],
 ) -> anyhow::Result<f64> {
     let engine = Engine::default();
     let module = WasmModule::new(&engine, wasm)?;
@@ -271,6 +272,13 @@ fn bench_aot_via_wasmi(
     memory
         .write(&mut store, params_ptr as usize, &bytes)
         .map_err(|e| anyhow::anyhow!("memory write: {e}"))?;
+    if !const_table.is_empty() {
+        let at = scratch_ptr as usize + (scratch_len - const_table.len()) * 8;
+        let tbl: Vec<u8> = const_table.iter().flat_map(|c| c.to_le_bytes()).collect();
+        memory
+            .write(&mut store, at, &tbl)
+            .map_err(|e| anyhow::anyhow!("const table write: {e}"))?;
+    }
 
     for _ in 0..(N_LPG_ITERS / 10) {
         lpg.call(&mut store, (params_ptr, grads_ptr, n_params as i32, scratch_ptr))?;

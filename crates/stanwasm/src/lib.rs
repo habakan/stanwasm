@@ -99,9 +99,10 @@ pub struct StanModel {
     model: Model,
     compiled: Option<Compiled>,
     step: Option<StepSampler>,
-    /// Scratch slots the last `compileToWasm` output needs. `sampleViaAot`
-    /// cannot size the buffer without it.
-    aot_scratch_len: Option<usize>,
+    /// Initial scratch contents for the last `compileToWasm` output: zeroed
+    /// primals and adjoints, then the re-rolled loops' constant table.
+    /// `sampleViaAot` cannot build the buffer without it.
+    aot_scratch_init: Option<Vec<f64>>,
 }
 
 #[wasm_bindgen]
@@ -117,7 +118,7 @@ impl StanModel {
             model,
             compiled,
             step: None,
-            aot_scratch_len: None,
+            aot_scratch_init: None,
         })
     }
 
@@ -349,7 +350,10 @@ impl StanModel {
     pub fn compile_to_wasm(&mut self) -> Result<Vec<u8>, JsError> {
         let dummy = vec![0.1_f64; self.model.n_params()];
         let compiled = stanwasm_codegen::compile(&self.model, &dummy).map_err(jserr)?;
-        self.aot_scratch_len = Some(compiled.scratch_len);
+        let mut scratch = vec![0.0_f64; compiled.scratch_len];
+        let at = compiled.scratch_len - compiled.const_table.len();
+        scratch[at..].copy_from_slice(&compiled.const_table);
+        self.aot_scratch_init = Some(scratch);
         Ok(compiled.wasm)
     }
 }
@@ -479,6 +483,17 @@ impl CpuLogpFunc for AotLogp {
 impl StanModel {
     /// `sample` through a `setAotExports`-bound AOT wasm instead of tape replay;
     /// V8 JITs the unrolled pass. Identical samples for a given seed.
+    /// Initial contents of the scratch buffer the AOT module works in: zeroed
+    /// primals and adjoints, then the constants its re-rolled loops read.
+    /// Callers driving `log_prob_grad` themselves must stage this once;
+    /// `sampleViaAot` does it internally.
+    #[wasm_bindgen(js_name = aotScratchInit)]
+    pub fn aot_scratch_init(&self) -> Result<Vec<f64>, JsError> {
+        self.aot_scratch_init.clone().ok_or_else(|| {
+            JsError::new("call compileToWasm() first: the scratch layout comes from it")
+        })
+    }
+
     #[wasm_bindgen(js_name = sampleViaAot)]
     pub fn sample_via_aot(
         &mut self,
@@ -498,15 +513,15 @@ impl StanModel {
         // silently becomes a different (possibly enormous) run length.
         let total = num_warmup as u64 + num_draws as u64;
 
-        let scratch_len = self.aot_scratch_len.ok_or_else(|| {
+        let scratch_buf = self.aot_scratch_init.clone().ok_or_else(|| {
             JsError::new("call compileToWasm() before sampleViaAot(): the AOT \
-                          module works in a scratch buffer this model has not sized yet")
+                          module works in a scratch buffer this model has not built yet")
         })?;
         let math = CpuMath::new(AotLogp {
             n_params: n,
             params_buf: vec![0.0; n],
             grads_buf: vec![0.0; n],
-            scratch_buf: vec![0.0; scratch_len],
+            scratch_buf,
         });
 
         let settings = DiagNutsSettings {
