@@ -340,7 +340,7 @@ fn generated_quantities_end_to_end() {
 #[test]
 fn compile_to_wasm_returns_valid_module() {
     let mut model = StanModel::new(LINEAR_REGRESSION, DATA).unwrap();
-    let wasm = model.compile_to_wasm().unwrap();
+    let wasm = model.compile_to_wasm(None).unwrap();
     assert!(
         wasm.starts_with(&[0x00, 0x61, 0x73, 0x6d]),
         "wasm magic missing"

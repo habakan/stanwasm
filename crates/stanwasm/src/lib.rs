@@ -347,9 +347,23 @@ impl StanModel {
     /// AOT-compile this model to a self-contained wasm module. Pass the bytes to
     /// `WebAssembly.instantiate` for an independent log_prob_grad runtime.
     #[wasm_bindgen(js_name = compileToWasm)]
-    pub fn compile_to_wasm(&mut self) -> Result<Vec<u8>, JsError> {
+    /// `reroll` selects how vectorised statements are lowered: `"auto"`
+    /// (default), `"always"`, or `"never"`. Which is faster is an engine
+    /// preference — Safari prefers `"always"`, Chrome and Firefox `"auto"` —
+    /// so the page, which knows what it is running on, gets to choose.
+    pub fn compile_to_wasm(&mut self, reroll: Option<String>) -> Result<Vec<u8>, JsError> {
+        let mode = match reroll.as_deref() {
+            None | Some("auto") => stanwasm_codegen::Reroll::Auto,
+            Some("always") => stanwasm_codegen::Reroll::Always,
+            Some("never") => stanwasm_codegen::Reroll::Never,
+            Some(other) => {
+                return Err(JsError::new(&format!(
+                    "reroll must be \"auto\", \"always\" or \"never\", got {other:?}"
+                )))
+            }
+        };
         let dummy = vec![0.1_f64; self.model.n_params()];
-        let compiled = stanwasm_codegen::compile(&self.model, &dummy).map_err(jserr)?;
+        let compiled = stanwasm_codegen::compile_with(&self.model, &dummy, mode).map_err(jserr)?;
         let mut scratch = vec![0.0_f64; compiled.scratch_len];
         let at = compiled.scratch_len - compiled.const_table.len();
         scratch[at..].copy_from_slice(&compiled.const_table);
