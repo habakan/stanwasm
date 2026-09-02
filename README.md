@@ -2,12 +2,12 @@
 
 [![npm](https://img.shields.io/npm/v/stanwasm?logo=npm&color=cb3837)](https://www.npmjs.com/package/stanwasm)
 [![crates.io](https://img.shields.io/crates/v/stanwasm?logo=rust&color=e43717)](https://crates.io/crates/stanwasm)
-[![bundle](https://img.shields.io/badge/wasm-488%20KB%20%7C%20183%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](docs/en/BENCHMARKS.md)
+[![bundle](https://img.shields.io/badge/wasm-514%20KB%20%7C%20192%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](docs/en/BENCHMARKS.md)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 > **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
-Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~488 KB` wasm bundle (`~183 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
+Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~514 KB` wasm bundle (`~192 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
 ![stanwasm examples gallery demo](examples/gallery/demo.gif)
 
@@ -125,13 +125,19 @@ from `main` on every change to the crates, `ts/`, or the app itself. Source:
 
 ## Stan language coverage
 
-A subset — enough for linear, logistic, Poisson and negative-binomial
-regression, hierarchical models, and Cholesky-parameterised multivariate ones.
-Anything outside it is a clean load-time or evaluation error, never a model
-that silently samples something else.
+A subset, but a wide one now: linear, logistic, Poisson and negative-binomial
+regression, hierarchical models, multivariate ones with any of Stan's covariance
+and correlation parameterisations, user-defined `functions`, matrix products,
+indexed assignment, trigonometry and the elementwise operators. Anything outside
+it is a clean load-time or evaluation error, never a model that silently samples
+something else.
 
-Trigonometry (`sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`) is there
-too, which is what orientation and periodic-signal models need.
+The test of that breadth was writing a Maxwell-constrained magnetic-field GP —
+a `functions` block building a 3N×3N covariance from a curl-free kernel, fed to
+`multi_normal`. It runs as ordinary Stan, without rewriting.
+
+Recursion, `void` functions, the `data` argument qualifier and the `_lp`/`_rng`
+suffix rules are the notable omissions, each a message rather than a wrong answer.
 
 [`ROADMAP.md`](ROADMAP.md) has the full table of what is supported and what is
 not, the behavioural caveats a table cannot carry, and the remaining gaps

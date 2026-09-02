@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.2] — 2026-09-02 (npm only)
+
+Published to npm as `stanwasm@0.1.2`. The crates stay at 0.1.0: the Safari fix still
+lives in a `[patch]`, which Cargo does not carry into a published crate. The next
+crates.io release waits for nuts-rs to ship pymc-devs/nuts-rs#76 and drops the patch.
+
+This is the release that made a Maxwell-constrained magnetic-field GP writable as
+ordinary Stan — matrix products, user-defined functions, the remaining constraint
+transforms, indexed assignment and the utilities that went with them.
+
 
 ### Added
 

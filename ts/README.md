@@ -2,11 +2,11 @@
 
 [![npm](https://img.shields.io/npm/v/stanwasm?logo=npm&color=cb3837)](https://www.npmjs.com/package/stanwasm)
 [![crates.io](https://img.shields.io/crates/v/stanwasm?logo=rust&color=e43717)](https://crates.io/crates/stanwasm)
-[![bundle](https://img.shields.io/badge/wasm-488%20KB%20%7C%20183%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](https://github.com/habakan/stanwasm/blob/main/docs/en/BENCHMARKS.md)
+[![bundle](https://img.shields.io/badge/wasm-514%20KB%20%7C%20192%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](https://github.com/habakan/stanwasm/blob/main/docs/en/BENCHMARKS.md)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/habakan/stanwasm/blob/main/LICENSE)
 
 Stan probabilistic models compiled and sampled **entirely in the browser**.
-Pure Rust compiled to WebAssembly, a single ~488 KB bundle (~183 KB gzipped),
+Pure Rust compiled to WebAssembly, a single ~514 KB bundle (~192 KB gzipped),
 with [nuts-rs](https://github.com/pymc-devs/nuts-rs) embedded as the sampler.
 No server, no cmdstan, no round trip.
 
