@@ -89,3 +89,22 @@ fn writing_into_data_does_not_disturb_the_caller_of_a_function() {
         "caller's v was modified: {v}"
     );
 }
+
+#[test]
+fn an_uninitialised_transformed_parameter_arrives_shaped() {
+    // `vector[W] k;` in `transformed parameters` used to bind a scalar zero, so the
+    // element assignments below it had nothing to write into and `sum` refused it —
+    // while the identical code inside `model` worked.
+    let src = "data { int<lower=0> W; }\n\
+               parameters { real a; }\n\
+               transformed parameters { vector[W] k; for (w in 1:W) k[w] = a * w; }\n\
+               model { target += sum(k); }";
+    let mut data = Env::new();
+    data.set_scalar("W", 3.0);
+    let model = Model::parse_and_load(src, data).unwrap();
+
+    // a=1 gives k = (1, 2, 3), summing to 6.
+    let (lp, grad) = model.log_prob_grad(&[1.0]).unwrap();
+    assert!((lp - 6.0).abs() < 1e-12, "{lp}");
+    assert!((grad[0] - 6.0).abs() < 1e-12, "{grad:?}");
+}

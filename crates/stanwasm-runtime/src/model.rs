@@ -393,7 +393,9 @@ impl Model {
         for decl in &self.prog.transformed_params {
             let init = match &decl.init {
                 Some(e) => eval_expr(tape, e, &env)?,
-                None => Val::Num(0.0),
+                // An uninitialised `vector[W] k;` has to arrive shaped, or the
+                // element assignments that follow have nothing to write into.
+                None => crate::eval::default_for_type(tape, &decl.typ, &env)?,
             };
             env.set(&decl.name, init);
         }
@@ -504,7 +506,9 @@ impl Model {
         for decl in &self.prog.transformed_params {
             let init = match &decl.init {
                 Some(e) => crate::eval::eval_expr(tape, e, &env)?,
-                None => Val::Num(0.0),
+                // An uninitialised `vector[W] k;` has to arrive shaped, or the
+                // element assignments that follow have nothing to write into.
+                None => crate::eval::default_for_type(tape, &decl.typ, &env)?,
             };
             env.set(&decl.name, init);
         }

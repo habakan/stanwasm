@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An uninitialised `transformed parameters` declaration bound a scalar zero.**
+  `vector[W] k;` there had no shape, so element assignments had nothing to write into
+  and `sum` rejected it — while the identical code inside `model` worked, because that
+  path already sized the default from the declared type.
+
 - **Parameter names were sized from the unconstrained dimension.** A `cov_matrix[2]` got
   three labels for four values, so every name after it reported its neighbour's number.
   `cholesky_factor_corr` and `simplex` had the same defect.

@@ -585,7 +585,7 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
 
 /// Zero value matching a declaration's shape, for a local declared without an
 /// initializer. The shape decides `generated quantities`' column count.
-fn default_for_type(t: &mut Tape, typ: &StanType, env: &Env) -> Result<Val> {
+pub fn default_for_type(t: &mut Tape, typ: &StanType, env: &Env) -> Result<Val> {
     fn size_of(t: &mut Tape, e: &Expr, env: &Env) -> Result<usize> {
         Ok(eval_expr(t, e, env)?.to_i32(t)?.max(0) as usize)
     }
