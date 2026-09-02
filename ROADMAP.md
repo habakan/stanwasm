@@ -106,6 +106,31 @@ Not supported, each a clean error rather than a wrong answer:
   the original NUTS integration. Not comparable in scope to the items
   above; would be its own initiative if ever pursued.
 
+## The scalar tape, and what it costs
+
+Every tape node holds one `f64`, so a matrix-vector product is recorded one
+scalar at a time: `y ~ normal(X * beta, sigma)` over `matrix[N,K]` records
+`2K-1` nodes per row before the density adds its own. At N=5000, K=4 that is a
+70,000-node trace against 40,000 for the same model written with a single
+covariate — 75% more nodes for arithmetic a linear-algebra kernel would do in
+one pass over contiguous memory. Measured per-node throughput is fine (0.74 ns
+against 1.05 ns for the simpler model); there are simply many more nodes.
+
+Two things follow from the same cause, and neither is reachable without
+changing what a node is:
+
+- **No fusion.** A dot product cannot be one node, because the node layout is
+  `(op, arg1, arg2i, arg2f)` and has nowhere to put a length.
+- **No SIMD.** The AOT emitter only ever produces scalar `f64` instructions.
+  Widening a re-rolled loop to `f64x2` needs two consecutive iterations to read
+  contiguously, which holds for a vectorised statement but not once a value is
+  produced inside another re-rolled block and read back with that block's
+  stride — exactly the matrix case.
+
+A vector-valued node would address both, and would reach into the tape layout,
+the autodiff rules and the emitter at once. It is the largest open design
+question here, and nothing above depends on it.
+
 ## Correctness follow-ups from the pre-launch review
 
 A pre-launch review (external, via another agent) surfaced several
