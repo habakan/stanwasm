@@ -2,12 +2,12 @@
 
 [![npm](https://img.shields.io/npm/v/stanwasm?logo=npm&color=cb3837)](https://www.npmjs.com/package/stanwasm)
 [![crates.io](https://img.shields.io/crates/v/stanwasm?logo=rust&color=e43717)](https://crates.io/crates/stanwasm)
-[![bundle](https://img.shields.io/badge/wasm-514%20KB%20%7C%20192%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](docs/en/BENCHMARKS.md)
+[![bundle](https://img.shields.io/badge/wasm-534%20KB%20%7C%20200%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](docs/en/BENCHMARKS.md)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 > **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
-Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~514 KB` wasm bundle (`~192 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
+Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~534 KB` wasm bundle (`~200 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
 ![stanwasm examples gallery demo](examples/gallery/demo.gif)
 
