@@ -172,7 +172,7 @@ fn bench_case(case: &Case) -> anyhow::Result<Row> {
 
     // C) AOT wasm via wasmi
     let aot = aot_compile(&model, &vec![0.1; n])?;
-    let aot_us = bench_aot_via_wasmi(&aot.wasm, n, case.init)?;
+    let aot_us = bench_aot_via_wasmi(&aot.wasm, n, case.init, aot.scratch_len)?;
 
     // D) End-to-end sampling
     let mut sm = StanModel::new(case.src, case.data).map_err(|e| anyhow::anyhow!("{e:?}"))?;
@@ -241,11 +241,18 @@ fn stanwasm_autodiff_phi(x: f64) -> f64 {
     stanwasm_autodiff::phi_cdf(x)
 }
 
-fn bench_aot_via_wasmi(wasm: &[u8], n_params: usize, params: &[f64]) -> anyhow::Result<f64> {
+fn bench_aot_via_wasmi(
+    wasm: &[u8],
+    n_params: usize,
+    params: &[f64],
+    scratch_len: usize,
+) -> anyhow::Result<f64> {
     let engine = Engine::default();
     let module = WasmModule::new(&engine, wasm)?;
     let mut store = Store::new(&engine, HostState);
-    let memory = Memory::new(&mut store, MemoryType::new(1, None))
+    // params + grads + the module's primal/adjoint scratch, rounded up to pages.
+    let pages = ((n_params * 2 + scratch_len) * 8).div_ceil(65536).max(1) as u32;
+    let memory = Memory::new(&mut store, MemoryType::new(pages, None))
         .map_err(|e| anyhow::anyhow!("memory: {e}"))?;
     let mut linker: Linker<HostState> = Linker::new(&engine);
     install_math(&mut linker, &mut store);
@@ -256,20 +263,21 @@ fn bench_aot_via_wasmi(wasm: &[u8], n_params: usize, params: &[f64]) -> anyhow::
         .instantiate_and_start(&mut store, &module)
         .map_err(|e| anyhow::anyhow!("instantiate: {e}"))?;
 
-    let lpg = instance.get_typed_func::<(i32, i32, i32), f64>(&store, "log_prob_grad")?;
+    let lpg = instance.get_typed_func::<(i32, i32, i32, i32), f64>(&store, "log_prob_grad")?;
     let params_ptr: i32 = 0;
     let grads_ptr: i32 = (n_params * 8) as i32;
+    let scratch_ptr: i32 = (n_params * 16) as i32;
     let bytes: Vec<u8> = params.iter().flat_map(|p| p.to_le_bytes()).collect();
     memory
         .write(&mut store, params_ptr as usize, &bytes)
         .map_err(|e| anyhow::anyhow!("memory write: {e}"))?;
 
     for _ in 0..(N_LPG_ITERS / 10) {
-        lpg.call(&mut store, (params_ptr, grads_ptr, n_params as i32))?;
+        lpg.call(&mut store, (params_ptr, grads_ptr, n_params as i32, scratch_ptr))?;
     }
     let t0 = Instant::now();
     for _ in 0..N_LPG_ITERS {
-        lpg.call(&mut store, (params_ptr, grads_ptr, n_params as i32))?;
+        lpg.call(&mut store, (params_ptr, grads_ptr, n_params as i32, scratch_ptr))?;
     }
     let elapsed: Duration = t0.elapsed();
     Ok(elapsed.as_secs_f64() * 1e6 / N_LPG_ITERS as f64)

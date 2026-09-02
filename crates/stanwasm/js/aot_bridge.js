@@ -1,7 +1,7 @@
 // Bridge between stanwasm.wasm and a per-model AOT-compiled wasm.
 //
 // The AOT module imports memory from stanwasm (zero-copy) and exports
-// `log_prob_grad(params_ptr, grads_ptr, n_params)`. This snippet stores the
+// `log_prob_grad(params_ptr, grads_ptr, n_params, scratch_ptr)`. This snippet stores the
 // active AOT exports in a module-local variable and forwards calls.
 //
 // Usage from app code:
@@ -27,9 +27,9 @@ export function clear_aot_exports() {
   aotLogProbGrad = null;
 }
 
-export function aot_logp(paramsPtr, gradsPtr, nParams) {
+export function aot_logp(paramsPtr, gradsPtr, nParams, scratchPtr) {
   if (!aotLogProbGrad) {
     throw new Error("AOT not bound — call setAotExports() before sampleViaAot()");
   }
-  return aotLogProbGrad(paramsPtr, gradsPtr, nParams);
+  return aotLogProbGrad(paramsPtr, gradsPtr, nParams, scratchPtr);
 }

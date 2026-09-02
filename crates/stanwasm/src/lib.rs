@@ -99,6 +99,9 @@ pub struct StanModel {
     model: Model,
     compiled: Option<Compiled>,
     step: Option<StepSampler>,
+    /// Scratch slots the last `compileToWasm` output needs. `sampleViaAot`
+    /// cannot size the buffer without it.
+    aot_scratch_len: Option<usize>,
 }
 
 #[wasm_bindgen]
@@ -114,6 +117,7 @@ impl StanModel {
             model,
             compiled,
             step: None,
+            aot_scratch_len: None,
         })
     }
 
@@ -342,9 +346,10 @@ impl StanModel {
     /// AOT-compile this model to a self-contained wasm module. Pass the bytes to
     /// `WebAssembly.instantiate` for an independent log_prob_grad runtime.
     #[wasm_bindgen(js_name = compileToWasm)]
-    pub fn compile_to_wasm(&self) -> Result<Vec<u8>, JsError> {
+    pub fn compile_to_wasm(&mut self) -> Result<Vec<u8>, JsError> {
         let dummy = vec![0.1_f64; self.model.n_params()];
         let compiled = stanwasm_codegen::compile(&self.model, &dummy).map_err(jserr)?;
+        self.aot_scratch_len = Some(compiled.scratch_len);
         Ok(compiled.wasm)
     }
 }
@@ -387,7 +392,7 @@ pub fn version() -> String {
 #[wasm_bindgen(module = "/js/aot_bridge.js")]
 extern "C" {
     #[wasm_bindgen(js_name = aot_logp)]
-    fn aot_logp(params_ptr: u32, grads_ptr: u32, n_params: u32) -> f64;
+    fn aot_logp(params_ptr: u32, grads_ptr: u32, n_params: u32, scratch_ptr: u32) -> f64;
 
     #[wasm_bindgen(js_name = set_aot_exports)]
     fn js_set_aot_exports(exports: JsValue);
@@ -422,6 +427,8 @@ struct AotLogp {
     params_buf: Vec<f64>,
     /// Persistent scratch buffer for grads (grads_ptr) inside our memory.
     grads_buf: Vec<f64>,
+    /// Primal and adjoint storage the AOT module works in, two f64 per node.
+    scratch_buf: Vec<f64>,
 }
 
 impl HasDims for AotLogp {
@@ -450,7 +457,8 @@ impl CpuLogpFunc for AotLogp {
         self.params_buf.copy_from_slice(position);
         let params_ptr = self.params_buf.as_ptr() as u32;
         let grads_ptr = self.grads_buf.as_mut_ptr() as u32;
-        let lp = aot_logp(params_ptr, grads_ptr, self.n_params as u32);
+        let scratch_ptr = self.scratch_buf.as_mut_ptr() as u32;
+        let lp = aot_logp(params_ptr, grads_ptr, self.n_params as u32, scratch_ptr);
         gradient.copy_from_slice(&self.grads_buf);
         if lp.is_finite() {
             Ok(lp)
@@ -490,10 +498,15 @@ impl StanModel {
         // silently becomes a different (possibly enormous) run length.
         let total = num_warmup as u64 + num_draws as u64;
 
+        let scratch_len = self.aot_scratch_len.ok_or_else(|| {
+            JsError::new("call compileToWasm() before sampleViaAot(): the AOT \
+                          module works in a scratch buffer this model has not sized yet")
+        })?;
         let math = CpuMath::new(AotLogp {
             n_params: n,
             params_buf: vec![0.0; n],
             grads_buf: vec![0.0; n],
+            scratch_buf: vec![0.0; scratch_len],
         });
 
         let settings = DiagNutsSettings {
