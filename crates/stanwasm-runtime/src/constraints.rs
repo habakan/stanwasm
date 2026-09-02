@@ -3,7 +3,7 @@
 //! Covered: scalar reals (none, lower, upper, lower_upper), vectors and
 //! arrays with element-wise constraints, unconstrained matrices, and the
 //! shape transforms `simplex`, `ordered`, `positive_ordered`,
-//! `cholesky_factor_corr`.
+//! `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix` and `unit_vector`.
 //!
 //! Anything else (`cov_matrix`, `corr_matrix`, `cholesky_factor_cov`,
 //! `unit_vector`) is rejected with `EvalError::UnsupportedConstraint` rather
@@ -14,10 +14,36 @@
 use crate::env::Env;
 use crate::error::EvalError;
 use crate::eval::eval_plain;
-use crate::ops::{v_add, v_exp, v_inv_logit, v_log, v_mul, v_sqrt, v_sub, v_tanh};
+use crate::matrix;
+use crate::ops::{v_add, v_div, v_exp, v_inv_logit, v_log, v_mul, v_sqrt, v_sub, v_tanh};
 use crate::value::Val;
 use stanwasm_ast::{Constraint, StanType};
 use stanwasm_autodiff::Tape;
+
+/// Lower-triangular factor from the raw slice, row-major with each row's diagonal
+/// last. Returns the rows, the diagonal's own log Jacobian (Σ of the raw diagonal,
+/// since each is exponentiated), and the diagonal entries.
+fn tri_from_raw(t: &mut Tape, raw: &[Val], kk: usize) -> (Vec<Val>, Val, Vec<Val>) {
+    let mut rows: Vec<Val> = Vec::with_capacity(kk);
+    let mut log_jac = Val::Num(0.0);
+    let mut diag: Vec<Val> = Vec::with_capacity(kk);
+    let mut idx = 0;
+    for i in 0..kk {
+        let mut row: Vec<Val> = vec![Val::Num(0.0); kk];
+        for cell in row.iter_mut().take(i) {
+            *cell = raw.get(idx).cloned().unwrap_or(Val::Num(0.0));
+            idx += 1;
+        }
+        let d_raw = raw.get(idx).cloned().unwrap_or(Val::Num(0.0));
+        idx += 1;
+        log_jac = v_add(t, &log_jac, &d_raw);
+        let d = v_exp(t, &d_raw);
+        diag.push(d.clone());
+        row[i] = d;
+        rows.push(Val::Vec(row));
+    }
+    (rows, log_jac, diag)
+}
 
 pub fn param_dims(typ: &StanType, env: &Env) -> usize {
     match typ {
@@ -256,6 +282,40 @@ pub fn constrain(
             }
             let mat = raw.chunks(cols).map(|row| Val::Vec(row.to_vec())).collect();
             (Val::Vec(mat), Val::Num(0.0))
+        }
+        // cholesky_factor_cov[K]: K(K+1)/2 raw → lower-triangular L with a positive
+        // diagonal. L[m][m] = exp(raw), L[m][n<m] = raw; log_jac = Σ raw diagonal.
+        StanType::CholeskyFactorCov(k_e) => {
+            let kk = eval_plain_int(k_e, env);
+            let (mat, log_jac, _) = tri_from_raw(t, raw, kk);
+            (Val::Vec(mat), log_jac)
+        }
+        // cov_matrix[K]: the same L, then Σ = L Lᵀ. `K log 2 + Σ_k (K − k + 1) log L_kk`
+        // is the *whole* Jacobian, exp of the diagonal included, so `diag_jac` is not
+        // added on top of it the way cholesky_factor_cov does.
+        StanType::CovMatrix(k_e) => {
+            let kk = eval_plain_int(k_e, env);
+            let (l_rows, _diag_jac, diag) = tri_from_raw(t, raw, kk);
+            let mut log_jac = Val::Num((kk as f64) * std::f64::consts::LN_2);
+            for (i, d) in diag.iter().enumerate() {
+                let power = (kk - i) as f64 + 1.0;
+                let log_d = v_log(t, d);
+                let term = v_mul(t, &Val::Num(power), &log_d);
+                log_jac = v_add(t, &log_jac, &term);
+            }
+            let sigma = matrix::mat_mat_mul_transpose_rhs(t, &l_rows, kk);
+            (Val::Vec(sigma), log_jac)
+        }
+        // unit_vector[K]: x = y/‖y‖. The Jacobian is singular, and Stan compensates
+        // with the standard-normal kernel −½ yᵀy, which also pins the radius.
+        StanType::UnitVector(k_e) => {
+            let kk = eval_plain_int(k_e, env);
+            let ys: Vec<Val> = raw.iter().take(kk).cloned().collect();
+            let ss = matrix::vec_dot_self(t, &ys);
+            let norm = v_sqrt(t, &ss);
+            let unit = ys.iter().map(|y| v_div(t, y, &norm)).collect();
+            let log_jac = v_mul(t, &Val::Num(-0.5), &ss);
+            (Val::Vec(unit), log_jac)
         }
         StanType::Int(_) => return Err(EvalError::IntParameter(name.to_string())),
         other => {

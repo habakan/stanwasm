@@ -88,6 +88,28 @@ pub fn mat_mat_mul(t: &mut Tape, a_rows: &[Val], b_rows: &[Val], cols: usize) ->
         .collect()
 }
 
+/// `L Lᵀ` for a lower-triangular `l_rows`. Only the entries up to each row's
+/// diagonal are read, so the zeros above it never enter the sum.
+pub fn mat_mat_mul_transpose_rhs(t: &mut Tape, l_rows: &[Val], k: usize) -> Vec<Val> {
+    let cell = |t: &mut Tape, i: usize, j: usize| -> Val {
+        let (Some(Val::Vec(ri)), Some(Val::Vec(rj))) = (l_rows.get(i), l_rows.get(j)) else {
+            return Val::Num(0.0);
+        };
+        let mut acc = Val::Num(0.0);
+        for m in 0..=i.min(j) {
+            let (Some(a), Some(b)) = (ri.get(m), rj.get(m)) else {
+                break;
+            };
+            let p = v_mul(t, a, b);
+            acc = v_add(t, &acc, &p);
+        }
+        acc
+    };
+    (0..k)
+        .map(|i| Val::Vec((0..k).map(|j| cell(t, i, j)).collect()))
+        .collect()
+}
+
 pub fn cholesky_decompose(t: &mut Tape, sigma_rows: &[Val]) -> Vec<Val> {
     let n = sigma_rows.len();
     let mut l: Vec<Vec<Val>> = vec![Vec::new(); n];

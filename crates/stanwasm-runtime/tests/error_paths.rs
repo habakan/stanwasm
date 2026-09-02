@@ -128,19 +128,12 @@ fn array_element_constraint_is_applied_with_jacobian() {
 
 #[test]
 fn unsupported_constraint_types_are_rejected() {
-    for (decl, k, n_raw) in [
-        ("cov_matrix[K] S;", 2, 3),
-        ("corr_matrix[K] S;", 2, 1),
-        ("cholesky_factor_cov[K] S;", 2, 3),
-        ("unit_vector[K] u;", 2, 2),
-    ] {
-        let src = format!("data {{ int K; }} parameters {{ {decl} }} model {{ target += 0; }}");
-        let e = err(&src, &format!(r#"{{"K":{k}}}"#), &vec![0.1; n_raw]);
-        assert!(
-            e.contains("has no constraint transform in this runtime yet"),
-            "{decl}: {e}"
-        );
-    }
+    let src = "data { int K; } parameters { corr_matrix[K] S; } model { target += 0; }";
+    let e = err(src, r#"{"K":2}"#, &[0.1]);
+    assert!(
+        e.contains("has no constraint transform in this runtime yet"),
+        "{e}"
+    );
 }
 
 #[test]
@@ -172,11 +165,11 @@ fn int_parameters_are_rejected_with_their_own_message() {
 #[test]
 fn unsupported_constraint_names_the_parameter() {
     let e = err(
-        "data { int K; } parameters { cov_matrix[K] S; } model { target += 0; }",
+        "data { int K; } parameters { corr_matrix[K] S; } model { target += 0; }",
         r#"{"K":2}"#,
-        &[0.1, 0.2, 0.3],
+        &[0.1],
     );
-    assert!(e.contains("`S`") && e.contains("`cov_matrix`"), "{e}");
+    assert!(e.contains("`S`") && e.contains("`corr_matrix`"), "{e}");
 }
 
 #[test]

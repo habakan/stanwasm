@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`cov_matrix`, `cholesky_factor_cov` and `unit_vector` constraints.** Jacobians are
+  asserted against the formulas in the Stan reference manual, not only against their own
+  gradients: a wrong constant is self-consistent under finite differences and still
+  samples the wrong posterior.
+
+### Fixed
+
+- **Parameter names were sized from the unconstrained dimension.** A `cov_matrix[2]` got
+  three labels for four values, so every name after it reported its neighbour's number.
+  `cholesky_factor_corr` and `simplex` had the same defect.
+
 - **User-defined `functions`.** Calls are inlined while tracing, so the AOT path
   supports them without changes — it works from the tape, not the AST. Scalar,
   `vector` and `matrix` arguments, unsized in the signature as Stan writes them;

@@ -41,6 +41,27 @@ fn push_names_for(out: &mut Vec<String>, name: &str, typ: &StanType, env: &Env) 
                 }
             }
         }
+        // These constrain to a K×K matrix, while `param_dims` counts the smaller
+        // unconstrained vector — naming from that would leave the labels short and
+        // misaligned against `constrained_draw`.
+        StanType::CholeskyFactorCorr(k_e)
+        | StanType::CholeskyFactorCov(k_e)
+        | StanType::CovMatrix(k_e)
+        | StanType::CorrMatrix(k_e) => {
+            let k = eval_int(k_e, env);
+            for i in 1..=k {
+                for j in 1..=k {
+                    out.push(format!("{name}[{i},{j}]"));
+                }
+            }
+        }
+        // Likewise: K-1 unconstrained, K constrained.
+        StanType::Simplex(k_e) => {
+            let k = eval_int(k_e, env);
+            for i in 1..=k {
+                out.push(format!("{name}[{i}]"));
+            }
+        }
         other => {
             let k = param_dims(other, env);
             if k <= 1 {
