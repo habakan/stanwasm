@@ -124,3 +124,40 @@ fn parameter_names_line_up_with_the_constrained_draw() {
         );
     }
 }
+
+#[test]
+fn corr_matrix_shares_the_cholesky_factor_corr_jacobian() {
+    // x = L Lᵀ contributes nothing further: Stan's `read_corr_matrix` adds only what
+    // `read_corr_L` already did, which is not true of cov_matrix's L Lᵀ.
+    let raw = [0.4, -0.2, 0.7];
+    let (corr, _) = jacobian_only("corr_matrix[3] R;", &raw);
+    let (chol, _) = jacobian_only("cholesky_factor_corr[3] L;", &raw);
+    assert!((corr - chol).abs() < 1e-12, "corr={corr}, chol={chol}");
+}
+
+#[test]
+fn corr_matrix_has_a_unit_diagonal_and_is_symmetric() {
+    let src = "parameters { corr_matrix[3] R; }\nmodel { }";
+    let model = Model::parse_and_load(src, Env::new()).unwrap();
+    let r = model.constrained_draw(&[0.4, -0.2, 0.7]).unwrap();
+    assert_eq!(r.len(), 9, "{r:?}");
+    for i in 0..3 {
+        assert!(
+            (r[i * 3 + i] - 1.0).abs() < 1e-12,
+            "diagonal {i} = {}",
+            r[i * 3 + i]
+        );
+        for j in 0..3 {
+            assert!(
+                (r[i * 3 + j] - r[j * 3 + i]).abs() < 1e-12,
+                "not symmetric: {r:?}"
+            );
+            assert!(r[i * 3 + j].abs() <= 1.0 + 1e-12, "|r| > 1: {r:?}");
+        }
+    }
+}
+
+#[test]
+fn corr_matrix_gradients_agree_with_finite_differences() {
+    finite_diff_matches("corr_matrix[3] R;", &[0.4, -0.2, 0.7]);
+}

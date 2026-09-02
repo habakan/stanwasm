@@ -27,7 +27,7 @@ worked through below, ordered by effort.
 | Multivariate | `multi_normal_cholesky`, `multi_normal` (full covariance), `lkj_corr_cholesky`, `dirichlet`, `multinomial` | |
 | Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors | |
 | Vector shape | `simplex`, `ordered`, `positive_ordered`, `unit_vector` | |
-| Matrix constraints | `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix` | `corr_matrix` |
+| Matrix constraints | `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix`, `corr_matrix` | |
 | Blocks | `data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, `functions` | |
 | Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr` | indexed assignment (`y_rep[n] = ...`) |
 | Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`) | element-wise `.*` `./` |
@@ -88,7 +88,6 @@ Not supported, each a clean error rather than a wrong answer:
 
 - `multi_normal` (full covariance), `multinomial` and `categorical` are done —
   see `stanwasm-runtime/src/distributions.rs`.
-- Constraint/shape transforms: `corr_matrix`
 - `lkj_corr_cholesky_rng` (needs the onion-method sampling algorithm —
   self-contained, known algorithm, just not implemented yet)
 - Each of these follows the same pattern as the distributions already

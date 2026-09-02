@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`cov_matrix`, `cholesky_factor_cov` and `unit_vector` constraints.** Jacobians are
+- **`cov_matrix`, `cholesky_factor_cov`, `corr_matrix` and `unit_vector` constraints**, which completes the set. Jacobians are
   asserted against the formulas in the Stan reference manual, not only against their own
   gradients: a wrong constant is self-consistent under finite differences and still
   samples the wrong posterior.

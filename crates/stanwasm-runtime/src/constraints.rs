@@ -23,6 +23,43 @@ use stanwasm_autodiff::Tape;
 /// Lower-triangular factor from the raw slice, row-major with each row's diagonal
 /// last. Returns the rows, the diagonal's own log Jacobian (Σ of the raw diagonal,
 /// since each is exponentiated), and the diagonal entries.
+/// Cholesky factor of a correlation matrix from the raw slice, by the stick-breaking
+/// construction: `z = tanh(raw)`, `L[i][j] = z·√rem`, `rem *= 1 − z²`.
+///
+/// The Jacobian is `Σ ½log(rem) + log(1 − z²)`, which is the reference manual's
+/// `-2 Σ log cosh y + ½ Σ log(1 − Σ x²)` written in terms of the running remainder.
+fn corr_l_from_raw(t: &mut Tape, raw: &[Val], kk: usize) -> (Vec<Val>, Val) {
+    let mut mat: Vec<Val> = Vec::with_capacity(kk);
+    let mut log_jac = Val::Num(0.0);
+    let mut idx = 0;
+    for i in 0..kk {
+        let mut row: Vec<Val> = vec![Val::Num(0.0); kk];
+        if i == 0 {
+            row[0] = Val::Num(1.0);
+        } else {
+            let mut rem = Val::Num(1.0);
+            #[allow(clippy::needless_range_loop)]
+            for j in 0..i {
+                let z = v_tanh(t, &raw[idx]);
+                idx += 1;
+                let z2 = v_mul(t, &z, &z);
+                let log_rem = v_log(t, &rem);
+                let half_log_rem = v_mul(t, &Val::Num(0.5), &log_rem);
+                let one_minus_z2 = v_sub(t, &Val::Num(1.0), &z2);
+                let log_1mz2 = v_log(t, &one_minus_z2);
+                let term = v_add(t, &half_log_rem, &log_1mz2);
+                log_jac = v_add(t, &log_jac, &term);
+                let sqrt_rem = v_sqrt(t, &rem);
+                row[j] = v_mul(t, &z, &sqrt_rem);
+                rem = v_mul(t, &rem, &one_minus_z2);
+            }
+            row[i] = v_sqrt(t, &rem);
+        }
+        mat.push(Val::Vec(row));
+    }
+    (mat, log_jac)
+}
+
 fn tri_from_raw(t: &mut Tape, raw: &[Val], kk: usize) -> (Vec<Val>, Val, Vec<Val>) {
     let mut rows: Vec<Val> = Vec::with_capacity(kk);
     let mut log_jac = Val::Num(0.0);
@@ -198,39 +235,18 @@ pub fn constrain(
         // cholesky_factor_corr[K]: K*(K-1)/2 raw → lower-triangular L. Spherical,
         // per row: z = tanh(raw); L[i][j] = z·√rem; jac += ½log rem + log(1−z²); rem *= 1−z².
         StanType::CholeskyFactorCorr(k_e) => {
-            let kk = match eval_plain(t, k_e, env)? {
-                Val::Num(v) => v as usize,
-                _ => 0,
-            };
-            let mut mat: Vec<Val> = Vec::with_capacity(kk);
-            let mut log_jac = Val::Num(0.0);
-            let mut idx = 0;
-            for i in 0..kk {
-                let mut row: Vec<Val> = vec![Val::Num(0.0); kk];
-                if i == 0 {
-                    row[0] = Val::Num(1.0);
-                } else {
-                    let mut rem = Val::Num(1.0);
-                    #[allow(clippy::needless_range_loop)]
-                    for j in 0..i {
-                        let z = v_tanh(t, &raw[idx]);
-                        idx += 1;
-                        let z2 = v_mul(t, &z, &z);
-                        let log_rem = v_log(t, &rem);
-                        let half_log_rem = v_mul(t, &Val::Num(0.5), &log_rem);
-                        let one_minus_z2 = v_sub(t, &Val::Num(1.0), &z2);
-                        let log_1mz2 = v_log(t, &one_minus_z2);
-                        let term = v_add(t, &half_log_rem, &log_1mz2);
-                        log_jac = v_add(t, &log_jac, &term);
-                        let sqrt_rem = v_sqrt(t, &rem);
-                        row[j] = v_mul(t, &z, &sqrt_rem);
-                        rem = v_mul(t, &rem, &one_minus_z2);
-                    }
-                    row[i] = v_sqrt(t, &rem);
-                }
-                mat.push(Val::Vec(row));
-            }
+            let kk = eval_plain_int(k_e, env);
+            let (mat, log_jac) = corr_l_from_raw(t, raw, kk);
             (Val::Vec(mat), log_jac)
+        }
+        // corr_matrix[K]: the same L, then x = L Lᵀ. Unlike cov_matrix, that product
+        // contributes no further Jacobian — Stan's `read_corr_matrix` adds only what
+        // `read_corr_L` already accounted for.
+        StanType::CorrMatrix(k_e) => {
+            let kk = eval_plain_int(k_e, env);
+            let (l_rows, log_jac) = corr_l_from_raw(t, raw, kk);
+            let x = matrix::mat_mat_mul_transpose_rhs(t, &l_rows, kk);
+            (Val::Vec(x), log_jac)
         }
         // array[N] T — constrain each element and sum the Jacobians. Without this,
         // `array[N] real<lower=0> s;` passed through untransformed and unjacobianed.
@@ -318,32 +334,7 @@ pub fn constrain(
             (Val::Vec(unit), log_jac)
         }
         StanType::Int(_) => return Err(EvalError::IntParameter(name.to_string())),
-        other => {
-            return Err(EvalError::UnsupportedConstraint {
-                name: name.to_string(),
-                typ: type_name(other),
-            })
-        }
     })
-}
-
-/// Human-readable Stan type name, for `UnsupportedConstraint` messages.
-fn type_name(typ: &StanType) -> String {
-    match typ {
-        StanType::Real(_) => "real".into(),
-        StanType::Int(_) => "int".into(),
-        StanType::Vector(..) => "vector".into(),
-        StanType::Matrix(..) => "matrix".into(),
-        StanType::Simplex(_) => "simplex".into(),
-        StanType::Ordered(_) => "ordered".into(),
-        StanType::PositiveOrdered(_) => "positive_ordered".into(),
-        StanType::Array(_, elem) => format!("array[...] {}", type_name(elem)),
-        StanType::CholeskyFactorCorr(_) => "cholesky_factor_corr".into(),
-        StanType::CholeskyFactorCov(_) => "cholesky_factor_cov".into(),
-        StanType::CovMatrix(_) => "cov_matrix".into(),
-        StanType::CorrMatrix(_) => "corr_matrix".into(),
-        StanType::UnitVector(_) => "unit_vector".into(),
-    }
 }
 
 fn bad_size(name: &str, got: &Val) -> EvalError {
@@ -377,4 +368,23 @@ fn apply_lower_upper(t: &mut Tape, raw: &Val, lower: &Val, upper: &Val) -> (Val,
     let log_p_plus_1mp = v_add(t, &log_p, &log_1mp);
     let log_jac = v_add(t, &log_range, &log_p_plus_1mp);
     (c, log_jac)
+}
+
+/// Human-readable Stan type name, for `UnsupportedConstraint` messages.
+fn type_name(t: &StanType) -> String {
+    match t {
+        StanType::Real(_) => "real".into(),
+        StanType::Int(_) => "int".into(),
+        StanType::Vector(..) => "vector".into(),
+        StanType::Matrix(..) => "matrix".into(),
+        StanType::Simplex(_) => "simplex".into(),
+        StanType::Ordered(_) => "ordered".into(),
+        StanType::Array(..) => "array".into(),
+        StanType::CholeskyFactorCorr(_) => "cholesky_factor_corr".into(),
+        StanType::CholeskyFactorCov(_) => "cholesky_factor_cov".into(),
+        StanType::CovMatrix(_) => "cov_matrix".into(),
+        StanType::CorrMatrix(_) => "corr_matrix".into(),
+        StanType::PositiveOrdered(_) => "positive_ordered".into(),
+        StanType::UnitVector(_) => "unit_vector".into(),
+    }
 }

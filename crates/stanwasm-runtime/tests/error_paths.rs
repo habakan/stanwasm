@@ -127,16 +127,6 @@ fn array_element_constraint_is_applied_with_jacobian() {
 }
 
 #[test]
-fn unsupported_constraint_types_are_rejected() {
-    let src = "data { int K; } parameters { corr_matrix[K] S; } model { target += 0; }";
-    let e = err(src, r#"{"K":2}"#, &[0.1]);
-    assert!(
-        e.contains("has no constraint transform in this runtime yet"),
-        "{e}"
-    );
-}
-
-#[test]
 fn matrix_shape_check_compares_columns_not_just_rows() {
     // Both operands have 2 rows, so a row-count-only check would let this
     // through and `zip` would truncate the wider one's columns.
@@ -160,16 +150,6 @@ fn int_parameters_are_rejected_with_their_own_message() {
         e.contains("`k` is declared `int`") && e.contains("must be"),
         "{e}"
     );
-}
-
-#[test]
-fn unsupported_constraint_names_the_parameter() {
-    let e = err(
-        "data { int K; } parameters { corr_matrix[K] S; } model { target += 0; }",
-        r#"{"K":2}"#,
-        &[0.1],
-    );
-    assert!(e.contains("`S`") && e.contains("`corr_matrix`"), "{e}");
 }
 
 #[test]
