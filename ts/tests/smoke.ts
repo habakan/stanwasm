@@ -120,4 +120,25 @@ for (let i = 0; i < 20; i++) {
 }
 console.log(`generatedQuantities OK (${20} draws)`);
 
+// nuts-rs asserts on a zero-length warmup schedule, and an assertion inside
+// wasm reaches the caller as an untraceable trap. Every entry point checks.
+for (const [what, run] of [
+  ["sample", (m: StanModel, i: Float64Array) => m.sample(i, 0, 10, 7n)],
+  ["sampleViaAot", (m: StanModel, i: Float64Array) => m.sampleViaAot(i, 0, 10, 7n)],
+  ["startStepSampling", (m: StanModel, i: Float64Array) => m.startStepSampling(i, 0, 10, 7n)],
+] as const) {
+  let message = "";
+  try {
+    const m = new StanModel(stanCode, JSON.stringify(data));
+    run(m, new Float64Array(m.n_params).fill(0.1));
+  } catch (e) {
+    message = String(e);
+  }
+  if (!message.includes("num_warmup must be at least 1")) {
+    console.error(`FAIL: ${what} with no warmup gave ${message || "no error"}`);
+    process.exit(1);
+  }
+}
+console.log("zero warmup rejected on every entry point");
+
 console.log("OK");

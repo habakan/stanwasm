@@ -105,6 +105,18 @@ pub struct StanModel {
     aot_scratch_init: Option<Vec<f64>>,
 }
 
+/// nuts-rs asserts that its step-size adaptation has somewhere to run, and an
+/// assertion inside wasm is a trap the caller cannot tell apart from any other.
+fn no_warmup_check(num_warmup: u32) -> Result<(), JsError> {
+    if num_warmup == 0 {
+        return Err(JsError::new(
+            "num_warmup must be at least 1: the sampler adapts its step size \
+             during warmup and has no schedule to do it on with none",
+        ));
+    }
+    Ok(())
+}
+
 #[wasm_bindgen]
 impl StanModel {
     /// Parse `stan_src`, bind `data_json`, trace the model on the autodiff
@@ -171,6 +183,7 @@ impl StanModel {
                 init.len()
             )));
         }
+        no_warmup_check(num_warmup)?;
         // Widen before adding: `u32 + u32` wraps, and a wrapped total
         // silently becomes a different (possibly enormous) run length.
         let total = num_warmup as u64 + num_draws as u64;
@@ -277,6 +290,7 @@ impl StanModel {
                 init.len()
             )));
         }
+        no_warmup_check(num_warmup)?;
         let compiled = self
             .compiled
             .take()
@@ -523,6 +537,7 @@ impl StanModel {
                 init.len()
             )));
         }
+        no_warmup_check(num_warmup)?;
         // Widen before adding: `u32 + u32` wraps, and a wrapped total
         // silently becomes a different (possibly enormous) run length.
         let total = num_warmup as u64 + num_draws as u64;
