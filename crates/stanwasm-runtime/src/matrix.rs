@@ -40,10 +40,48 @@ pub fn mat_mdiv_ltri_low(t: &mut Tape, l_rows: &[Val], b: &[Val]) -> Vec<Val> {
     x
 }
 
+/// An evenly spaced run of tape values, which is what a contraction node can
+/// walk: its first index and the distance between elements.
+fn tape_run(xs: &[Val]) -> Option<(u32, u32)> {
+    let (&Val::Tape(first), &Val::Tape(second)) = (xs.first()?, xs.get(1)?) else {
+        return None;
+    };
+    let stride = second.checked_sub(first).filter(|s| *s > 0)?;
+    xs.iter()
+        .enumerate()
+        .all(|(k, x)| matches!(x, Val::Tape(i) if *i == first + k as u32 * stride))
+        .then_some((first, stride))
+}
+
 /// Cholesky decomposition of a symmetric positive-definite matrix: `Σ = L Lᵀ`,
 /// rows of `Val::Vec`. Lets full-covariance `multi_normal` reuse the Cholesky math.
 /// `A * b` where `a_rows` is a vec of row containers. Returns the length-rows vector.
 pub fn mat_vec_mul(t: &mut Tape, a_rows: &[Val], b: &[Val]) -> Vec<Val> {
+    // Data on the left against parameters on the right — `X * beta`, the shape
+    // regression is written in — is one contraction node per row instead of
+    // the `2K` multiplies and adds the chain would record.
+    if let Some((base, stride)) = tape_run(b) {
+        let all_data = a_rows.iter().all(|row| {
+            matches!(row, Val::Vec(cells)
+                if cells.len() == b.len() && cells.iter().all(|c| matches!(c, Val::Num(_))))
+        });
+        if all_data {
+            let mut out = Vec::with_capacity(a_rows.len());
+            let mut coeffs = Vec::with_capacity(b.len());
+            for row in a_rows {
+                let Val::Vec(cells) = row else {
+                    unreachable!("checked above")
+                };
+                coeffs.clear();
+                coeffs.extend(cells.iter().map(|c| match c {
+                    Val::Num(v) => *v,
+                    _ => unreachable!("checked above"),
+                }));
+                out.push(Val::Tape(t.dot_c(base, stride, &coeffs)));
+            }
+            return out;
+        }
+    }
     a_rows
         .iter()
         .map(|row| {
