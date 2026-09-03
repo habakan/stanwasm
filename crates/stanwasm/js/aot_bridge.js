@@ -12,7 +12,7 @@
 //   const stanMemory = /* obtain from init output */;
 //   const aot = await WebAssembly.instantiate(wasmBytes, {
 //     stan: { memory: stanMemory },
-//     Math: { exp: Math.exp, log: Math.log, /* ... + lgamma/digamma/phi shims */ },
+//     Math: { exp: Math.exp, log: Math.log, pow: Math.pow, sin, cos, /* + a phi shim */ },
 //   });
 //   setAotExports(aot.instance.exports);
 //   const samples = model.sampleViaAot(init, warmup, draws, seed);

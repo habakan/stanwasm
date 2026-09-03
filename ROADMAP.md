@@ -22,7 +22,7 @@ worked through below, ordered by effort.
 
 | | Supported | TODO |
 |---|---|---|
-| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta` | |
+| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`*, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta` | |
 | Discrete | `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2`, `categorical` | |
 | Multivariate | `multi_normal_cholesky`, `multi_normal` (full covariance), `lkj_corr_cholesky`, `dirichlet`, `multinomial` | |
 | Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors | |
@@ -33,6 +33,9 @@ worked through below, ordered by effort.
 | Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`), element-wise `.*` `./` `.^` | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
 | Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix` | `log10`, `norm` |
+
+\* `half_normal` is not a Stan distribution — stanc rejects it. Write
+`real<lower=0> tau; tau ~ normal(0, s);` for a model that also runs under Stan.
 
 Four caveats the table can't carry:
 
