@@ -472,6 +472,9 @@ impl Parser {
 
     fn parse_stmt(&mut self) -> Result<Stmt> {
         match self.peek().clone() {
+            // A block on its own, which Stan uses to scope a local declaration
+            // to the middle of another block.
+            Token::LBrace => Ok(Stmt::Block(self.parse_block()?)),
             Token::Kw(s) if s == "for" => {
                 self.consume();
                 self.expect_tok(&Token::LParen)?;

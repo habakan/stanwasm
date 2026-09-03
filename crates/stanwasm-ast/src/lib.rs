@@ -81,6 +81,8 @@ pub enum Stmt {
     IncrAssign(Expr, Expr),
     /// type name = init?;
     LocalDecl(StanType, String, Option<Expr>),
+    /// `{ ... }` on its own: a scope for the locals declared inside it.
+    Block(Vec<Stmt>),
     /// return expr;
     Return(Expr),
     Break,

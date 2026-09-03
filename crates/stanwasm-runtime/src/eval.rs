@@ -396,6 +396,19 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             let var = v_div(t, &ss, &Val::Num(n - 1.0));
             v_sqrt(t, &var)
         }
+        // The decomposition is already here for `multi_normal`; this only
+        // makes it reachable from a model.
+        ("cholesky_decompose", [Val::Vec(rows)]) => Val::Vec(matrix::cholesky_decompose(t, rows)),
+        ("diag_matrix", [Val::Vec(diag)]) => {
+            let n = diag.len();
+            let mut rows = Vec::with_capacity(n);
+            for (i, d) in diag.iter().enumerate() {
+                let mut row = vec![Val::Num(0.0); n];
+                row[i] = d.clone();
+                rows.push(Val::Vec(row));
+            }
+            Val::Vec(rows)
+        }
         ("diag_pre_multiply", [Val::Vec(diag), Val::Vec(rows)]) => {
             if diag.len() != rows.len() {
                 return Err(EvalError::ShapeMismatch {
@@ -577,6 +590,7 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
             Ok(Flow::Val(v))
         }
         Stmt::TargetIncr(e) => Ok(Flow::Val(eval_expr(t, e, env)?)),
+        Stmt::Block(body) => eval_block(t, body, env),
         Stmt::IncrAssign(lhs, rhs) => {
             // For target += rhs (lhs is `target`), already handled above.
             // Generic form: lhs += rhs.

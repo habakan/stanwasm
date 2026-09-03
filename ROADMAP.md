@@ -29,10 +29,10 @@ worked through below, ordered by effort.
 | Vector shape | `simplex`, `ordered`, `positive_ordered`, `unit_vector` | |
 | Matrix constraints | `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix`, `corr_matrix` | |
 | Blocks | `data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, `functions` | |
-| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed assignment, ternary `?:` | |
+| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed assignment, ternary `?:`, a bare `{ ... }` block | |
 | Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`), element-wise `.*` `./` `.^` | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
-| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov` | `norm` |
+| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose` | `norm` |
 
 \* `half_normal` is not a Stan distribution — stanc rejects it. Write
 `real<lower=0> tau; tau ~ normal(0, s);` for a model that also runs under Stan.
@@ -76,19 +76,19 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**90 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
-47 that come with a reference posterior, 37 are usable. What stops the rest:
+**93 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+47 that come with a reference posterior, 39 are usable. What stops the rest:
 
 | | count |
 |---|---:|
 | transpose — `x'` | 18 |
-| a bare `{ ... }` block for local scope inside a statement | 13 |
+| a range mixed with an index — `W[1:rows(W), k]` | 7 |
 | other syntax: range slicing `x[1:5]`, `<` in a declaration, a bare expression statement, `data` as a function qualifier | 6 |
 | a `transformed data` variable declared in one statement and assigned in the next | 5 |
+| an array literal — `{1, 2, 3}`, and indexing by one | 5 |
 | `array[...] simplex` — an array of constrained vectors | 4 |
-| a range mixed with an index — `W[1:rows(W), k]` | 3 |
-| a function: `diag_matrix`, `student_t_lccdf` | 2 |
-| two that did not finish tracing in two minutes; two shape mismatches | 4 |
+| `student_t_lccdf` | 1 |
+| four shape mismatches, two that did not finish tracing in two minutes | 6 |
 
 Each row is the *first* thing a model hit, so fixing one does not always
 unlock its models — some will land on the next.
@@ -97,10 +97,10 @@ The shape of that list was not what the section below assumed. Syntax, not
 numerics and not distributions, is most of it — and `print()` and the remaining
 constraint transforms, which the section below leads with, block nothing here.
 
-Three rounds of that list have been worked through — multi-dimensional
-declarations, then the missing distributions, then the missing functions —
-taking the count from 63 to 90. Each round unblocked more than its own row,
-because a model whose first complaint was a distribution often had nothing
+Four rounds of that list have been worked through — multi-dimensional
+declarations, the missing distributions, the missing functions, then bare
+blocks — taking the count from 63 to 93. Each round unblocked more than its own
+row, because a model whose first complaint was a distribution often had nothing
 behind it.
 
 **Transpose is now the largest single blocker and is deliberately still

@@ -105,3 +105,29 @@ fn dot_product_sums_the_products() {
     d.set_vector("z", &[4.0, 5.0]);
     assert!(err_of("target += dot_product(x, z);", d).contains("shape mismatch"));
 }
+
+/// Stan scopes a local declaration by wrapping it in a block, which is how a
+/// forward-filtering loop keeps its working array out of the enclosing block.
+#[test]
+fn a_bare_block_scopes_what_it_declares() {
+    let body = "{ real tmp = 3.0; target += tmp; } target += 10.0;";
+    assert!((value_of(body, Env::new()) - 13.0).abs() < 1e-12);
+
+    // And what it declared is gone afterwards.
+    let leaked = "{ real tmp = 3.0; target += tmp; } target += tmp;";
+    assert!(
+        err_of(leaked, Env::new()).contains("tmp"),
+        "{}",
+        err_of(leaked, Env::new())
+    );
+}
+
+#[test]
+fn diag_matrix_puts_the_vector_on_the_diagonal() {
+    let mut d = Env::new();
+    d.set_vector("v", &[2.0, 5.0]);
+    // Row 1 is [2, 0] and row 2 is [0, 5], so this sums to 7 and the corners to 0.
+    let body = "target += sum(diag_matrix(v)[1]) + sum(diag_matrix(v)[2]);";
+    assert!((value_of(body, d.clone()) - 7.0).abs() < 1e-12);
+    assert!(value_of("target += diag_matrix(v)[1, 2];", d).abs() < 1e-12);
+}
