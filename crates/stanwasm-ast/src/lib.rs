@@ -102,6 +102,9 @@ pub struct FuncDef {
 pub struct StanProgram {
     pub functions: Vec<(String, FuncDef)>,
     pub data: Vec<VarDecl>,
+    /// `transformed data`, evaluated once against the data env before any
+    /// parameter exists, so its results are constants for every later block.
+    pub transformed_data: Vec<Stmt>,
     pub parameters: Vec<VarDecl>,
     pub transformed_params: Vec<VarDecl>,
     pub transformed_stmts: Vec<Stmt>,

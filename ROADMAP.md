@@ -28,7 +28,7 @@ worked through below, ordered by effort.
 | Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors | |
 | Vector shape | `simplex`, `ordered`, `positive_ordered`, `unit_vector` | |
 | Matrix constraints | `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix`, `corr_matrix` | |
-| Blocks | `data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, `functions` | |
+| Blocks | `data`, `transformed data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, `functions` | |
 | Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed assignment, ternary `?:`, a bare `{ ... }` block | |
 | Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`), element-wise `.*` `./` `.^` | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
@@ -51,9 +51,6 @@ Four caveats the table can't carry:
   have no emitter for `tan`/`asin`/`acos`/`atan` (hence `atan2`), `erf`/`erfc`
   or `digamma`, and report `CodegenError::UnsupportedOp` rather than emitting a
   module that traps. Adding them needs new math imports on the host side.
-- **`transformed data` parses but does not memoize.** Its statements fold into
-  `model`, so they re-run every trace and its variables are invisible from
-  `generated quantities`.
 - **Stan's static typing is honored where it changes results.** `int / int` is
   integer division (`N / 2` with `N = 3` is `1`), and `^` binds tighter than
   unary minus and associates right (`-a^2` is `-(a^2)`, `2^3^2` is `512`).
@@ -76,19 +73,18 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**93 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+**100 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
 47 that come with a reference posterior, 39 are usable. What stops the rest:
 
 | | count |
 |---|---:|
-| transpose — `x'` | 18 |
+| transpose — `x'` | 17 |
 | a range mixed with an index — `W[1:rows(W), k]` | 7 |
 | other syntax: range slicing `x[1:5]`, `<` in a declaration, a bare expression statement, `data` as a function qualifier | 6 |
-| a `transformed data` variable declared in one statement and assigned in the next | 5 |
 | an array literal — `{1, 2, 3}`, and indexing by one | 5 |
-| `array[...] simplex` — an array of constrained vectors | 4 |
-| `student_t_lccdf` | 1 |
-| four shape mismatches, two that did not finish tracing in two minutes | 6 |
+| four shape mismatches, a bound that depends on another parameter, an array of vectors as a multivariate variate | 7 |
+| `max` over an array, `student_t_lccdf` | 2 |
+| did not finish tracing in two minutes | 3 |
 
 Each row is the *first* thing a model hit, so fixing one does not always
 unlock its models — some will land on the next.
@@ -244,12 +240,6 @@ validation. Still open:
   on shape, so matrix-vector and matrix-matrix products work, but two vectors still
   multiply element-wise instead of erroring the way Stan does. Stan spells that `.*`,
   which is unimplemented, so nothing yet distinguishes the two.
-
-- **`transformed data { ... }` is folded into `model`.** Its statements are
-  appended to the model block, so they re-run on every trace instead of once
-  at load, and the variables they define aren't visible from `generated
-  quantities` (`undefined variable`). Needs its own `StanProgram` field,
-  evaluated once into `data_env` during `Model::parse_and_load`.
 
 - **`sampleViaAot` doesn't check the AOT module's `n_params` against the
   current model's.** Passing an AOT module compiled for a different model

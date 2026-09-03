@@ -646,9 +646,8 @@ impl Parser {
                     }
                 }
                 "transformed_data" => {
-                    // transformed_data is pre-processed before parameters; treat as model preamble
                     for s in self.parse_block_body()? {
-                        prog.model.push(s);
+                        prog.transformed_data.push(s);
                     }
                 }
                 "generated_quantities" => {

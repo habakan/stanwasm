@@ -99,7 +99,6 @@ const kind = (r: Row) => {
     [/expected RBrack, got Comma/, "index or declare with more than one dimension"],
     [/unrecognized character `'`/, "transpose"],
     [/unexpected token in expression: LBrace/, "an array literal — `{1, 2, 3}`"],
-    [/undefined variable/, "a `transformed data` variable"],
     [/unknown distribution/, "a distribution"],
     [/unknown function/, "a function"],
     [/no unconstrained dimensions|UnsupportedConstraint/, "a constraint transform"],

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`transformed data` is its own block, evaluated once when the model loads.**
+  Its statements had been appended to `model`, so a variable declared in one
+  statement and assigned in the next was undefined, and nothing it declared was
+  visible from `transformed parameters` or `generated quantities`. Its results
+  now join the data environment before parameters are sized, which also lets a
+  parameter's dimension depend on one. posteriordb coverage goes from 93 to 100
+  of 147.
+
 ## [0.2.0] — 2026-09-04 (npm only)
 
 Published to npm as `stanwasm@0.2.0`. The crates stay at 0.1.0 for the same

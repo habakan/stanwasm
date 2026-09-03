@@ -91,6 +91,8 @@ pub enum ModelError {
     Parse(#[from] stanwasm_parser::ParseError),
     #[error("data block: {0}")]
     Data(#[from] DataMismatch),
+    #[error("transformed data: {0}")]
+    TransformedData(#[from] EvalError),
 }
 
 /// A `data { ... }` declaration the supplied JSON doesn't satisfy. Each of these
@@ -323,28 +325,35 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(prog: StanProgram, data_env: Env) -> Self {
+    pub fn new(prog: StanProgram, data_env: Env) -> Result<Self, EvalError> {
         // Held on the data env so every later scope inherits it by clone.
         let mut data_env = data_env;
         if !prog.functions.is_empty() {
             data_env.set_funcs(std::rc::Rc::new(prog.functions.clone()));
         }
+        // `transformed data` sees only data, so it is evaluated once here and its
+        // results join the data env: parameter sizes may depend on them.
+        let mut tape = Tape::new();
+        for stmt in &prog.transformed_data {
+            eval_stmt(&mut tape, stmt, &mut data_env)?.into_val();
+        }
+        data_env.freeze(&tape);
         let n_params: usize = prog
             .parameters
             .iter()
             .map(|d| param_dims(&d.typ, &data_env))
             .sum();
-        Self {
+        Ok(Self {
             prog,
             data_env,
             n_params,
-        }
+        })
     }
 
     pub fn parse_and_load(stan_src: &str, mut data_env: Env) -> Result<Self, ModelError> {
         let prog = stanwasm_parser::parse(stan_src)?;
         validate_data(&prog, &mut data_env)?;
-        Ok(Self::new(prog, data_env))
+        Ok(Self::new(prog, data_env)?)
     }
 
     pub fn n_params(&self) -> usize {

@@ -6,6 +6,7 @@ use std::rc::Rc;
 use crate::value::Val;
 use rand::rngs::ChaCha8Rng;
 use stanwasm_ast::FuncDef;
+use stanwasm_autodiff::Tape;
 
 /// One binding, carrying whether the *declared* Stan type is integral. It lives
 /// here and not in `Val` because it is static, and only `/` cares.
@@ -106,6 +107,21 @@ impl Env {
 
     pub fn truncate(&mut self, len: usize) {
         self.vars.truncate(len);
+    }
+
+    /// Replace every tape-backed binding with its constant value. `transformed
+    /// data` runs on a scratch tape whose indices must not outlive it.
+    pub fn freeze(&mut self, tape: &Tape) {
+        fn go(tape: &Tape, v: &mut Val) {
+            match v {
+                Val::Tape(i) => *v = Val::Num(tape.value(*i)),
+                Val::Vec(xs) => xs.iter_mut().for_each(|x| go(tape, x)),
+                Val::Num(_) => {}
+            }
+        }
+        for b in self.vars.iter_mut() {
+            go(tape, &mut b.val);
+        }
     }
 
     pub fn set_scalar(&mut self, name: &str, v: f64) {
