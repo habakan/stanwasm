@@ -86,6 +86,22 @@ bench: wasm ## Node benchmark (replay vs AOT)
 bench-native: ## Native Rust benchmark, no wasm involved
 	cargo run --release -p stanwasm-cli -- bench all
 
+# Data size for the vectorised models; the small ones ignore it.
+N ?= 5000
+BENCH_DIR := $(ROOT)/target/bench
+
+.PHONY: bench-gradients
+bench-gradients: wasm ## Per-gradient cost of both paths, over the model set
+	cd ts && $(NODE) tests/bench_gradients.ts $(N) --emit $(BENCH_DIR)
+
+# Needs a built CmdStan. Compiles each model there on first run, which takes a
+# few seconds each and is then cached in target/bench.
+CMDSTAN ?= ~/cmdstan
+
+.PHONY: compare-cmdstan
+compare-cmdstan: bench-gradients ## Check log density and gradients against CmdStan, and time both
+	cd ts && CMDSTAN=$(CMDSTAN) $(NODE) tests/compare_cmdstan.ts $(BENCH_DIR)
+
 .PHONY: gallery
 gallery: wasm ## Vite dev server for examples/gallery
 	cd examples/gallery && npm install && npm run dev
