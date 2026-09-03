@@ -58,8 +58,10 @@ Four caveats the table can't carry:
   integer division (`N / 2` with `N = 3` is `1`), and `^` binds tighter than
   unary minus and associates right (`-a^2` is `-(a^2)`, `2^3^2` is `512`).
 
-For matrix algebra, write the loop form (`for (n in 1:N) ... X[n] * beta`) or
-use `multi_normal_cholesky`, whose matrix work is done internally.
+`X * beta` with data on the left is the form to write — it records one node
+per row rather than one per multiply. An array of vectors on the left of a
+multivariate density is a load-time error pointing at the loop form, which is
+what that case wants.
 
 The `data` block is checked against the supplied JSON when the model loads — a
 missing field, a wrong length, a non-integral `int`, or a violated
@@ -109,30 +111,72 @@ Not supported, each a clean error rather than a wrong answer:
   the original NUTS integration. Not comparable in scope to the items
   above; would be its own initiative if ever pursued.
 
-## The scalar tape, and what it costs
+## What the tape records, and what it costs
 
-Every tape node holds one `f64`, so a matrix-vector product is recorded one
-scalar at a time: `y ~ normal(X * beta, sigma)` over `matrix[N,K]` records
-`2K-1` nodes per row before the density adds its own. At N=5000, K=4 that is a
-70,000-node trace against 40,000 for the same model written with a single
-covariate — 75% more nodes for arithmetic a linear-algebra kernel would do in
-one pass over contiguous memory. Measured per-node throughput is fine (0.74 ns
-against 1.05 ns for the simpler model); there are simply many more nodes.
+Every tape node holds one `f64`, and for a while that meant a matrix-vector
+product was recorded one multiply at a time: `y ~ normal(X * beta, sigma)` over
+`matrix[N,K]` took `2K` nodes per row. It no longer does. Two opcodes now stand
+for a whole run:
 
-Two things follow from the same cause, and neither is reachable without
-changing what a node is:
+- a **contraction**, for `X * beta` with data on the left — one node per row
+  instead of `2K`
+- a **reduction**, for the total a vectorised statement accumulates — one node
+  instead of a chain of adds, and summed in the same order the chain was, so
+  no log density changes value
 
-- **No fusion.** A dot product cannot be one node, because the node layout is
-  `(op, arg1, arg2i, arg2f)` and has nowhere to put a length.
-- **No SIMD.** The AOT emitter only ever produces scalar `f64` instructions.
-  Widening a re-rolled loop to `f64x2` needs two consecutive iterations to read
-  contiguously, which holds for a vectorised statement but not once a value is
-  produced inside another re-rolled block and read back with that block's
-  stride — exactly the matrix case.
+Neither widens the tape row. The run's shape sits in a table beside the node
+and the node holds a handle, so a model with no contraction in it pays nothing.
 
-A vector-valued node would address both, and would reach into the tape layout,
-the autodiff rules and the emitter at once. It is the largest open design
-question here, and nothing above depends on it.
+The emitter re-rolls the repeated part of a vectorised statement into a wasm
+loop, lays that loop's values out so consecutive repeats are adjacent, and runs
+**two repeats at a time as `f64x2`** where every slot it touches moves by one or
+not at all. A density that calls a host math import per observation — anything
+built on `exp` or `log` — stays scalar, because those have no lane-wise form.
+
+Per gradient at N=5000, Node 22 on Apple arm64, against the same commit's
+predecessor:
+
+| | before | after |
+|---|---:|---:|
+| `y ~ normal(X * beta, sigma)`, K=4 | 52.6 µs | **17.4 µs** |
+| `y ~ normal(alpha + beta * x, sigma)` | 40.8 | **21.0** |
+| hierarchical `mu[g[i]]` | 33.6 | **25.6** |
+| `y ~ bernoulli_logit(...)` | 171.1 | **163.6** |
+
+The trace for the first went from 70,040 nodes to 30,040, and the scratch
+buffer with it.
+
+**The emitted module now uses the fixed-width SIMD proposal.** Every engine
+that ships WebAssembly today has it — Safari since 16.4 — but an embedder that
+disables the proposal will reject the module.
+
+### Checked against CmdStan
+
+`make compare-cmdstan` compiles the models in `ts/tests/bench_models.ts` with a
+CmdStan of your choosing, evaluates both at the same point in the unconstrained
+space, and compares. Across twelve models the gradients agree to **3e-13**
+relative at worst, and the log densities differ by exactly the normalising
+constants Stan's `~` drops — checked at two points, since a constant offset is
+the expected difference and one that moves with the point is a bug.
+
+That harness also times both — CmdStan under static HMC, whose leapfrog count
+per draw is fixed and where every leapfrog is one gradient. The AOT gradient is
+faster than CmdStan's on ten of the twelve, which is the trace-once design
+paying off: Stan builds a tape on every evaluation, this builds one at compile
+time and emits code with no allocation and no dispatch. The two it loses are `bernoulli_logit` and `student_t`, where
+stan-math has an analytic special case and this project expands the density
+into elementary operations; each of those spends most of its time in one
+transcendental call per observation.
+
+### What is still open
+
+- A distribution whose density is built from `log(1 + exp(x))` pays two
+  transcendental calls per observation where one op with an analytic
+  derivative would do. That is the gap on the two models above.
+- A hand-written module of the same shape reaches 8.9 µs on the matrix model
+  against the emitter's 17.4, by fusing the mean into the density loop. Merging
+  those two loops was measured on its own and was a *loss*, so the remaining
+  distance is not simply available.
 
 ## Correctness follow-ups from the pre-launch review
 

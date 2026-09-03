@@ -61,9 +61,9 @@ Seven crates, one TS facade.
 |---|---|---|
 | `stanwasm-ast` | lib (native + wasm) | AST type definitions shared by parser, runtime, codegen. Optional `serde` for golden-value tests. |
 | `stanwasm-parser` | lib | Hand-written recursive-descent parser. Token enum + lexer + Pratt precedence climbing for expressions. |
-| `stanwasm-autodiff` | lib | Reverse-mode autodiff tape (SoA `Vec<f64>` / `Vec<u32>`). Per-op enum, 28 supported ops, CSE caches for log/exp, O(1) reset via generation counter, and `forward_replay` for the sampling hot loop. |
+| `stanwasm-autodiff` | lib | Reverse-mode autodiff tape (SoA `Vec<f64>` / `Vec<u32>`). Per-op enum, 30 supported ops — 28 scalar plus a contraction and a reduction that each stand for a whole run of values — CSE caches for log/exp, O(1) reset via generation counter, and `forward_replay` for the sampling hot loop. |
 | `stanwasm-runtime` | lib (native by default) | Distributions, constraint transforms, Stan-program evaluator. `Compiled` struct wraps a frozen tape + root index for the replay path. The native-only AST evaluator is the **golden oracle** used in tests; production wasm does not reach it. |
-| `stanwasm-codegen` | lib | Emits per-model wasm via `wasm-encoder`. ABI imports memory from the host; exports `log_prob_grad(params_ptr, grads_ptr, n_params)`. No WAT, no `wabt`. |
+| `stanwasm-codegen` | lib | Emits per-model wasm via `wasm-encoder`. ABI imports memory from the host; exports `log_prob_grad(params_ptr, grads_ptr, n_params, scratch_ptr)`. No WAT, no `wabt`. |
 | `stanwasm` | cdylib (wasm32) | wasm-bindgen public API. Embeds `nuts-rs` (Rust crate) for sampling. Exposes `StanModel` class, `setAotExports` bridge, and the `aot_logp` JS shim. |
 | `stanwasm-cli` | bin (native) | Development CLI. `bench all` times AST eval / replay / AOT (via `wasmi`) / end-to-end sampling. |
 
@@ -114,11 +114,11 @@ for each leapfrog step in nuts-rs:
 
 ### Hot path: `sampleViaAot` (V8-JIT'd AOT)
 
-The recorded tape is one-shot rewritten to wasm32 by `stanwasm-codegen`. Each tape node becomes a sequence of wasm instructions writing to a function-local `f64`. There are no loops, no conditionals, and no memory access in the body except for parameter loads and gradient stores. V8 JITs this aggressively.
+The recorded tape is one-shot rewritten to wasm32 by `stanwasm-codegen`. A small trace becomes straight-line code, every node a sequence of wasm instructions writing to a function-local `f64`; V8 JITs that aggressively. Past a few thousand nodes it stops, so the emitter finds the repeated blocks a vectorised statement leaves on the tape and re-rolls each into a loop over a caller-owned scratch buffer, running two repeats at a time as `f64x2` where the addresses allow. Which of the two an engine prefers is a per-engine matter and selectable — see `Reroll` in `stanwasm-codegen`.
 
 Per-leapfrog step:
-- `nuts-rs` calls `aot_logp(params_ptr, grads_ptr, n)` (a wasm-bindgen import)
-- The JS shim forwards directly to `aotInstance.exports.log_prob_grad(p, g, n)`
+- `nuts-rs` calls `aot_logp(params_ptr, grads_ptr, n, scratch_ptr)` (a wasm-bindgen import)
+- The JS shim forwards directly to `aotInstance.exports.log_prob_grad(p, g, n, s)`
 - Because both wasm instances share the same `WebAssembly.Memory`, the pointers are linear-memory offsets that both modules read/write in place — no `memcpy`
 
 ## Memory model
@@ -129,7 +129,7 @@ Default: each wasm-pack-built bundle has one linear memory exported as `memory`.
 const stanMemory = sharedMemory();             // WebAssembly.Memory of stanwasm
 const aot = await WebAssembly.instantiate(model.compileToWasm(), {
   stan: { memory: stanMemory },                 // AOT imports stan's memory
-  Math: { exp, log, sin, cos, pow, lgamma, digamma, phi },
+  Math: { exp, log, sin, cos, pow, phi },       // only what JS already has, plus phi
 });
 setAotExports(aot.instance.exports);            // bind aot_logp -> aot.log_prob_grad
 const samples = model.sampleViaAot(init, 1000, 1000, 42n);

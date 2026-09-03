@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The AOT gradient is between 1.3x and 3x faster**, and now beats CmdStan's
+  native gradient on ten of the twelve models in `ts/tests/bench_models.ts`.
+  Per gradient at N=5000: `y ~ normal(X * beta, sigma)` with K=4 goes from 52.6
+  to 17.4 µs, a vectorised linear regression from 40.8 to 21.0, a hierarchical
+  gather from 33.6 to 25.6. Four changes, each measured on its own:
+  - A matrix-vector product with data on the left records one contraction node
+    per row instead of `2K`, and the total a vectorised statement accumulates
+    records as one reduction node instead of a chain of adds. Both are summed
+    in the order the chain was, so no log density changes value. The trace for
+    the matrix model halves, from 70,040 nodes to 30,040.
+  - A re-rolled loop's values are laid out so consecutive repeats are adjacent,
+    and the loop runs **two repeats at a time as `f64x2`** where every slot it
+    touches moves by one or not at all.
+  - Block detection starts a loop on the statement's own boundary. It had been
+    taking the first offset where the opcodes repeat, which could split a row.
+- **The emitted module now requires the fixed-width SIMD proposal.** Every
+  engine that ships WebAssembly today has it (Safari since 16.4); an embedder
+  that disables the proposal will reject the module.
+- The module no longer imports `lgamma` or `digamma`. JavaScript has neither,
+  so every embedder had to supply its own; they are functions inside the module
+  now. `Math` still needs `exp`, `log`, `sin`, `cos`, `pow` and a `phi` shim.
+
+### Fixed
+
+- `lgamma`, `digamma` and `trigamma` were asymptotic series stopped where the
+  first dropped term was still around 2e-9. A gradient through `student_t`
+  agreed with CmdStan to 8e-9; it now agrees to 3e-14, and the worst across the
+  twelve benchmark models is 3e-13.
+
+### Added
+
+- `make bench-gradients` times both paths across a set of twelve models, and
+  `make compare-cmdstan` checks the log density and gradients against CmdStan
+  at the same point in the unconstrained space and times both.
+
+### Documentation
+
+- `half_normal` is not a Stan distribution — `stanc` rejects it. `ROADMAP.md`
+  now says so and gives the portable form.
+
 ## [0.1.2] — 2026-09-02 (npm only)
 
 Published to npm as `stanwasm@0.1.2`. The crates stay at 0.1.0: the Safari fix still
