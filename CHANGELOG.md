@@ -17,11 +17,10 @@ the next check is a test run rather than a manual build.
 
 ### Changed
 
-- **The AOT gradient is between 1.3x and 3x faster**, and now beats CmdStan's
-  native gradient on ten of the twelve models in `ts/tests/bench_models.ts`.
-  Per gradient at N=5000: `y ~ normal(X * beta, sigma)` with K=4 goes from 52.6
-  to 17.4 µs, a vectorised linear regression from 40.8 to 21.0, a hierarchical
-  gather from 33.6 to 25.6. Four changes, each measured on its own:
+- **The AOT gradient is between 1.3x and 3x faster.** Per gradient at N=5000:
+  `y ~ normal(X * beta, sigma)` with K=4 goes from 52.6 to 17.4 µs, a
+  vectorised linear regression from 40.8 to 21.0, a hierarchical gather from
+  33.6 to 25.6. Four changes, each measured on its own:
   - A matrix-vector product with data on the left records one contraction node
     per row instead of `2K`, and the total a vectorised statement accumulates
     records as one reduction node instead of a chain of adds. Both are summed
@@ -42,15 +41,15 @@ the next check is a test run rather than a manual build.
 ### Fixed
 
 - `lgamma`, `digamma` and `trigamma` were asymptotic series stopped where the
-  first dropped term was still around 2e-9. A gradient through `student_t`
-  agreed with CmdStan to 8e-9; it now agrees to 3e-14, and the worst across the
-  twelve benchmark models is 3e-13.
+  first dropped term was still around 2e-9, which is what a gradient through
+  `student_t` was worth. Against a reference computed at 60 decimal digits they
+  now hold to 1e-14, pinned by `stanwasm-autodiff`'s tests.
 
 ### Added
 
-- `make bench-gradients` times both paths across a set of twelve models, and
-  `make compare-cmdstan` checks the log density and gradients against CmdStan
-  at the same point in the unconstrained space and times both.
+- `make bench-gradients` times the tape-replay and AOT paths across a set of
+  fifteen models, and `make posteriordb` reports how much of stan-dev's
+  posterior collection this subset can read — 93 of 147, up from 63.
 
 ### Documentation
 

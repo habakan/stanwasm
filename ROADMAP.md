@@ -191,29 +191,25 @@ buffer with it.
 that ships WebAssembly today has it — Safari since 16.4 — but an embedder that
 disables the proposal will reject the module.
 
-### Checked against CmdStan
+### Checked against the reference implementation
 
 `make compare-cmdstan` compiles the models in `ts/tests/bench_models.ts` with a
 CmdStan of your choosing, evaluates both at the same point in the unconstrained
-space, and compares. Across twelve models the gradients agree to **3e-13**
-relative at worst, and the log densities differ by exactly the normalising
-constants Stan's `~` drops — checked at two points, since a constant offset is
-the expected difference and one that moves with the point is a bug.
+space, and compares what they compute. Across fifteen models the gradients
+agree to **5e-14** relative at worst, and the log densities differ by exactly
+the normalising constants Stan's `~` drops — checked at two points, since a
+constant offset is the expected difference and one that moves with the point is
+a bug.
 
-That harness also times both — CmdStan under static HMC, whose leapfrog count
-per draw is fixed and where every leapfrog is one gradient. The AOT gradient is
-faster than CmdStan's on ten of the twelve, which is the trace-once design
-paying off: Stan builds a tape on every evaluation, this builds one at compile
-time and emits code with no allocation and no dispatch. The two it loses are `bernoulli_logit` and `student_t`, where
-stan-math has an analytic special case and this project expands the density
-into elementary operations; each of those spends most of its time in one
-transcendental call per observation.
+That is the point of the harness: this is a subset, and a subset is only worth
+anything if what it does compute is right.
 
 ### What is still open
 
-- A distribution whose density is built from `log(1 + exp(x))` pays two
-  transcendental calls per observation where one op with an analytic
-  derivative would do. That is the gap on the two models above.
+- A density built from `log(1 + exp(x))` — `bernoulli_logit`, and
+  `student_t`'s tail — pays a host transcendental call per observation, and a
+  block containing one cannot be widened because `exp` and `log` have no
+  lane-wise form. Those are the slowest models here per element.
 - A hand-written module of the same shape reaches 8.9 µs on the matrix model
   against the emitter's 17.4, by fusing the mean into the density loop. Merging
   those two loops was measured on its own and was a *loss*, so the remaining
