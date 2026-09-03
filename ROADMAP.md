@@ -22,8 +22,8 @@ worked through below, ordered by effort.
 
 | | Supported | TODO |
 |---|---|---|
-| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`*, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta` | |
-| Discrete | `bernoulli`, `bernoulli_logit`, `poisson`, `neg_binomial_2`, `categorical` | |
+| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`*, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta`, `inv_gamma`, `uniform` | |
+| Discrete | `bernoulli`, `bernoulli_logit`, `binomial`, `binomial_logit`, `poisson`, `poisson_log`, `neg_binomial_2`, `categorical` | |
 | Multivariate | `multi_normal_cholesky`, `multi_normal` (full covariance), `lkj_corr_cholesky`, `dirichlet`, `multinomial` | |
 | Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors | |
 | Vector shape | `simplex`, `ordered`, `positive_ordered`, `unit_vector` | |
@@ -32,7 +32,7 @@ worked through below, ordered by effort.
 | Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed assignment, ternary `?:` | |
 | Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`), element-wise `.*` `./` `.^` | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
-| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix` | `log10`, `norm` |
+| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov` | `norm` |
 
 \* `half_normal` is not a Stan distribution — stanc rejects it. Write
 `real<lower=0> tau; tau ~ normal(0, s);` for a model that also runs under Stan.
@@ -76,20 +76,19 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**67 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
-47 that come with a reference posterior, 33 are usable. What stops the rest:
+**90 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+47 that come with a reference posterior, 37 are usable. What stops the rest:
 
 | | count |
 |---|---:|
 | transpose — `x'` | 18 |
-| a distribution: `binomial` (6), `binomial_logit` (4), `uniform` (3), `inv_gamma`, `poisson_log` | 15 |
-| a function: `log_sum_exp` (5), `sd` (3), `log_mix` (2), `log10`, `gp_exp_quad_cov`, `student_t_lccdf`, `diag_pre_multiply` | 14 |
 | a bare `{ ... }` block for local scope inside a statement | 13 |
 | other syntax: range slicing `x[1:5]`, `<` in a declaration, a bare expression statement, `data` as a function qualifier | 6 |
 | a `transformed data` variable declared in one statement and assigned in the next | 5 |
 | `array[...] simplex` — an array of constrained vectors | 4 |
 | a range mixed with an index — `W[1:rows(W), k]` | 3 |
-| an array of vectors where a multivariate density wanted one vector; an operation this runtime takes elementwise | 2 |
+| a function: `diag_matrix`, `student_t_lccdf` | 2 |
+| two that did not finish tracing in two minutes; two shape mismatches | 4 |
 
 Each row is the *first* thing a model hit, so fixing one does not always
 unlock its models — some will land on the next.
@@ -98,13 +97,17 @@ The shape of that list was not what the section below assumed. Syntax, not
 numerics and not distributions, is most of it — and `print()` and the remaining
 constraint transforms, which the section below leads with, block nothing here.
 
-The first thing it named, indexing or declaring with more than one dimension,
-is fixed; that took the count from 63 to 67 and moved eleven more models on to
-whatever they hit next. **Transpose is now the largest single blocker and is
-deliberately still refused**: this runtime has no row vector, so `x'` cannot be
-told apart from `x`, and `x' * y` would quietly be an element-wise product
-where Stan means a dot product. A wrong number is worse than a refusal, so it
-waits for a row-vector shape in `Val`.
+Three rounds of that list have been worked through — multi-dimensional
+declarations, then the missing distributions, then the missing functions —
+taking the count from 63 to 90. Each round unblocked more than its own row,
+because a model whose first complaint was a distribution often had nothing
+behind it.
+
+**Transpose is now the largest single blocker and is deliberately still
+refused**: this runtime has no row vector, so `x'` cannot be told apart from
+`x`, and `x' * y` would quietly be an element-wise product where Stan means a
+dot product. A wrong number is worse than a refusal, so it waits for a
+row-vector shape in `Val`.
 
 ## Remaining language gaps, roughly ordered by effort
 

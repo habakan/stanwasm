@@ -145,6 +145,86 @@ pub fn poisson_lpmf(t: &mut Tape, y: &Val, lambda: &Val) -> Val {
     v_sub(t, &inner, &lg)
 }
 
+/// `log C(n, y)`. Constant in the parameters, but `~` here keeps its
+/// normalising terms, so it is recorded like anything else.
+fn log_binomial_coeff(t: &mut Tape, y: &Val, n: &Val) -> Val {
+    let np1 = v_add(t, n, &Val::Num(1.0));
+    let yp1 = v_add(t, y, &Val::Num(1.0));
+    let n_y_p1 = v_sub(t, &np1, y);
+    let all = v_lgamma(t, &np1);
+    let chosen = v_lgamma(t, &yp1);
+    let rest = v_lgamma(t, &n_y_p1);
+    let d = v_sub(t, &all, &chosen);
+    v_sub(t, &d, &rest)
+}
+
+/// `log(1 + exp(x))`, which both logit-scale counts below need.
+fn log1p_exp(t: &mut Tape, x: &Val) -> Val {
+    let e = v_exp(t, x);
+    let s = v_add(t, &Val::Num(1.0), &e);
+    v_log(t, &s)
+}
+
+pub fn binomial_lpmf(t: &mut Tape, y: &Val, n: &Val, theta: &Val) -> Val {
+    let coeff = log_binomial_coeff(t, y, n);
+    let log_theta = v_log(t, theta);
+    let one_minus = v_sub(t, &Val::Num(1.0), theta);
+    let log_1m = v_log(t, &one_minus);
+    let hit = v_mul(t, y, &log_theta);
+    let n_y = v_sub(t, n, y);
+    let miss = v_mul(t, &n_y, &log_1m);
+    let s = v_add(t, &coeff, &hit);
+    v_add(t, &s, &miss)
+}
+
+/// `log C + y log inv_logit(a) + (n - y) log(1 - inv_logit(a))`, written with
+/// `log1p_exp` so neither logarithm is taken of something near zero.
+pub fn binomial_logit_lpmf(t: &mut Tape, y: &Val, n: &Val, alpha: &Val) -> Val {
+    let coeff = log_binomial_coeff(t, y, n);
+    let neg_alpha = v_neg(t, alpha);
+    let hit = log1p_exp(t, &neg_alpha);
+    let miss = log1p_exp(t, alpha);
+    let n_y = v_sub(t, n, y);
+    let a = v_mul(t, y, &hit);
+    let b = v_mul(t, &n_y, &miss);
+    let s = v_sub(t, &coeff, &a);
+    v_sub(t, &s, &b)
+}
+
+pub fn poisson_log_lpmf(t: &mut Tape, y: &Val, alpha: &Val) -> Val {
+    let y_alpha = v_mul(t, y, alpha);
+    let rate = v_exp(t, alpha);
+    let inner = v_sub(t, &y_alpha, &rate);
+    let yp1 = v_add(t, y, &Val::Num(1.0));
+    let lg = v_lgamma(t, &yp1);
+    v_sub(t, &inner, &lg)
+}
+
+pub fn inv_gamma_lpdf(t: &mut Tape, y: &Val, alpha: &Val, beta: &Val) -> Val {
+    let log_beta = v_log(t, beta);
+    let a_log_b = v_mul(t, alpha, &log_beta);
+    let lg = v_lgamma(t, alpha);
+    let ap1 = v_add(t, alpha, &Val::Num(1.0));
+    let log_y = v_log(t, y);
+    let tail = v_mul(t, &ap1, &log_y);
+    let over = v_div(t, beta, y);
+    let s = v_sub(t, &a_log_b, &lg);
+    let s = v_sub(t, &s, &tail);
+    v_sub(t, &s, &over)
+}
+
+/// `-log(b - a)`.
+///
+/// Outside `[a, b]` Stan's is `-inf`, and this cannot be: the support test is a
+/// branch on the variate, and a graph traced once has no form for one. A model
+/// that writes `y ~ uniform(a, b)` declares `real<lower=a, upper=b> y`, and it
+/// is that transform, not this, which keeps the variate inside.
+pub fn uniform_lpdf(t: &mut Tape, _y: &Val, a: &Val, b: &Val) -> Val {
+    let width = v_sub(t, b, a);
+    let log_width = v_log(t, &width);
+    v_neg(t, &log_width)
+}
+
 pub fn neg_binomial_2_lpmf(t: &mut Tape, y: &Val, mu: &Val, phi: &Val) -> Val {
     let yp_phi = v_add(t, y, phi);
     let lg_yphi = v_lgamma(t, &yp_phi);
@@ -295,13 +375,17 @@ fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "std_normal" => 0,
         "exponential" | "half_normal" | "bernoulli" | "bernoulli_logit" | "poisson"
-        | "dirichlet" | "lkj_corr_cholesky" | "multinomial" | "categorical" => 1,
+        | "poisson_log" | "dirichlet" | "lkj_corr_cholesky" | "multinomial" | "categorical" => 1,
         "normal"
         | "cauchy"
         | "lognormal"
         | "gamma"
         | "beta"
         | "neg_binomial_2"
+        | "binomial"
+        | "binomial_logit"
+        | "inv_gamma"
+        | "uniform"
         | "multi_normal_cholesky"
         | "multi_normal" => 2,
         "student_t" => 3,
@@ -340,6 +424,11 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
         "bernoulli" => bernoulli_lpmf(t, x, &args[0]),
         "bernoulli_logit" => bernoulli_logit_lpmf(t, x, &args[0]),
         "poisson" => poisson_lpmf(t, x, &args[0]),
+        "poisson_log" => poisson_log_lpmf(t, x, &args[0]),
+        "binomial" => binomial_lpmf(t, x, &args[0], &args[1]),
+        "binomial_logit" => binomial_logit_lpmf(t, x, &args[0], &args[1]),
+        "inv_gamma" => inv_gamma_lpdf(t, x, &args[0], &args[1]),
+        "uniform" => uniform_lpdf(t, x, &args[0], &args[1]),
         "neg_binomial_2" => neg_binomial_2_lpmf(t, x, &args[0], &args[1]),
         "categorical" => match &args[0] {
             Val::Vec(theta) => categorical_lpmf(t, x, theta)?,

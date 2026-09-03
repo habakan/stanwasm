@@ -207,6 +207,33 @@ fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
     })
 }
 
+/// `m + log ∑ exp(xᵢ − m)`.
+///
+/// The identity holds for any `m`, so the shift is chosen once while tracing —
+/// at the largest element there — and stays that element for every parameter
+/// value afterwards. The result is exact either way; only how much cancellation
+/// it survives depends on the choice.
+fn log_sum_exp(t: &mut Tape, xs: &[Val]) -> Result<Val> {
+    let mut at = 0;
+    let mut best = f64::NEG_INFINITY;
+    for (i, x) in xs.iter().enumerate() {
+        let v = x.to_f64(t)?;
+        if v > best {
+            best = v;
+            at = i;
+        }
+    }
+    let shift = xs.get(at).ok_or(EvalError::NotAScalar)?.clone();
+    let mut acc = Val::Num(0.0);
+    for x in xs {
+        let d = v_sub(t, x, &shift);
+        let e = v_exp(t, &d);
+        acc = v_add(t, &acc, &e);
+    }
+    let l = v_log(t, &acc);
+    Ok(v_add(t, &shift, &l))
+}
+
 /// Inlines a user-defined call: binds the arguments into a scope of their own,
 /// runs the body, and evaluates the return expression there.
 ///
@@ -334,6 +361,75 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             }
         }
         ("Phi", [a]) | ("std_normal_cdf", [a]) => v_phi(t, a),
+        ("log10", [a]) => {
+            let l = v_log(t, a);
+            v_div(t, &l, &Val::Num(std::f64::consts::LN_10))
+        }
+        ("log_sum_exp", [Val::Vec(xs)]) => log_sum_exp(t, xs)?,
+        ("log_sum_exp", [a, b]) => log_sum_exp(t, &[a.clone(), b.clone()])?,
+        ("log_mix", [theta, a, b]) => {
+            let log_theta = v_log(t, theta);
+            let one_minus = v_sub(t, &Val::Num(1.0), theta);
+            let log_1m = v_log(t, &one_minus);
+            let first = v_add(t, &log_theta, a);
+            let second = v_add(t, &log_1m, b);
+            log_sum_exp(t, &[first, second])?
+        }
+        // Stan's `sd` is the sample standard deviation: the denominator is
+        // `n - 1`, not `n`.
+        ("sd", [Val::Vec(xs)]) => {
+            if xs.len() < 2 {
+                return Err(EvalError::NotAScalar);
+            }
+            let n = xs.len() as f64;
+            let mut acc = Val::Num(0.0);
+            for x in xs {
+                acc = v_add(t, &acc, x);
+            }
+            let mean = v_div(t, &acc, &Val::Num(n));
+            let mut ss = Val::Num(0.0);
+            for x in xs {
+                let d = v_sub(t, x, &mean);
+                let sq = v_mul(t, &d, &d);
+                ss = v_add(t, &ss, &sq);
+            }
+            let var = v_div(t, &ss, &Val::Num(n - 1.0));
+            v_sqrt(t, &var)
+        }
+        ("diag_pre_multiply", [Val::Vec(diag), Val::Vec(rows)]) => {
+            if diag.len() != rows.len() {
+                return Err(EvalError::ShapeMismatch {
+                    op: "diag_pre_multiply".into(),
+                    lhs: Shape::Vector(diag.len()).to_string(),
+                    rhs: Shape::Vector(rows.len()).to_string(),
+                });
+            }
+            let mut out = Vec::with_capacity(rows.len());
+            for (scale, row) in diag.iter().zip(rows) {
+                out.push(v_mul(t, row, scale));
+            }
+            Val::Vec(out)
+        }
+        // `alpha² exp(-(xᵢ - xⱼ)² / 2ρ²)`. The differences are data, so only the
+        // two scale parameters reach the tape; the matrix is still N² nodes.
+        ("gp_exp_quad_cov", [Val::Vec(xs), alpha, rho]) => {
+            let a2 = v_mul(t, alpha, alpha);
+            let r2 = v_mul(t, rho, rho);
+            let denom = v_mul(t, &Val::Num(2.0), &r2);
+            let coords: Vec<f64> = xs.iter().map(|x| x.to_f64(t)).collect::<Result<_>>()?;
+            let mut rows = Vec::with_capacity(coords.len());
+            for xi in &coords {
+                let mut row = Vec::with_capacity(coords.len());
+                for xj in &coords {
+                    let d = xi - xj;
+                    let q = v_div(t, &Val::Num(-(d * d)), &denom);
+                    let e = v_exp(t, &q);
+                    row.push(v_mul(t, &a2, &e));
+                }
+                rows.push(Val::Vec(row));
+            }
+            Val::Vec(rows)
+        }
         ("pow", [a, b]) => v_pow(t, a, b),
         ("square", [a]) => v_mul(t, a, a),
         ("sum", [Val::Vec(xs)]) => {

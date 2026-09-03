@@ -186,6 +186,57 @@ model {
     10,
   );
 
+  // Not a shape anyone would fit, but every distribution and function added
+  // for the posteriordb sweep is in one of these two, so CmdStan checks each
+  // formula rather than only that it runs.
+  add(
+    "binomial",
+    `data { int<lower=0> N; array[N] int<lower=0> trials; array[N] int<lower=0> hits; vector[N] x; }
+parameters { real<lower=0, upper=1> theta; real alpha; real beta; }
+model {
+  theta ~ uniform(0, 1);
+  alpha ~ normal(0, 5); beta ~ normal(0, 5);
+  hits ~ binomial(trials, theta);
+  target += binomial_logit_lpmf(hits | trials, alpha + beta * x);
+}`,
+    { N: n, trials: counts.map((c) => c + 5), hits: counts, x },
+    3,
+  );
+
+  add(
+    "count_mix",
+    `data { int<lower=0> N; vector[N] x; array[N] int<lower=0> y; }
+parameters { real alpha; real beta; real<lower=0> sigma; real<lower=0, upper=1> lambda; }
+model {
+  sigma ~ inv_gamma(3, 2);
+  lambda ~ uniform(0, 1);
+  alpha ~ normal(0, sigma); beta ~ normal(0, 5);
+  y ~ poisson_log(alpha + beta * x);
+  target += log_mix(lambda, log_sum_exp(x) * alpha, log10(sigma));
+  target += sd(x) * beta;
+}`,
+    { N: n, x, y: counts },
+    4,
+  );
+
+  add(
+    "cov_builders",
+    `data { int<lower=0> M; int<lower=0> D; array[M] vector[D] y; vector[D] mu; array[D] real t; }
+parameters { cholesky_factor_corr[D] L; vector<lower=0>[D] tau; real<lower=0> rho; }
+model {
+  L ~ lkj_corr_cholesky(2); tau ~ exponential(1); rho ~ exponential(1);
+  matrix[D, D] S = diag_pre_multiply(tau, L);
+  for (m in 1:M) y[m] ~ multi_normal_cholesky(mu, S);
+  target += sum(gp_exp_quad_cov(t, tau[1], rho)[1]);
+}`,
+    {
+      M: rows.length, D: d, y: rows,
+      mu: Array.from({ length: d }, (_, i) => 0.3 * i),
+      t: Array.from({ length: d }, (_, i) => 0.3 * i),
+    },
+    (d * (d - 1)) / 2 + d + 1,
+  );
+
   add(
     "funnel",
     `data { int<lower=0> D; }
