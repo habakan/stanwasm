@@ -82,6 +82,59 @@ pub fn v_div(t: &mut Tape, a: &Val, b: &Val) -> Val {
     }
 }
 
+/// The longest suffix of `terms` that is an evenly spaced run of tape values:
+/// its length, first tape index, and the spacing between elements.
+fn run_suffix(terms: &[Val]) -> Option<(usize, u32, u32)> {
+    let idx: Vec<Option<u32>> = terms
+        .iter()
+        .map(|v| match v {
+            Val::Tape(i) => Some(*i),
+            _ => None,
+        })
+        .collect();
+    let n = idx.len();
+    let (Some(a), Some(b)) = (*idx.get(n.checked_sub(2)?)?, idx[n - 1]) else {
+        return None;
+    };
+    let stride = b.checked_sub(a).filter(|s| *s > 0)?;
+    let mut len = 2;
+    while len < n {
+        match (idx[n - 1 - len], idx[n - len]) {
+            (Some(u), Some(w)) if u + stride == w => len += 1,
+            _ => break,
+        }
+    }
+    Some((len, idx[n - len].expect("in the run"), stride))
+}
+
+/// Sum a vectorised statement's per-element terms.
+///
+/// An evenly spaced run of tape values becomes one reduction node. The chain of
+/// adds it replaces carries a value from each element to the next, which is the
+/// one shape a re-rolled loop cannot run two repeats of at a time. Common
+/// subexpressions leave the first element's nodes unlike the rest, so whatever
+/// prefix falls outside the run keeps the chain and the run is added onto it —
+/// the order the chain itself had.
+pub fn v_sum(t: &mut Tape, terms: &[Val]) -> Val {
+    let head = match run_suffix(terms) {
+        // A run needs something ahead of it to be added to, and below a few
+        // elements the chain is no worse.
+        Some((len, _, _)) if len >= 4 => terms.len() - len.min(terms.len() - 1),
+        _ => terms.len(),
+    };
+    let mut acc = Val::Num(0.0);
+    for x in &terms[..head] {
+        acc = v_add(t, &acc, x);
+    }
+    if let (Val::Tape(seed), Some((_, base, stride))) = (&acc, run_suffix(&terms[head..])) {
+        return Val::Tape(t.sum_run(*seed, base, stride, (terms.len() - head) as u32));
+    }
+    for x in &terms[head..] {
+        acc = v_add(t, &acc, x);
+    }
+    acc
+}
+
 pub fn v_neg(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(-x),

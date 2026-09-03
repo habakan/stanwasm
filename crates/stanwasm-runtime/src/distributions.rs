@@ -12,7 +12,7 @@
 
 use crate::error::EvalError;
 use crate::matrix::{cholesky_decompose, mat_mdiv_ltri_low, vec_dot_self};
-use crate::ops::{v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub};
+use crate::ops::{v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub, v_sum};
 use crate::value::Val;
 use stanwasm_autodiff::Tape;
 
@@ -453,12 +453,11 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Re
     // `categorical`'s theta is the simplex shared by every element of the variate,
     // not a per-observation argument, so it skips the broadcast below.
     if name == "categorical" {
-        let mut acc = Val::Num(0.0);
-        for x in xs {
-            let term = eval_dist(t, name, x, args)?;
-            acc = v_add(t, &acc, &term);
-        }
-        return Ok(acc);
+        let terms: Vec<Val> = xs
+            .iter()
+            .map(|x| eval_dist(t, name, x, args))
+            .collect::<Result<_>>()?;
+        return Ok(v_sum(t, &terms));
     }
     // Vectorized arguments must line up element-wise. Indexing without this check
     // panicked on a short argument and ignored the tail of a long one.
@@ -473,17 +472,16 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Re
             }
         }
     }
-    let mut acc = Val::Num(0.0);
+    let mut terms: Vec<Val> = Vec::with_capacity(xs.len());
     let mut elem_args: Vec<Val> = Vec::with_capacity(args.len());
     for (i, x) in xs.iter().enumerate() {
         elem_args.clear();
         for a in args {
             elem_args.push(broadcast_elem(a, i));
         }
-        let term = eval_dist(t, name, x, &elem_args)?;
-        acc = v_add(t, &acc, &term);
+        terms.push(eval_dist(t, name, x, &elem_args)?);
     }
-    Ok(acc)
+    Ok(v_sum(t, &terms))
 }
 
 fn broadcast_elem(v: &Val, i: usize) -> Val {
