@@ -75,7 +75,7 @@ responsive.
 | `.startStepSampling(init, warmup, draws, seed)`, `.stepDraw()`, `.finishStepSampling()` | One draw at a time, for live visualisation. |
 | `.constrainDraw(draw)` | Unconstrained draw back to the model's own scale. |
 | `.genQuantityNames()`, `.generatedQuantities(draws, nDraws, seed)` | `generated quantities` block. |
-| `.compileToWasm()`, `.sampleViaAot(...)` | Ahead-of-time compile this model to its own wasm module and sample through it — roughly 2-3x faster on the models in the repository's benchmarks. Needs `setAotExports` wiring; see the repository. |
+| `.compileToWasm()`, `.sampleViaAot(...)` | Ahead-of-time compile this model to its own wasm module and sample through it — 2 to 12x faster per gradient across the repository's fifteen benchmark models, and faster than CmdStan's native gradient on twelve of them. The emitted module uses fixed-width SIMD (Safari 16.4+). Needs `setAotExports` wiring; see the repository. |
 
 Types ship with the package; the entry point is plain `.js` with a `.d.ts`
 alongside, so plain-JavaScript and bundler consumers both work with no

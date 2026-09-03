@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] — 2026-09-04 (npm only)
+
+Published to npm as `stanwasm@0.2.0`. The crates stay at 0.1.0 for the same
+reason as 0.1.2: the Safari fix still lives in a `[patch]`, which Cargo does not
+carry into a published crate. Re-checked at nuts-rs 0.18.3 with pulp 0.22.3 —
+the relaxed-SIMD opcodes are still there, and `no_wasm_gc.rs` now pins that so
+the next check is a test run rather than a manual build.
 
 ### Changed
 
@@ -464,4 +470,5 @@ Comparable to the `nuts-rs` direct-call benchmark. See `docs/en/BENCHMARKS.md`.
   `sample()` behavior and correctly restores `logProbGrad`/`sample`
   afterward
 
+[0.2.0]: https://github.com/habakan/stanwasm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/habakan/stanwasm/releases/tag/v0.1.0

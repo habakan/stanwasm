@@ -53,6 +53,15 @@ Dropping relaxed SIMD costs nothing measurable at these parameter dimensions:
 -4.3% and 0.0% on two models (1000 warmup + 1000 draws, median of 7 runs,
 Chromium). The bundle grows about 2 KB.
 
+Checked again at nuts-rs 0.18.3 with pulp 0.22.3: the opcodes are still there,
+so the patch is still needed. `cargo test -p stanwasm-codegen --test no_wasm_gc`
+is what answers that question — build the bundle first.
+
+Separately, the **AOT module the compiler emits uses fixed-width SIMD** — an
+`f64x2` pair of loop iterations, which is a different proposal from the relaxed
+one above and is in every engine that ships wasm today (Safari since 16.4). An
+embedder that disables it will reject the emitted module.
+
 ## Quick start (browser / Node.js)
 
 ```bash
