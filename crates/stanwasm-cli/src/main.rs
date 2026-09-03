@@ -281,11 +281,17 @@ fn bench_aot_via_wasmi(
     }
 
     for _ in 0..(N_LPG_ITERS / 10) {
-        lpg.call(&mut store, (params_ptr, grads_ptr, n_params as i32, scratch_ptr))?;
+        lpg.call(
+            &mut store,
+            (params_ptr, grads_ptr, n_params as i32, scratch_ptr),
+        )?;
     }
     let t0 = Instant::now();
     for _ in 0..N_LPG_ITERS {
-        lpg.call(&mut store, (params_ptr, grads_ptr, n_params as i32, scratch_ptr))?;
+        lpg.call(
+            &mut store,
+            (params_ptr, grads_ptr, n_params as i32, scratch_ptr),
+        )?;
     }
     let elapsed: Duration = t0.elapsed();
     Ok(elapsed.as_secs_f64() * 1e6 / N_LPG_ITERS as f64)

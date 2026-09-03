@@ -543,8 +543,10 @@ impl StanModel {
         let total = num_warmup as u64 + num_draws as u64;
 
         let scratch_buf = self.aot_scratch_init.clone().ok_or_else(|| {
-            JsError::new("call compileToWasm() before sampleViaAot(): the AOT \
-                          module works in a scratch buffer this model has not built yet")
+            JsError::new(
+                "call compileToWasm() before sampleViaAot(): the AOT \
+                          module works in a scratch buffer this model has not built yet",
+            )
         })?;
         let math = CpuMath::new(AotLogp {
             n_params: n,
