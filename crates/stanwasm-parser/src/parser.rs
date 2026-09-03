@@ -33,10 +33,7 @@ pub enum ParseError {
          calls aren't supported yet) — did you mean `~`, `=`, or `+=`?"
     )]
     UnsupportedStatement,
-    #[error(
-        "unrecognized character `{0}` — note: elementwise operators (`.*`, \
-         `./`, `.^`) aren't supported yet"
-    )]
+    #[error("{0}")]
     UnknownChar(#[from] crate::lexer::UnknownChar),
 }
 
@@ -176,10 +173,18 @@ impl Parser {
         if self.check_kw("array") {
             self.consume();
             self.expect_tok(&Token::LBrack)?;
-            let size = self.parse_expr(0)?;
+            let mut sizes = vec![self.parse_expr(0)?];
+            while self.try_tok(&Token::Comma) {
+                sizes.push(self.parse_expr(0)?);
+            }
             self.expect_tok(&Token::RBrack)?;
             let elem = self.parse_base_type()?;
-            return Ok(StanType::Array(size, Box::new(elem)));
+            // `array[a, b] T` is `array[a] array[b] T`, so the rightmost size is
+            // the innermost array.
+            return Ok(sizes
+                .into_iter()
+                .rev()
+                .fold(elem, |inner, size| StanType::Array(size, Box::new(inner))));
         }
         self.parse_base_type()
     }

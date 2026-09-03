@@ -150,3 +150,35 @@ fn unknown_non_ascii_character_is_reported_verbatim() {
     let msg = err.to_string();
     assert!(msg.contains('α'), "{msg}");
 }
+
+/// `array[a, b] T` is `array[a] array[b] T`, and the rightmost size is the
+/// innermost. It is how capture-history and panel data get declared, which is
+/// most of what a real model corpus wanted that this could not read.
+#[test]
+fn an_array_can_be_declared_with_more_than_one_dimension() {
+    let prog = parse("data { int M; int T; array[M, T] int<lower=0, upper=1> y; }").unwrap();
+    let y = prog
+        .data
+        .iter()
+        .find(|d| d.name == "y")
+        .expect("y is declared");
+    let StanType::Array(outer, inner) = &y.typ else {
+        panic!("expected an array, got {:?}", y.typ);
+    };
+    assert_eq!(*outer, Expr::Var("M".into()));
+    let StanType::Array(mid, elem) = inner.as_ref() else {
+        panic!("expected a nested array, got {inner:?}");
+    };
+    assert_eq!(*mid, Expr::Var("T".into()));
+    assert!(matches!(elem.as_ref(), StanType::Int(_)));
+}
+
+/// Transpose is refused rather than read as a no-op: without a row vector,
+/// `x' * y` would be an element-wise product where Stan means a dot product.
+#[test]
+fn a_transpose_says_why_it_is_refused() {
+    let err = parse("model { target += x' * y; }").unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("transpose"), "{msg}");
+    assert!(msg.contains("dot_product"), "{msg}");
+}

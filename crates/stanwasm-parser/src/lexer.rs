@@ -9,7 +9,20 @@ pub struct UnknownChar(pub char);
 
 impl std::fmt::Display for UnknownChar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "unrecognized character `{}`", self.0)?;
+        // The reason belongs to the runtime rather than the lexer, but this is
+        // where the character is, and a bare "unrecognized character `'`" sends
+        // the reader looking for a typo.
+        if self.0 == '\'' {
+            write!(
+                f,
+                " — transpose isn't supported: without a row vector `x'` cannot \
+                 be told apart from `x`, so `x' * y` would quietly be an \
+                 element-wise product where Stan means a dot product. Write \
+                 `dot_product(x, y)`"
+            )?;
+        }
+        Ok(())
     }
 }
 
