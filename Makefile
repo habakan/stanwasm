@@ -98,6 +98,14 @@ bench-gradients: wasm ## Per-gradient cost of both paths, over the model set
 # few seconds each and is then cached in target/bench.
 CMDSTAN ?= ~/cmdstan
 
+# posteriordb is stan-dev's collection of real posterior inference problems:
+#   git clone --depth 1 https://github.com/stan-dev/posteriordb
+PDB ?= ../posteriordb
+
+.PHONY: posteriordb
+posteriordb: wasm ## How much of posteriordb loads, and what stops the rest
+	cd ts && $(NODE) tests/posteriordb_sweep.ts $(PDB)
+
 .PHONY: compare-cmdstan
 compare-cmdstan: bench-gradients ## Check log density and gradients against CmdStan, and time both
 	cd ts && CMDSTAN=$(CMDSTAN) $(NODE) tests/compare_cmdstan.ts $(BENCH_DIR)

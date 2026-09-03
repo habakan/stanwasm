@@ -68,6 +68,37 @@ missing field, a wrong length, a non-integral `int`, or a violated
 `<lower=...>`/`<upper=...>` bound is an error rather than a model that samples
 the wrong thing.
 
+## How much of Stan this is, measured
+
+`make posteriordb PDB=<a clone of stan-dev/posteriordb>` loads every posterior
+in stan-dev's collection of real inference problems — models people actually
+wrote, with their data — and reports how far each gets. It is a better answer
+to "how much of Stan is this subset" than the table above, because nothing in
+it was chosen by this project.
+
+**63 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+47 that come with a reference posterior, 33 are usable. What stops the rest:
+
+| | count |
+|---|---:|
+| indexing or declaring with more than one dimension — `y[i, j]`, `array[M, T] int y` | 18 |
+| transpose — `alpha'` | 17 |
+| a distribution: `binomial` (5), `binomial_logit` (4), `uniform` (2), `inv_gamma`, `poisson_log` | 13 |
+| a function: `sd` (3), `log_sum_exp` (3), `log_mix` (2), `log10`, `gp_exp_quad_cov`, `student_t_lccdf`, `diag_pre_multiply` | 12 |
+| a bare `{ ... }` block for local scope inside a statement | 8 |
+| a `transformed data` variable declared in one statement and assigned in the next | 5 |
+| other syntax: range slicing `x[1:5]`, a bare expression statement, `data` as a function qualifier | 5 |
+| `array[...] simplex` — an array of constrained vectors | 4 |
+| one model that wants a vectorised operation this runtime takes elementwise, one that did not finish in two minutes | 2 |
+
+Each row is the *first* thing a model hit, so fixing one does not always
+unlock its models — some will land on the next.
+
+The shape of that list was not what the section below assumed. **The three
+largest are syntax**, not numerics and not distributions: 43 of the 84
+failures are things the parser declines to read. `print()` and the remaining
+constraint transforms, which the section below leads with, block nothing here.
+
 ## Remaining language gaps, roughly ordered by effort
 
 ### `functions { ... }` — what is and is not supported
