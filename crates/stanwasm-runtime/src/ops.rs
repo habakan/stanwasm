@@ -34,15 +34,24 @@ fn map_right(
     ys.iter().map(|y| op(t, lhs, y)).collect()
 }
 
+/// Element-wise broadcast for the container cases. The result takes the
+/// container operand's orientation, so a row stays a row.
+fn broadcast(t: &mut Tape, a: &Val, b: &Val, op: fn(&mut Tape, &Val, &Val) -> Val) -> Val {
+    match (a.elems(), b.elems()) {
+        (Some(xs), Some(ys)) => a.like(map_pair(t, xs, ys, op)),
+        (Some(xs), _) => a.like(map_left(t, xs, b, op)),
+        (_, Some(ys)) => b.like(map_right(t, a, ys, op)),
+        _ => unreachable!("every caller matches the two-scalar pairs first"),
+    }
+}
+
 pub fn v_add(t: &mut Tape, a: &Val, b: &Val) -> Val {
     match (a, b) {
         (Val::Num(x), Val::Num(y)) => Val::Num(x + y),
         (Val::Tape(i), Val::Num(y)) => Val::Tape(t.add_c(*i, *y)),
         (Val::Num(x), Val::Tape(j)) => Val::Tape(t.add_c(*j, *x)),
         (Val::Tape(i), Val::Tape(j)) => Val::Tape(t.add(*i, *j)),
-        (Val::Vec(xs), Val::Vec(ys)) => Val::Vec(map_pair(t, xs, ys, v_add)),
-        (Val::Vec(xs), other) => Val::Vec(map_left(t, xs, other, v_add)),
-        (other, Val::Vec(ys)) => Val::Vec(map_right(t, other, ys, v_add)),
+        _ => broadcast(t, a, b, v_add),
     }
 }
 
@@ -52,9 +61,7 @@ pub fn v_sub(t: &mut Tape, a: &Val, b: &Val) -> Val {
         (Val::Tape(i), Val::Num(y)) => Val::Tape(t.sub_c(*i, *y)),
         (Val::Num(x), Val::Tape(j)) => Val::Tape(t.rsub_c(*j, *x)),
         (Val::Tape(i), Val::Tape(j)) => Val::Tape(t.sub(*i, *j)),
-        (Val::Vec(xs), Val::Vec(ys)) => Val::Vec(map_pair(t, xs, ys, v_sub)),
-        (Val::Vec(xs), other) => Val::Vec(map_left(t, xs, other, v_sub)),
-        (other, Val::Vec(ys)) => Val::Vec(map_right(t, other, ys, v_sub)),
+        _ => broadcast(t, a, b, v_sub),
     }
 }
 
@@ -64,9 +71,7 @@ pub fn v_mul(t: &mut Tape, a: &Val, b: &Val) -> Val {
         (Val::Tape(i), Val::Num(y)) => Val::Tape(t.mul_c(*i, *y)),
         (Val::Num(x), Val::Tape(j)) => Val::Tape(t.mul_c(*j, *x)),
         (Val::Tape(i), Val::Tape(j)) => Val::Tape(t.mul(*i, *j)),
-        (Val::Vec(xs), Val::Vec(ys)) => Val::Vec(map_pair(t, xs, ys, v_mul)),
-        (Val::Vec(xs), other) => Val::Vec(map_left(t, xs, other, v_mul)),
-        (other, Val::Vec(ys)) => Val::Vec(map_right(t, other, ys, v_mul)),
+        _ => broadcast(t, a, b, v_mul),
     }
 }
 
@@ -76,9 +81,7 @@ pub fn v_div(t: &mut Tape, a: &Val, b: &Val) -> Val {
         (Val::Tape(i), Val::Num(y)) => Val::Tape(t.div_c(*i, *y)),
         (Val::Num(x), Val::Tape(j)) => Val::Tape(t.rdiv_c(*j, *x)),
         (Val::Tape(i), Val::Tape(j)) => Val::Tape(t.div(*i, *j)),
-        (Val::Vec(xs), Val::Vec(ys)) => Val::Vec(map_pair(t, xs, ys, v_div)),
-        (Val::Vec(xs), other) => Val::Vec(map_left(t, xs, other, v_div)),
-        (other, Val::Vec(ys)) => Val::Vec(map_right(t, other, ys, v_div)),
+        _ => broadcast(t, a, b, v_div),
     }
 }
 
@@ -139,12 +142,12 @@ pub fn v_neg(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(-x),
         Val::Tape(i) => Val::Tape(t.neg(*i)),
-        Val::Vec(xs) => {
+        Val::Vec(xs) | Val::Row(xs) => {
             let mut out = Vec::with_capacity(xs.len());
             for x in xs {
                 out.push(v_neg(t, x));
             }
-            Val::Vec(out)
+            a.like(out)
         }
     }
 }
@@ -157,7 +160,7 @@ pub fn v_abs(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(x.abs()),
         Val::Tape(i) => Val::Tape(t.abs(*i)),
-        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_abs)),
+        Val::Vec(xs) | Val::Row(xs) => a.like(map_unary(t, xs, v_abs)),
     }
 }
 
@@ -165,7 +168,7 @@ pub fn v_exp(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(x.exp()),
         Val::Tape(i) => Val::Tape(t.exp(*i)),
-        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_exp)),
+        Val::Vec(xs) | Val::Row(xs) => a.like(map_unary(t, xs, v_exp)),
     }
 }
 
@@ -173,7 +176,7 @@ pub fn v_log(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(x.ln()),
         Val::Tape(i) => Val::Tape(t.log(*i)),
-        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_log)),
+        Val::Vec(xs) | Val::Row(xs) => a.like(map_unary(t, xs, v_log)),
     }
 }
 
@@ -183,7 +186,7 @@ macro_rules! v_unary {
             match a {
                 Val::Num(x) => Val::Num(x.$prim()),
                 Val::Tape(i) => Val::Tape(t.$tape(*i)),
-                Val::Vec(xs) => Val::Vec(map_unary(t, xs, $name)),
+                Val::Vec(xs) | Val::Row(xs) => a.like(map_unary(t, xs, $name)),
             }
         }
     };
@@ -216,7 +219,7 @@ pub fn v_lgamma(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(lgamma_double(*x)),
         Val::Tape(i) => Val::Tape(t.lgamma(*i)),
-        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_lgamma)),
+        Val::Vec(xs) | Val::Row(xs) => a.like(map_unary(t, xs, v_lgamma)),
     }
 }
 
@@ -224,7 +227,7 @@ pub fn v_phi(t: &mut Tape, a: &Val) -> Val {
     match a {
         Val::Num(x) => Val::Num(phi_cdf_double(*x)),
         Val::Tape(i) => Val::Tape(t.phi(*i)),
-        Val::Vec(xs) => Val::Vec(map_unary(t, xs, v_phi)),
+        Val::Vec(xs) | Val::Row(xs) => a.like(map_unary(t, xs, v_phi)),
     }
 }
 

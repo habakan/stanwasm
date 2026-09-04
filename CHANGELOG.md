@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+posteriordb coverage goes from 93 to 101 of 147.
+
+### Added
+
+- **Transpose.** `x'` is a row vector, `M'` a reflected matrix, and orientation
+  is what makes `x' * y` the inner product Stan means and `x * y'` the outer
+  one. `rep_matrix` reads it too — a row lies along the rows, a column along
+  the columns. `row_vector` still cannot be declared, and a matrix's row still
+  indexes as a column vector, so orientation is carried only where `'` wrote it.
+
+### Changed
+
+- **`vector * vector` is now an error, as it is in Stan.** It had multiplied
+  element-wise, which is a wrong answer for the dot product the notation
+  suggests. Write `x' * y` or `dot_product(x, y)`; `.*` is the element-wise one.
+
 ### Fixed
 
 - **`transformed data` is its own block, evaluated once when the model loads.**
@@ -14,8 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   statement and assigned in the next was undefined, and nothing it declared was
   visible from `transformed parameters` or `generated quantities`. Its results
   now join the data environment before parameters are sized, which also lets a
-  parameter's dimension depend on one. posteriordb coverage goes from 93 to 100
-  of 147.
+  parameter's dimension depend on one.
 
 ## [0.2.0] — 2026-09-04 (npm only)
 

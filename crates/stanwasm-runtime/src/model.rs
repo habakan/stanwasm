@@ -18,7 +18,7 @@ use thiserror::Error;
 /// order used by `param_names`/`gen_quantity_names`.
 fn flatten_val(tape: &Tape, v: &Val, out: &mut Vec<f64>) -> Result<(), EvalError> {
     match v {
-        Val::Vec(xs) => {
+        Val::Vec(xs) | Val::Row(xs) => {
             for x in xs {
                 flatten_val(tape, x, out)?;
             }

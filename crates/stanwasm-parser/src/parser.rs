@@ -380,6 +380,11 @@ impl Parser {
     fn parse_postfix(&mut self) -> Result<Expr> {
         let mut e = self.parse_primary()?;
         loop {
+            // `'` binds tighter than `^`, so it lives here with indexing.
+            if self.try_tok(&Token::Quote) {
+                e = Expr::UnOp("'".into(), Box::new(e));
+                continue;
+            }
             if !matches!(self.peek(), Token::LBrack) {
                 break;
             }

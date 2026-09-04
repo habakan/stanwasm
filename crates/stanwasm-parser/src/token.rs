@@ -41,6 +41,7 @@ pub enum Token {
     Equals,   // =
     Pipe,     // |
     Bang,     // !
+    Quote,    // ' (transpose)
     Eof,
 }
 

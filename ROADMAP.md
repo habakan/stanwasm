@@ -30,14 +30,14 @@ worked through below, ordered by effort.
 | Matrix constraints | `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix`, `corr_matrix` | |
 | Blocks | `data`, `transformed data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, `functions` | |
 | Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed assignment, ternary `?:`, a bare `{ ... }` block | |
-| Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`), element-wise `.*` `./` `.^` | |
+| Operators | arithmetic, comparison, logical, `^`, matrix product (`X * beta`, `A * B`), transpose `x'`, element-wise `.*` `./` `.^` | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
 | Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose` | `norm` |
 
 \* `half_normal` is not a Stan distribution — stanc rejects it. Write
 `real<lower=0> tau; tau ~ normal(0, s);` for a model that also runs under Stan.
 
-Four caveats the table can't carry:
+Five caveats the table can't carry:
 
 - **Branches on a sampled parameter.** `if`/`while` conditions that depend on a
   parameter work in `generated quantities` (re-evaluated natively per draw) but
@@ -51,6 +51,12 @@ Four caveats the table can't carry:
   have no emitter for `tan`/`asin`/`acos`/`atan` (hence `atan2`), `erf`/`erfc`
   or `digamma`, and report `CodegenError::UnsupportedOp` rather than emitting a
   module that traps. Adding them needs new math imports on the host side.
+- **A row vector is what `'` produces, and nothing else.** `x' * y` is the inner
+  product, `x * y'` the outer one, and `vector * vector` is the error Stan makes
+  it. But `row_vector` cannot be declared, and a matrix's row indexes as a
+  column vector where Stan gives a row — so orientation is right wherever `'`
+  wrote it and defaults to a column everywhere else. Every operator but `*`
+  reads the elements and ignores it.
 - **Stan's static typing is honored where it changes results.** `int / int` is
   integer division (`N / 2` with `N = 3` is `1`), and `^` binds tighter than
   unary minus and associates right (`-a^2` is `-(a^2)`, `2^3^2` is `512`).
@@ -73,18 +79,21 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**100 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+**101 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
 47 that come with a reference posterior, 39 are usable. What stops the rest:
 
 | | count |
 |---|---:|
-| transpose — `x'` | 17 |
+| a matrix literal — `[a, b]` | 9 |
 | a range mixed with an index — `W[1:rows(W), k]` | 7 |
-| other syntax: range slicing `x[1:5]`, `<` in a declaration, a bare expression statement, `data` as a function qualifier | 6 |
+| a bound in a container declaration — `matrix<lower=0>[M, T] p` | 5 |
 | an array literal — `{1, 2, 3}`, and indexing by one | 5 |
+| range slicing `x[1:5]` and `x[ : ]` | 4 |
 | four shape mismatches, a bound that depends on another parameter, an array of vectors as a multivariate variate | 7 |
-| `max` over an array, `student_t_lccdf` | 2 |
-| did not finish tracing in two minutes | 3 |
+| a `row_vector` declaration | 2 |
+| `max` over an array, `softmax`, `student_t_lccdf` | 3 |
+| a bare expression statement, `data` as a function qualifier | 2 |
+| did not finish tracing in two minutes | 2 |
 
 Each row is the *first* thing a model hit, so fixing one does not always
 unlock its models — some will land on the next.
@@ -235,11 +244,6 @@ validation. Still open:
   people write a `generated quantities` block at all — doesn't work. Both
   are small next to the payoff: broadcasting in `rng::dispatch` plus lvalue
   resolution in `eval::eval_stmt`.
-
-- **`vector * vector` is element-wise, where Stan rejects it.** `*` now dispatches
-  on shape, so matrix-vector and matrix-matrix products work, but two vectors still
-  multiply element-wise instead of erroring the way Stan does. Stan spells that `.*`,
-  which is unimplemented, so nothing yet distinguishes the two.
 
 - **`sampleViaAot` doesn't check the AOT module's `n_params` against the
   current model's.** Passing an AOT module compiled for a different model

@@ -115,7 +115,7 @@ impl Env {
         fn go(tape: &Tape, v: &mut Val) {
             match v {
                 Val::Tape(i) => *v = Val::Num(tape.value(*i)),
-                Val::Vec(xs) => xs.iter_mut().for_each(|x| go(tape, x)),
+                Val::Vec(xs) | Val::Row(xs) => xs.iter_mut().for_each(|x| go(tape, x)),
                 Val::Num(_) => {}
             }
         }

@@ -6,7 +6,7 @@ use crate::error::EvalError;
 use crate::matrix;
 use crate::ops::{
     v_abs, v_acos, v_add, v_asin, v_atan, v_cos, v_div, v_exp, v_inv_logit, v_lgamma, v_log,
-    v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_sub, v_tan, v_tanh,
+    v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_sub, v_sum, v_tan, v_tanh,
 };
 use crate::value::{Shape, Val};
 use stanwasm_ast::{Expr, FuncDef, StanType, Stmt};
@@ -78,6 +78,7 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
             Ok(match op.as_str() {
                 "-" => v_neg(t, &v),
                 "!" => bool_val(v.to_f64(t)? == 0.0),
+                "'" => transpose(&v),
                 _ => v,
             })
         }
@@ -98,7 +99,7 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
             let idx = one_based - 1;
             let arr = eval_expr(t, arr_e, env)?;
             match arr {
-                Val::Vec(xs) => {
+                Val::Vec(xs) | Val::Row(xs) => {
                     if idx >= 0 {
                         if let Some(v) = xs.get(idx as usize) {
                             return Ok(v.clone());
@@ -153,10 +154,67 @@ pub fn stan_type_is_int(typ: &StanType) -> bool {
 }
 
 /// Stan's `*` is a matrix product when the ranks call for one and element-wise
+/// Rows of a matrix as columns. The caller has already established that every
+/// element is a container, so a shorter row simply contributes fewer entries.
+fn transpose_rows(rows: &[Val]) -> Vec<Val> {
+    let cols = rows
+        .iter()
+        .filter_map(|r| r.elems())
+        .map(<[Val]>::len)
+        .max()
+        .unwrap_or(0);
+    (0..cols)
+        .map(|j| {
+            Val::Vec(
+                rows.iter()
+                    .filter_map(|r| r.elems().and_then(|xs| xs.get(j)).cloned())
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+/// Stan's `'`. A scalar is its own transpose; a vector and a row vector swap;
+/// a matrix reflects. The orientation is what makes `x' * y` an inner product.
+fn transpose(v: &Val) -> Val {
+    match v {
+        Val::Num(_) | Val::Tape(_) => v.clone(),
+        Val::Row(xs) => Val::Vec(xs.clone()),
+        Val::Vec(xs) if xs.iter().any(|x| x.elems().is_some()) => Val::Vec(transpose_rows(xs)),
+        Val::Vec(xs) => Val::Row(xs.clone()),
+    }
+}
+
 /// otherwise; `check_binop_shapes` has already rejected the mismatched cases.
 fn mul_or_matmul(t: &mut Tape, lhs: &Val, rhs: &Val) -> Result<Val> {
     use Shape::*;
     match (lhs.shape(), rhs.shape()) {
+        // row · column is Stan's inner product, and column · row its outer one.
+        (RowVector(_), Vector(_)) => {
+            let (Some(a), Some(b)) = (lhs.elems(), rhs.elems()) else {
+                return Err(EvalError::NotAScalar);
+            };
+            let terms: Vec<Val> = a.iter().zip(b).map(|(x, y)| v_mul(t, x, y)).collect();
+            Ok(v_sum(t, &terms))
+        }
+        (Vector(_), RowVector(_)) => {
+            let (Some(a), Some(b)) = (lhs.elems(), rhs.elems()) else {
+                return Err(EvalError::NotAScalar);
+            };
+            let mut rows = Vec::with_capacity(a.len());
+            for x in a {
+                rows.push(Val::Vec(b.iter().map(|y| v_mul(t, x, y)).collect()));
+            }
+            Ok(Val::Vec(rows))
+        }
+        // A row vector on the left of a matrix is `(Mᵀ r)ᵀ`.
+        (RowVector(_), Matrix(..)) => {
+            let (Some(r), Val::Vec(m)) = (lhs.elems(), rhs) else {
+                return Err(EvalError::NotAScalar);
+            };
+            let mt = transpose_rows(m);
+            Ok(Val::Row(matrix::mat_vec_mul(t, &mt, r)))
+        }
         (Matrix(_, Some(_)), Vector(_)) => {
             let (Val::Vec(a), Val::Vec(b)) = (lhs, rhs) else {
                 return Err(EvalError::NotAScalar);
@@ -182,20 +240,26 @@ fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
         (Scalar, Scalar) => true,
         // scalar ⊙ container broadcasts element-wise, in both directions.
         (Scalar, _) | (_, Scalar) => true,
-        (Vector(a), Vector(b)) => a == b,
-        // `*` is a matrix product, so it needs the inner dimensions to meet; every
-        // other operator is element-wise and needs both to agree. A ragged operand
-        // (`cols: None`) matches nothing, so it can't be zipped down silently.
+        // `*` between two 1-D operands is linear algebra: row·column is the inner
+        // product, column·row the outer one. Two of the same orientation is a
+        // type error in Stan, and answering it element-wise would be a wrong
+        // dot product.
+        (RowVector(a), Vector(b)) if op == "*" => a == b,
+        (Vector(_), RowVector(_)) if op == "*" => true,
+        (Vector(_) | RowVector(_), Vector(_) | RowVector(_)) if op == "*" => false,
+        // Every other operator is element-wise, and orientation doesn't change
+        // what it computes, so a row and a column of one length are accepted.
+        (Vector(a) | RowVector(a), Vector(b) | RowVector(b)) => a == b,
+        // The linear-algebra cases, handled in `mul_or_matmul`.
+        (RowVector(a), Matrix(rb, Some(_))) => op == "*" && a == rb,
         (Matrix(_, Some(ca)), Matrix(rb, Some(cb))) if op == "*" => {
             let _ = cb;
             ca == rb
         }
         (Matrix(ra, Some(ca)), Matrix(rb, Some(cb))) => ra == rb && ca == cb,
         (Matrix(..), Matrix(..)) => false,
-        // `*` on these is linear algebra, handled in eval_binop; any other operator
-        // would be an element-wise broadcast across mismatched ranks.
         (Matrix(_, Some(ca)), Vector(b)) => op == "*" && ca == b,
-        (Matrix(..), Vector(_)) | (Vector(_), Matrix(..)) => false,
+        (Matrix(..), Vector(_) | RowVector(_)) | (Vector(_) | RowVector(_), Matrix(..)) => false,
     };
     if ok {
         return Ok(());
@@ -304,7 +368,7 @@ fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<(
             *container = val;
             return Ok(());
         };
-        let Val::Vec(xs) = container else {
+        let (Val::Vec(xs) | Val::Row(xs)) = container else {
             return Err(EvalError::NotAScalar);
         };
         let len = xs.len();
@@ -332,6 +396,25 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
     if let Some(def) = env.func(name) {
         return eval_user_call(t, name, &def, evaled, env);
     }
+    // Stan lays a row vector out along the rows and a column vector along the
+    // columns, so this one reads the orientation before it is dropped below.
+    if let ("rep_matrix", [v, n_e]) = (name, evaled.as_slice()) {
+        let n = n_e.to_i32(t)?.max(0) as usize;
+        return Ok(match v {
+            Val::Row(xs) => Val::Vec(vec![Val::Vec(xs.clone()); n]),
+            Val::Vec(xs) => Val::Vec(xs.iter().map(|x| Val::Vec(vec![x.clone(); n])).collect()),
+            scalar => Val::Vec(vec![Val::Vec(vec![scalar.clone(); n]); n]),
+        });
+    }
+    // Every remaining builtin works on the elements, and a row reaching one of
+    // them as a `Val::Row` would fall through its `Val::Vec` arm unmatched.
+    let evaled: Vec<Val> = evaled
+        .into_iter()
+        .map(|v| match v {
+            Val::Row(xs) => Val::Vec(xs),
+            other => other,
+        })
+        .collect();
     Ok(match (name, evaled.as_slice()) {
         ("log", [a]) => v_log(t, a),
         ("exp", [a]) => v_exp(t, a),
@@ -518,7 +601,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 let x = &args[0];
                 let rest: Vec<Val> = args[1..].to_vec();
                 match x {
-                    Val::Vec(xs) => eval_sample_vec(t, base, xs, &rest)?,
+                    Val::Vec(xs) | Val::Row(xs) => eval_sample_vec(t, base, xs, &rest)?,
                     _ => eval_dist(t, base, x, &rest)?,
                 }
             }
@@ -584,7 +667,7 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
                 .map(|a| eval_expr(t, a, env))
                 .collect::<Result<_>>()?;
             let v = match &x {
-                Val::Vec(xs) => eval_sample_vec(t, dist, xs, &evaled_args)?,
+                Val::Vec(xs) | Val::Row(xs) => eval_sample_vec(t, dist, xs, &evaled_args)?,
                 _ => eval_dist(t, dist, &x, &evaled_args)?,
             };
             Ok(Flow::Val(v))

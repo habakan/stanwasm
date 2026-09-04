@@ -173,12 +173,32 @@ fn an_array_can_be_declared_with_more_than_one_dimension() {
     assert!(matches!(elem.as_ref(), StanType::Int(_)));
 }
 
-/// Transpose is refused rather than read as a no-op: without a row vector,
-/// `x' * y` would be an element-wise product where Stan means a dot product.
+/// `'` is postfix and binds tighter than `^`, so `x'` is the operand of `*`
+/// rather than the whole product being transposed.
 #[test]
-fn a_transpose_says_why_it_is_refused() {
-    let err = parse("model { target += x' * y; }").unwrap_err();
-    let msg = err.to_string();
-    assert!(msg.contains("transpose"), "{msg}");
-    assert!(msg.contains("dot_product"), "{msg}");
+fn transpose_is_postfix_and_binds_tightest() {
+    let prog = parse("model { target += x' * y; }").unwrap();
+    let Stmt::TargetIncr(Expr::BinOp(op, lhs, rhs)) = &prog.model[0] else {
+        panic!("expected a product, got {:?}", prog.model[0]);
+    };
+    assert_eq!(op, "*");
+    assert_eq!(
+        **lhs,
+        Expr::UnOp("'".into(), Box::new(Expr::Var("x".into())))
+    );
+    assert_eq!(**rhs, Expr::Var("y".into()));
+}
+
+/// `M[i]'` transposes the indexed element, not `M`.
+#[test]
+fn transpose_applies_after_indexing() {
+    let prog = parse("model { target += sum(M[i]'); }").unwrap();
+    let Stmt::TargetIncr(Expr::Call(_, args)) = &prog.model[0] else {
+        panic!("expected a call, got {:?}", prog.model[0]);
+    };
+    let Expr::UnOp(op, inner) = &args[0] else {
+        panic!("expected a transpose, got {:?}", args[0]);
+    };
+    assert_eq!(op, "'");
+    assert!(matches!(**inner, Expr::Index(..)));
 }
