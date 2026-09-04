@@ -96,7 +96,8 @@ console.log(`names    = ${model.paramNames().join(", ")}`);
 const lpAndGrad = model.logProbGrad(new Float64Array([0, 1, 0]));
 //   [logp, dα, dβ, dlog_σ]
 
-// Full NUTS sampling
+// Full NUTS sampling. The sampler refuses a starting point where some parameter
+// has no slope; `model.randomInit(42n)` draws one it accepts.
 const samples = model.sample(
   new Float64Array([0, 0, 0]),
   /*nWarmup*/ 1000,
