@@ -131,3 +131,12 @@ fn diag_matrix_puts_the_vector_on_the_diagonal() {
     assert!((value_of(body, d.clone()) - 7.0).abs() < 1e-12);
     assert!(value_of("target += diag_matrix(v)[1, 2];", d).abs() < 1e-12);
 }
+
+/// `&&` and `||` short-circuit, which is what lets the operand beside them be
+/// guarded: `i <= n && x[i] > 0` must not index past the end.
+#[test]
+fn logical_operators_short_circuit() {
+    let d = vec_data("x", &[1.0, 2.0]);
+    assert!((value_of("target += (3 <= 2 && x[3] > 0) ? 7 : 9;", d.clone()) - 9.0).abs() < 1e-12);
+    assert!((value_of("target += (1 <= 2 || x[3] > 0) ? 7 : 9;", d) - 7.0).abs() < 1e-12);
+}

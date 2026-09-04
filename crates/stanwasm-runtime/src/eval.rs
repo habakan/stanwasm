@@ -27,13 +27,23 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
             .get(n)
             .cloned()
             .ok_or_else(|| EvalError::UndefinedVariable(n.clone())),
+        // `&&` and `||` short-circuit, which Stan relies on to guard the operand
+        // beside them: `i <= n && x[i] > 0` must not index past the end.
+        Expr::BinOp(op, l, r) if op == "&&" || op == "||" => {
+            let lv = eval_expr(t, l, env)?;
+            check_no_param_branch(env, &lv)?;
+            let lb = lv.to_f64(t)? != 0.0;
+            if lb != (op == "&&") {
+                return Ok(bool_val(lb));
+            }
+            let rv = eval_expr(t, r, env)?;
+            check_no_param_branch(env, &rv)?;
+            Ok(bool_val(rv.to_f64(t)? != 0.0))
+        }
         Expr::BinOp(op, l, r) => {
             let lv = eval_expr(t, l, env)?;
             let rv = eval_expr(t, r, env)?;
-            if matches!(
-                op.as_str(),
-                "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||"
-            ) {
+            if matches!(op.as_str(), "==" | "!=" | "<" | ">" | "<=" | ">=") {
                 // Comparison results collapse to `Val::Num`, so checking the result
                 // can never catch a parameter-dependent condition. Check the operands.
                 check_no_param_branch(env, &lv)?;
@@ -66,8 +76,6 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 ">" => bool_val(lv.to_f64(t)? > rv.to_f64(t)?),
                 "<=" => bool_val(lv.to_f64(t)? <= rv.to_f64(t)?),
                 ">=" => bool_val(lv.to_f64(t)? >= rv.to_f64(t)?),
-                "&&" => bool_val(lv.to_f64(t)? != 0.0 && rv.to_f64(t)? != 0.0),
-                "||" => bool_val(lv.to_f64(t)? != 0.0 || rv.to_f64(t)? != 0.0),
                 // Unreachable in practice: the parser only ever produces the
                 // operator strings matched above.
                 _ => Val::Num(0.0),
