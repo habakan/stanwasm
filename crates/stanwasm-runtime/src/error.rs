@@ -34,11 +34,10 @@ pub enum EvalError {
     #[error("while loop exceeded {0} iterations — possible infinite loop")]
     WhileLoopOverflow(u64),
     #[error(
-        "the recorded computation graph passed {0} nodes. Every scalar \
-         operation the model performs is one, so this is a model whose data \
-         and parameters multiply out beyond what fits in memory — 60,000 rows \
-         against 78,500 weights is billions. Fit a subset, or reduce the \
-         model's width"
+        "the recorded computation graph passed {0} nodes, which is more than a \
+         32-bit address space holds. Every scalar operation the model performs \
+         is one node, so observations times parameters is the count that grows: \
+         fit a subset of the data, or narrow the model"
     )]
     TapeTooLarge(usize),
     #[error("invalid parameters: {0}")]

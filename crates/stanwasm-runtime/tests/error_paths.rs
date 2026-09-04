@@ -4,7 +4,7 @@
 //! hand-written Stan source, e.g. via the gallery's Wasm Sandbox tab.
 
 use stanwasm_autodiff::Tape;
-use stanwasm_runtime::{data_from_json, Model, Val};
+use stanwasm_runtime::{data_from_json, Env, EvalError, Model, Val};
 
 fn load(src: &str, data: &str) -> Result<Model, String> {
     let env = data_from_json(data).map_err(|e| e.to_string())?;
@@ -351,4 +351,25 @@ fn nested_arrays_keep_their_shape() {
     };
     assert_eq!(first.len(), 3);
     assert_eq!(env.get("N").unwrap().to_f64(&Tape::new()).unwrap(), 2.0);
+}
+
+/// A graph too large for memory is an error, not an allocator abort — on wasm
+/// an abort traps, and a trap takes the module instance down with it.
+#[test]
+fn a_graph_past_the_node_limit_is_reported() {
+    let src = "
+        data { int N; matrix[N, N] x; }
+        parameters { vector[N] b; }
+        model { target += sum(x * x * x * b); }
+    ";
+    let n = 700;
+    let row: Vec<Val> = (0..n).map(|_| Val::Num(1.0)).collect();
+    let mut env = Env::new();
+    env.set("N", Val::Num(n as f64));
+    env.set("x", Val::Vec((0..n).map(|_| Val::Row(row.clone())).collect()));
+    let model = Model::parse_and_load(src, env).expect("loads");
+    let err = model
+        .log_prob_grad(&vec![0.1; n])
+        .expect_err("700 cubed is past the limit");
+    assert!(matches!(err, EvalError::TapeTooLarge(_)), "{err}");
 }
