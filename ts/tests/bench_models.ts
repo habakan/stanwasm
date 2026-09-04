@@ -112,6 +112,8 @@ parameters { vector[G] mu; real<lower=0> sigma; }
 model {
   mu ~ normal(0, 5); sigma ~ exponential(1);
   for (i in 1:N) y[i] ~ normal(mu[g[i]], sigma);
+  // the same gather written as one array index, which is its own code path
+  target += -0.5 * dot_self(y - mu[g]);
 }`,
     { N: n, G: 8, g, y },
     9,
