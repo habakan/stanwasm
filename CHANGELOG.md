@@ -52,6 +52,12 @@ posteriors that come with a reference posterior.
 
 ### Changed
 
+- **A block may need up to twelve index tables, where it could need two.** A
+  gather costs one table and a statement can hold several — an LDA term reads
+  two per topic — so the old bound left those models re-rolled into fragments.
+  Across posteriordb the emitted modules total 113 MB before and 78 after; the
+  largest goes from 25 MB to 4, and the shape that drove it also gets 1.5x
+  faster per gradient, since the smaller module is the one V8 keeps optimising.
 - **`vector * vector` is now an error, as it is in Stan.** It had multiplied
   element-wise, which is a wrong answer for the dot product the notation
   suggests. Write `x' * y` or `dot_product(x, y)`; `.*` is the element-wise one.
