@@ -299,3 +299,24 @@ fn out_of_range_slice_is_an_error() {
     );
     assert!(e.contains("out of bounds"), "{e}");
 }
+
+/// An ODE integrator is refused by name, before its first argument — which is
+/// the system function, and would otherwise read as an undefined variable.
+#[test]
+fn an_ode_integrator_says_what_it_is() {
+    let src = "functions { array[] real f(real t, array[] real y, array[] real th,
+                                          data array[] real x_r, data array[] int x_i) {
+                 return y;
+               } }
+               parameters { real a; }
+               model { target += a * integrate_ode_rk45(f, {1.0}, 0, {1.0}, {a}, {1.0}, {1})[1, 1]; }";
+    let msg = match Model::parse_and_load(src, data_from_json("{}").unwrap())
+        .unwrap()
+        .log_prob_grad(&[1.0])
+    {
+        Err(e) => e.to_string(),
+        Ok(v) => panic!("expected an error, got {v:?}"),
+    };
+    assert!(msg.contains("integrate_ode_rk45"), "{msg}");
+    assert!(msg.contains("adaptive"), "{msg}");
+}

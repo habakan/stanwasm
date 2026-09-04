@@ -100,6 +100,7 @@ const kind = (r: Row) => {
     [/unrecognized character `'`/, "transpose"],
     [/unexpected token in expression: LBrace/, "an array literal — `{1, 2, 3}`"],
     [/unknown distribution/, "a distribution"],
+    [/is not implemented\. An adaptive solver/, "an ODE integrator"],
     [/unknown function/, "a function"],
     [/no unconstrained dimensions|UnsupportedConstraint/, "a constraint transform"],
     [/^parse:/, "other syntax"],

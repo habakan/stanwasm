@@ -11,6 +11,15 @@ pub enum EvalError {
     UndefinedVariable(String),
     #[error("unknown function: {0}")]
     UnknownFunction(String),
+    #[error(
+        "`{0}` is not implemented. An adaptive solver takes a number of steps \
+         that depends on the parameters, and this runtime records the log \
+         density once and replays the same computation graph for every draw, \
+         so the step sequence would freeze at whatever the first evaluation \
+         chose. Solving the system on a fixed grid outside the model, and \
+         passing the result in as data, is the form that works here"
+    )]
+    UnsupportedOdeIntegrator(String),
     #[error("unknown distribution: {0}")]
     UnknownDistribution(String),
     #[error("{0}_rng called outside generated quantities")]
