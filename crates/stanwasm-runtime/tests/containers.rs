@@ -158,3 +158,13 @@ fn dot_self_is_the_vector_against_itself() {
     let src = format!("{HEAD} target += a * dot_self(u); }}");
     assert!((lp(&src, data()) - 14.0).abs() < 1e-12);
 }
+
+#[test]
+fn an_array_literal_is_a_container() {
+    let src = format!("{HEAD} target += a * sum({{1, 2, 3}}); }}");
+    assert!((lp(&src, data()) - 6.0).abs() < 1e-12);
+
+    // and it indexes like one, including as a gather
+    let idx = format!("{HEAD} target += a * sum(u[{{3, 1}}]); }}");
+    assert!((lp(&idx, data()) - 4.0).abs() < 1e-12);
+}

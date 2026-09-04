@@ -192,6 +192,9 @@ impl Parser {
     /// Types as they appear in a function signature, where Stan omits the sizes
     /// (`vector v`, not `vector[N] v`) because the argument carries its own length.
     fn parse_param_type(&mut self) -> Result<StanType> {
+        // `data array[] real x_r` — the qualifier promises the argument is not
+        // a parameter, which changes nothing this runtime records.
+        let _ = self.try_kw("data");
         if self.check_kw("array") {
             self.consume();
             self.expect_tok(&Token::LBrack)?;
@@ -495,6 +498,17 @@ impl Parser {
                 let e = self.parse_expr(0)?;
                 self.expect_tok(&Token::RParen)?;
                 Ok(e)
+            }
+            // `{a, b, c}` — an array. Only reachable in expression position,
+            // since a statement's `{` is a block.
+            Token::LBrace => {
+                self.consume();
+                let mut args = vec![self.parse_expr(0)?];
+                while self.try_tok(&Token::Comma) {
+                    args.push(self.parse_expr(0)?);
+                }
+                self.expect_tok(&Token::RBrace)?;
+                Ok(Expr::Call("{}".into(), args))
             }
             // `[a, b, c]` — a row vector of scalars, or a matrix of its rows.
             // Spelled as a call because it needs no evaluation rule of its own,

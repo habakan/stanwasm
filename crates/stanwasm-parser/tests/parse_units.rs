@@ -237,3 +237,18 @@ fn transpose_applies_after_indexing() {
     assert_eq!(op, "'");
     assert!(matches!(**inner, Expr::Index(..)));
 }
+
+/// `data` on a function argument promises it is not a parameter, which changes
+/// nothing about the shape the argument carries.
+#[test]
+fn a_data_qualified_argument_parses() {
+    let src =
+        "functions { real f(real a, data array[] real x_r, data array[] int x_i) { return a; } }
+               model { target += f(1.0, x_r, x_i); }";
+    let prog = parse(src).unwrap();
+    let (name, def) = &prog.functions[0];
+    assert_eq!(name, "f");
+    assert_eq!(def.params.len(), 3);
+    assert_eq!(def.params[1].1, "x_r");
+    assert_eq!(def.params[2].1, "x_i");
+}

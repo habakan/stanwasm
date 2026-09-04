@@ -626,6 +626,11 @@ fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<(
 }
 
 fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> {
+    // Checked before the arguments, one of which is the name of the system
+    // function and would otherwise be reported as an undefined variable.
+    if name.starts_with("integrate_ode") || name.starts_with("ode_") {
+        return Err(EvalError::UnsupportedOdeIntegrator(name.to_string()));
+    }
     let evaled: Vec<Val> = args
         .iter()
         .map(|a| eval_expr(t, a, env))
@@ -891,6 +896,8 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             flat(v, &mut out);
             Val::Vec(out)
         }
+        // `{a, b, c}`: an array, which is a container of whatever it holds.
+        ("{}", args) => Val::Vec(args.to_vec()),
         // `[a, b, c]`: scalars make a row vector, containers make its rows.
         ("[]", args) if !args.is_empty() => {
             if args.iter().all(|a| a.elems().is_none()) {
