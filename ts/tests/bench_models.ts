@@ -206,18 +206,20 @@ model {
 
   add(
     "count_mix",
-    `data { int<lower=0> N; vector[N] x; array[N] int<lower=0> y; }
-parameters { real alpha; real beta; real<lower=0> sigma; real<lower=0, upper=1> lambda; }
+    `data { int<lower=0> N; vector[N] x; array[N] int<lower=0> y; array[N] int<lower=1,upper=3> label; }
+parameters { real alpha; real beta; real<lower=0> sigma; real<lower=0, upper=1> lambda; vector[3] gamma; }
 model {
   sigma ~ inv_gamma(3, 2);
   lambda ~ uniform(0, 1);
   alpha ~ normal(0, sigma); beta ~ normal(0, 5);
+  gamma ~ normal(0, 2);
   y ~ poisson_log(alpha + beta * x);
+  label ~ categorical_logit(gamma);
   target += log_mix(lambda, log_sum_exp(x) * alpha, log10(sigma));
-  target += sd(x) * beta;
+  target += sd(x) * beta + dot_self(gamma);
 }`,
-    { N: n, x, y: counts },
-    4,
+    { N: n, x, y: counts, label: h },
+    7,
   );
 
   add(
@@ -229,6 +231,8 @@ model {
   matrix[D, D] S = diag_pre_multiply(tau, L);
   for (m in 1:M) y[m] ~ multi_normal_cholesky(mu, S);
   target += sum(gp_exp_quad_cov(t, tau[1], rho)[1]);
+  target += sum(quad_form_diag(multiply_lower_tri_self_transpose(L), tau)[2]);
+  target += sum(softmax(cumulative_sum(tau))) * (min(t) + max(t));
 }`,
     {
       M: rows.length, D: d, y: rows,
@@ -236,6 +240,22 @@ model {
       t: Array.from({ length: d }, (_, i) => 0.3 * i),
     },
     (d * (d - 1)) / 2 + d + 1,
+  );
+
+  // The GLM form and the two densities added with it: CmdStan checks the
+  // formulas, not only that they run.
+  add(
+    "glm",
+    `data { int<lower=0> N; int<lower=0> K; matrix[N, K] xm; array[N] int<lower=0,upper=1> y; }
+parameters { real alpha; vector[K] beta; real<lower=0> s; }
+model {
+  alpha ~ logistic(0, 1);
+  beta ~ double_exponential(0, 2);
+  s ~ exponential(1);
+  y ~ bernoulli_logit_glm(xm, alpha, beta);
+}`,
+    { N: n, K: 4, xm: mat(4), y: bits },
+    6,
   );
 
   add(
