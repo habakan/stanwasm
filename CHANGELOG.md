@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-posteriordb coverage goes from 93 to 134 of 147, and from 39 to 41 of the 47
+posteriordb coverage goes from 93 to 137 of 147, and from 39 to 43 of the 47
 posteriors that come with a reference posterior.
 
 ### Added
@@ -37,8 +37,15 @@ posteriors that come with a reference posterior.
   parameter, which changes nothing this runtime records.
 - **`bernoulli_logit_glm`.** The same density as `bernoulli_logit(alpha + x *
   beta)`, but recording one contraction per row rather than a chain per element.
-- **`logistic`, `double_exponential` and `categorical_logit`**, each checked
-  against the reference implementation rather than only against itself.
+- **`logistic`, `double_exponential`, `categorical_logit` and
+  `normal_id_glm`**, each checked against the reference implementation rather
+  than only against itself.
+- **`student_t_lccdf`.** Its value goes through a regularized incomplete beta,
+  checked against the closed forms the Student-t tail has at one, two and three
+  degrees of freedom. `y`, `mu` and `sigma` differentiate through it; degrees
+  of freedom must not depend on a parameter, and say so if they do. The AOT
+  emitter has no form for the node, so a model that differentiates through it
+  reports `CodegenError::UnsupportedOp` rather than emitting one that traps.
 - `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`,
   `to_vector`, `dot_self`, `pi`, `negative_infinity`, `sub_col`, `append_row`,
   `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`.

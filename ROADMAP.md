@@ -22,7 +22,7 @@ worked through below, ordered by effort.
 
 | | Supported | TODO |
 |---|---|---|
-| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`*, `cauchy`, `student_t`, `logistic`, `double_exponential`, `lognormal`, `gamma`, `beta`, `inv_gamma`, `uniform` | |
+| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`*, `cauchy`, `student_t`, `logistic`, `double_exponential`, `lognormal`, `gamma`, `beta`, `inv_gamma`, `uniform`, `normal_id_glm` | |
 | Discrete | `bernoulli`, `bernoulli_logit`, `bernoulli_logit_glm`, `binomial`, `binomial_logit`, `poisson`, `poisson_log`, `neg_binomial_2`, `categorical`, `categorical_logit` | |
 | Multivariate | `multi_normal_cholesky`, `multi_normal` (full covariance), `lkj_corr_cholesky`, `dirichlet`, `multinomial` | |
 | Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors, row vectors and matrices | |
@@ -34,7 +34,7 @@ worked through below, ordered by effort.
 | Indexing | a position, a range (`x[1:5]`, `x[ : ]`), an array of positions (`phi[node1]`), and any mix across dimensions (`W[1:rows(W), k]`) — reading and assigning | |
 | Literals | an array `{1, 2, 3}`, a row vector or matrix `[a, b]` | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
-| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose`, `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`, `to_vector`, `dot_self`, `pi`, `negative_infinity`, `sub_col`, `append_row`, `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`, a `[a, b]` literal | `norm`, `eigenvectors_sym`, `student_t_lccdf` |
+| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose`, `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`, `to_vector`, `dot_self`, `pi`, `negative_infinity`, `student_t_lccdf`, `sub_col`, `append_row`, `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`, a `[a, b]` literal | `norm`, `eigenvectors_sym` |
 
 \* `half_normal` is not a Stan distribution — stanc rejects it. Write
 `real<lower=0> tau; tau ~ normal(0, s);` for a model that also runs under Stan.
@@ -50,9 +50,9 @@ Six caveats the table can't carry:
   only scalars returns a scalar — it is the container argument that vectorizes.
 - **The AOT path covers fewer ops than the interpreter.** `sample()` (tape
   replay) evaluates everything the runtime produces; `compile()`/`sampleViaAot`
-  have no emitter for `tan`/`asin`/`acos`/`atan` (hence `atan2`), `erf`/`erfc`
-  or `digamma`, and report `CodegenError::UnsupportedOp` rather than emitting a
-  module that traps. Adding them needs new math imports on the host side.
+  have no emitter for `tan`/`asin`/`acos`/`atan` (hence `atan2`), `erf`/`erfc`,
+  `digamma`, or a `student_t_lccdf` that a parameter reaches, and report
+  `CodegenError::UnsupportedOp` rather than emitting a module that traps. Adding them needs new math imports on the host side.
 - **A row vector is a distinct shape, not a spelling.** `x' * y` is the inner
   product, `x * y'` the outer one, and `vector * vector` is the error Stan makes
   it. A `matrix`'s rows are row vectors and an `array[N] vector[K]`'s are
@@ -87,14 +87,14 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**134 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
-47 that come with a reference posterior, 41 are usable. What stops the rest:
+**137 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+47 that come with a reference posterior, 43 are usable. What stops the rest:
 
 | | count |
 |---|---:|
 | an ODE integrator — `integrate_ode_rk45`, `integrate_ode_bdf` | 4 |
-| `student_t_lccdf` (3) and `eigenvectors_sym` | 4 |
 | two ragged containers, a bound that depends on another parameter, an array of vectors as a multivariate variate | 4 |
+| `eigenvectors_sym` | 1 |
 | did not finish in two minutes — 60,000 MNIST digits against 78,500 weights | 1 |
 
 Each row is the *first* thing a model hit, so fixing one does not always
