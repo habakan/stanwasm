@@ -210,6 +210,12 @@ pub fn v_pow(t: &mut Tape, base: &Val, exp: &Val) -> Val {
     match (base, exp) {
         (Val::Num(x), Val::Num(n)) => Val::Num(x.powf(*n)),
         (Val::Tape(i), Val::Num(n)) => Val::Tape(t.pow(*i, *n)),
+        // Element-wise, so each element reaches the single node above. The
+        // `exp(n log x)` below is three nodes instead of one, and a `log(0)` in
+        // it cannot be differentiated back through: `sqrt` of a vector holding
+        // an underflowed entry came back as NaN rather than as no slope.
+        _ if base.elems().is_some() || exp.elems().is_some() => broadcast(t, base, exp, v_pow),
+        // A variable exponent, which only this form expresses.
         _ => {
             let lb = v_log(t, base);
             let m = v_mul(t, exp, &lb);

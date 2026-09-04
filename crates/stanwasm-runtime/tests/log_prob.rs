@@ -560,6 +560,20 @@ fn a_root_of_an_underflowed_value_does_not_poison_the_gradient() {
     assert_eq!(lp, 0.0);
     assert_eq!(g, vec![1.0]);
 
+    // The vector form is the one a real model reaches: `sqrt` of a spectral
+    // density whose tail underflows. It used to lower to `exp(0.5 log x)`,
+    // where the `log(0)` came back as 0/0.
+    let vector = "data { vector[3] w; }
+                  parameters { real a; }
+                  model { target += sum(sqrt(exp(-w * (a * a + 1)))) + a; }";
+    let mut d = Env::new();
+    d.set_vector("w", &[1.0, 2.0, 1000.0]);
+    let (_, g) = Model::parse_and_load(vector, d)
+        .unwrap()
+        .log_prob_grad(&[0.5])
+        .unwrap();
+    assert!(g[0].is_finite(), "{g:?}");
+
     // and a base that is merely small still carries its slope
     let small = "parameters { real a; } model { target += sqrt(exp(-40 * (a * a + 1))); }";
     let (_, g) = Model::parse_and_load(small, Env::new())

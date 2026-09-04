@@ -74,7 +74,10 @@ posteriors that come with a reference posterior.
   intermediate that underflows to zero turned every gradient downstream of it
   into NaN. A spectral-density GP reaches that in the ordinary course of
   evaluating itself: seven of its forty terms are `exp(-500)`. The log density
-  was right the whole time, which is what made it hard to see.
+  was right the whole time, which is what made it hard to see. Two causes: a
+  zero base now contributes nothing to a power's gradient, and `^` on a
+  container is taken element-wise rather than as `exp(n log x)` — which is one
+  node per element instead of three, and has no `log(0)` to differentiate.
 - **The sampler says which parameters make a starting point unusable.** It
   refuses one whose gradient has a zero component, and reported only "Invalid
   initial point" — naming neither the rule nor the parameters. Several real
