@@ -107,3 +107,16 @@ fn a_value_off_its_support_is_named() {
     let err = m.unconstrain_draw(&[-1.0]).unwrap_err().to_string();
     assert!(err.contains('s') && err.contains("outside"), "{err}");
 }
+
+/// A bound that names an earlier parameter has to be resolved against that
+/// parameter's value, in both directions.
+#[test]
+fn a_parameter_dependent_bound_round_trips() {
+    round_trip(
+        "real<lower=0, upper=1> a; real<lower=0, upper=(1 - a)> b;",
+        &[0.3, -0.8],
+    );
+    let m = model("real<lower=0, upper=1> a; real<lower=0, upper=(1 - a)> b;");
+    let c = m.constrained_draw(&[0.3, -0.8]).unwrap();
+    assert!(c[1] < 1.0 - c[0], "b = {} is not under 1 - a = {}", c[1], 1.0 - c[0]);
+}

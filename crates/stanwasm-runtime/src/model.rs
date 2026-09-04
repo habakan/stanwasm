@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::constraints::{constrain, constrained_dims, param_dims, unconstrain};
+use crate::constraints::{constrain, constrained_dims, param_dims, shape_flat, unconstrain};
 use crate::env::Env;
 use crate::error::EvalError;
 use crate::eval::{eval_expr, eval_stmt, stan_type_is_int};
@@ -484,8 +484,7 @@ impl Model {
             let k = param_dims(&decl.typ, &self.data_env);
             let raw: Vec<Val> = (0..k).map(|i| Val::Tape(leaves[leaf_idx + i])).collect();
             leaf_idx += k;
-            let (constrained, _log_jac) =
-                constrain(tape, &decl.name, &decl.typ, &raw, &self.data_env)?;
+            let (constrained, _log_jac) = constrain(tape, &decl.name, &decl.typ, &raw, &env)?;
             env.set(&decl.name, constrained);
         }
         for decl in &self.prog.transformed_params {
@@ -542,6 +541,8 @@ impl Model {
     pub fn unconstrain_draw(&self, constrained: &[f64]) -> Result<Vec<f64>, EvalError> {
         let mut out = Vec::with_capacity(self.n_params);
         let mut at = 0usize;
+        // Bounds see the parameters read so far, the way `constrain` does.
+        let mut env = Env::nested(Rc::clone(&self.data_env));
         for decl in &self.prog.parameters {
             let k = constrained_dims(&decl.typ, &self.data_env);
             let end = at + k;
@@ -555,7 +556,8 @@ impl Model {
                 });
             }
             let before = out.len();
-            unconstrain(&decl.name, &decl.typ, &constrained[at..end], &self.data_env, &mut out)?;
+            unconstrain(&decl.name, &decl.typ, &constrained[at..end], &env, &mut out)?;
+            env.set(&decl.name, shape_flat(&decl.typ, &constrained[at..end], &env));
             // A value off its own support gives an infinity here rather than
             // downstream, where it would read as the model's fault.
             if let Some(bad) = out[before..].iter().position(|v| !v.is_finite()) {
@@ -647,8 +649,9 @@ impl Model {
             let k = param_dims(&decl.typ, &self.data_env);
             let raw: Vec<Val> = (0..k).map(|i| Val::Tape(leaves[leaf_idx + i])).collect();
             leaf_idx += k;
-            let (constrained, log_jac) =
-                constrain(tape, &decl.name, &decl.typ, &raw, &self.data_env)?;
+            // Bounds are resolved against the parameters already constrained,
+            // not just the data: `real<lower=0, upper=(1 - alpha1)> beta1`.
+            let (constrained, log_jac) = constrain(tape, &decl.name, &decl.typ, &raw, &env)?;
             env.set(&decl.name, constrained);
             lp = v_add(tape, &lp, &log_jac);
         }

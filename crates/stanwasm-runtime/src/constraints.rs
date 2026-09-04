@@ -522,6 +522,27 @@ pub fn unconstrain(
     Ok(())
 }
 
+/// A flat constrained slice back into the shape `constrained_draw` flattened,
+/// so a later declaration's bound can index it.
+pub fn shape_flat(typ: &StanType, x: &[f64], env: &Env) -> Val {
+    let nums = |xs: &[f64]| xs.iter().map(|v| Val::Num(*v)).collect::<Vec<_>>();
+    let grid = |k: usize| Val::Vec(x.chunks(k).map(|r| Val::Row(nums(r))).collect());
+    match typ {
+        StanType::Real(_) | StanType::Int(_) => Val::Num(x.first().copied().unwrap_or(0.0)),
+        StanType::RowVector(..) => Val::Row(nums(x)),
+        StanType::Matrix(_, c_e, _) => grid(eval_plain_int(c_e, env).max(1)),
+        StanType::CholeskyFactorCorr(k_e)
+        | StanType::CholeskyFactorCov(k_e)
+        | StanType::CovMatrix(k_e)
+        | StanType::CorrMatrix(k_e) => grid(eval_plain_int(k_e, env).max(1)),
+        StanType::Array(_, elem) => {
+            let chunk = constrained_dims(elem, env).max(1);
+            Val::Vec(x.chunks(chunk).map(|p| shape_flat(elem, p, env)).collect())
+        }
+        _ => Val::Vec(nums(x)),
+    }
+}
+
 fn free_scalar(x: f64, c: &Constraint, env: &Env) -> Result<f64, EvalError> {
     Ok(match c {
         Constraint::None => x,

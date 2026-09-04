@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A bound may name an earlier parameter.** `real<lower=0, upper=(1 - alpha1)>
+  beta1` was resolved against the data alone, so `alpha1` came back undefined.
+  The transform is triangular, and the log determinant already carried
+  `log(hi - lo)` as a traced value, so the gradient through the bound follows.
 - **A model too large for memory reports it rather than trapping.** An
   allocator abort is a wasm trap, and a trap takes the module instance down —
   the page has to be reloaded. The data block now deserialises straight into
