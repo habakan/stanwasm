@@ -196,10 +196,12 @@ disables the proposal will reject the module.
 `make compare-cmdstan` compiles the models in `ts/tests/bench_models.ts` with a
 CmdStan of your choosing, evaluates both at the same point in the unconstrained
 space, and compares what they compute. Across fifteen models the gradients
-agree to **5e-14** relative at worst, and the log densities differ by exactly
+agree to **3e-13** relative at worst, and the log densities differ by exactly
 the normalising constants Stan's `~` drops — checked at two points, since a
 constant offset is the expected difference and one that moves with the point is
-a bug.
+a bug. Thirteen of the fifteen agree to 1e-14 or better; the worst is
+`neg_binomial`'s overdispersion gradient, a sum of digamma differences over
+5000 observations that both implementations round differently.
 
 That is the point of the harness: this is a subset, and a subset is only worth
 anything if what it does compute is right.
