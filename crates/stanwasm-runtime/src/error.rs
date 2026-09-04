@@ -44,6 +44,11 @@ pub enum EvalError {
          write the loop form instead"
     )]
     NotAScalar,
+    #[error(
+        "`{func}`'s {arg} depends on a parameter, and its derivative there has \
+         no closed form in this runtime. Move it to `data`/`transformed data`"
+    )]
+    NonDifferentiableArgument { func: String, arg: String },
     #[error("shape mismatch: cannot apply `{op}` to {lhs} and {rhs}")]
     ShapeMismatch {
         op: String,

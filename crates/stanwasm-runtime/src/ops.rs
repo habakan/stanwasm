@@ -7,7 +7,10 @@
 //! containers (e.g. `vector[N] y = exp(x);` is standard Stan).
 
 use crate::value::Val;
-use stanwasm_autodiff::{lgamma as lgamma_double, phi_cdf as phi_cdf_double, Tape};
+use stanwasm_autodiff::{
+    lgamma as lgamma_double, phi_cdf as phi_cdf_double, student_t_lccdf as student_t_lccdf_double,
+    Tape,
+};
 
 // For Vec broadcasts we collect into Vec<Val> via a for-loop so the
 // recursive call has a clear borrow lifetime on the tape.
@@ -228,6 +231,23 @@ pub fn v_phi(t: &mut Tape, a: &Val) -> Val {
         Val::Num(x) => Val::Num(phi_cdf_double(*x)),
         Val::Tape(i) => Val::Tape(t.phi(*i)),
         Val::Vec(xs) | Val::Row(xs) => a.like(map_unary(t, xs, v_phi)),
+    }
+}
+
+/// `log P(T > t)` at `nu` degrees of freedom. `nu` is a plain number: the
+/// value needs an incomplete beta, whose derivative in its own parameter has
+/// no closed form here.
+pub fn v_student_t_lccdf(t: &mut Tape, a: &Val, nu: f64) -> Val {
+    match a {
+        Val::Num(x) => Val::Num(student_t_lccdf_double(*x, nu)),
+        Val::Tape(i) => Val::Tape(t.student_t_lccdf(*i, nu)),
+        Val::Vec(xs) | Val::Row(xs) => {
+            let mut out = Vec::with_capacity(xs.len());
+            for x in xs {
+                out.push(v_student_t_lccdf(t, x, nu));
+            }
+            a.like(out)
+        }
     }
 }
 
