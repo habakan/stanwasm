@@ -75,6 +75,26 @@ pub fn bernoulli_logit_rng(rng: &mut impl Rng, alpha: f64) -> Result<f64> {
     bernoulli_rng(rng, 1.0 / (1.0 + (-alpha).exp()))
 }
 
+/// A 1-based category, by walking the cumulative weights. `theta` is normalised
+/// here, so it need only be non-negative and sum to something positive.
+pub fn categorical_rng(rng: &mut impl Rng, theta: &[f64]) -> Result<f64> {
+    let total: f64 = theta.iter().sum();
+    if theta.is_empty() || !total.is_finite() || total <= 0.0 || theta.iter().any(|p| *p < 0.0) {
+        return Err(EvalError::InvalidRngParams(
+            "categorical_rng: theta must be non-negative and sum to something positive".into(),
+        ));
+    }
+    let mut u = uniform_rng(rng, 0.0, total)?;
+    for (k, p) in theta.iter().enumerate() {
+        u -= p;
+        if u <= 0.0 {
+            return Ok(k as f64 + 1.0);
+        }
+    }
+    // Only reachable when rounding leaves a hair of `u` after the last weight.
+    Ok(theta.len() as f64)
+}
+
 pub fn poisson_rng(rng: &mut impl Rng, lambda: f64) -> Result<f64> {
     let d = Poisson::new(lambda).map_err(|e| invalid("poisson_rng", e))?;
     Ok(d.sample(rng))
@@ -128,6 +148,8 @@ pub fn multi_normal_cholesky_rng(
 /// `_rng` functions whose arguments are whole containers rather than elements to
 /// broadcast over.
 const CONTAINER_ARG_RNGS: &[&str] = &[
+    "categorical",
+    "categorical_logit",
     "dirichlet",
     "multi_normal_cholesky",
     "multi_normal",
@@ -205,6 +227,17 @@ pub fn dispatch(t: &Tape, base: &str, args: &[Val], env: &Env) -> Result<Val> {
             mu.to_f64(t)?,
             phi.to_f64(t)?,
         )?),
+        // One category, not one draw per weight — hence `CONTAINER_ARG_RNGS`.
+        ("categorical", [Val::Vec(theta)]) => {
+            let p: Vec<f64> = theta.iter().map(|v| v.to_f64(t)).collect::<Result<_>>()?;
+            Val::Num(categorical_rng(&mut *rng, &p)?)
+        }
+        ("categorical_logit", [Val::Vec(beta)]) => {
+            let b: Vec<f64> = beta.iter().map(|v| v.to_f64(t)).collect::<Result<_>>()?;
+            let shift = b.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let p: Vec<f64> = b.iter().map(|x| (x - shift).exp()).collect();
+            Val::Num(categorical_rng(&mut *rng, &p)?)
+        }
         ("dirichlet", [Val::Vec(alpha)]) => {
             let a: Vec<f64> = alpha.iter().map(|v| v.to_f64(t)).collect::<Result<_>>()?;
             Val::Vec(

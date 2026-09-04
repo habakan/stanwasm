@@ -199,3 +199,56 @@ generated quantities { vector[N] y_rep = normal_rng(mu, sigma); }
         "{err}"
     );
 }
+
+/// One category, not one draw per weight.
+#[test]
+fn categorical_rng_draws_a_category_in_proportion() {
+    let src = "data { simplex[3] theta; }
+               parameters { real a; }
+               model { a ~ normal(0, 1); }
+               generated quantities { int k = categorical_rng(theta); }";
+    let mut d = Env::new();
+    d.set_vector("theta", &[0.2, 0.5, 0.3]);
+    let model = Model::parse_and_load(src, d).unwrap();
+    let rng = Rc::new(RefCell::new(ChaCha8Rng::seed_from_u64(7)));
+
+    let n = 20_000;
+    let mut seen = [0usize; 3];
+    for _ in 0..n {
+        let k = model.generated_quantities(&[0.1], rng.clone()).unwrap()[0];
+        assert!((1.0..=3.0).contains(&k) && k.fract() == 0.0, "{k}");
+        seen[k as usize - 1] += 1;
+    }
+    for (got, want) in seen.iter().zip([0.2, 0.5, 0.3]) {
+        let share = *got as f64 / n as f64;
+        assert!(
+            (share - want).abs() < 0.02,
+            "{seen:?} against [0.2, 0.5, 0.3]"
+        );
+    }
+}
+
+/// The logit form is the same draw through a softmax: shifting every weight
+/// changes nothing.
+#[test]
+fn categorical_logit_rng_is_shift_invariant() {
+    let counts = |offset: f64| {
+        let src = format!(
+            "parameters {{ real a; }} model {{ a ~ normal(0, 1); }}
+             generated quantities {{ int k = categorical_logit_rng([{}, {}, {}]'); }}",
+            offset,
+            offset + 1.0,
+            offset + 2.0
+        );
+        let model = Model::parse_and_load(&src, Env::new()).unwrap();
+        let rng = Rc::new(RefCell::new(ChaCha8Rng::seed_from_u64(11)));
+        let mut seen = [0usize; 3];
+        for _ in 0..6000 {
+            let k = model.generated_quantities(&[0.1], rng.clone()).unwrap()[0];
+            seen[k as usize - 1] += 1;
+        }
+        seen
+    };
+    // 1000 would overflow to inf without the max shift
+    assert_eq!(counts(0.0), counts(1000.0));
+}
