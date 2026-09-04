@@ -33,7 +33,7 @@ worked through below, ordered by effort.
 | Operators | arithmetic, comparison, short-circuiting `&&`/`\|\|`, `^`, matrix product (`X * beta`, `A * B`), transpose `x'`, element-wise `.*` `./` `.^` | |
 | Indexing | a position, a range (`x[1:5]`, `x[ : ]`), an array of positions (`phi[node1]`), and any mix across dimensions (`W[1:rows(W), k]`) — reading and assigning | |
 | Literals | an array `{1, 2, 3}`, a row vector or matrix `[a, b]` | |
-| `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
+| `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng`, `categorical_rng`, `categorical_logit_rng` | `lkj_corr_cholesky_rng` |
 | Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose`, `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`, `to_vector`, `dot_self`, `pi`, `negative_infinity`, `student_t_lccdf`, `sub_col`, `append_row`, `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`, a `[a, b]` literal | `norm`, `eigenvectors_sym` |
 
 \* `half_normal` is not a Stan distribution — stanc rejects it. Write
