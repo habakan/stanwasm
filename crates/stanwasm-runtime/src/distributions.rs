@@ -11,8 +11,8 @@
 //! borrow.
 
 use crate::error::EvalError;
-use crate::matrix::{cholesky_decompose, mat_mdiv_ltri_low, vec_dot_self};
-use crate::ops::{v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub, v_sum};
+use crate::matrix::{cholesky_decompose, mat_mdiv_ltri_low, mat_vec_mul, vec_dot_self};
+use crate::ops::{v_abs, v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub, v_sum};
 use crate::value::Val;
 use stanwasm_autodiff::Tape;
 
@@ -84,6 +84,29 @@ pub fn lognormal_lpdf(t: &mut Tape, x: &Val, mu: &Val, sigma: &Val) -> Val {
     let log_x = v_log(t, x);
     let n = normal_lpdf(t, &log_x, mu, sigma);
     v_sub(t, &n, &log_x)
+}
+
+/// `-z - log s - 2 log(1 + e^-z)`, with `z = (x - mu) / s`.
+pub fn logistic_lpdf(t: &mut Tape, x: &Val, mu: &Val, s: &Val) -> Val {
+    let diff = v_sub(t, x, mu);
+    let z = v_div(t, &diff, s);
+    let neg_z = v_neg(t, &z);
+    let tail = log1p_exp(t, &neg_z);
+    let two_tail = v_mul(t, &Val::Num(2.0), &tail);
+    let log_s = v_log(t, s);
+    let prefix = v_sub(t, &neg_z, &log_s);
+    v_sub(t, &prefix, &two_tail)
+}
+
+/// Laplace: `-log(2 s) - |x - mu| / s`.
+pub fn double_exponential_lpdf(t: &mut Tape, x: &Val, mu: &Val, s: &Val) -> Val {
+    let diff = v_sub(t, x, mu);
+    let dist = v_abs(t, &diff);
+    let scaled = v_div(t, &dist, s);
+    let log_s = v_log(t, s);
+    let norm = v_add(t, &Val::Num(LN_2), &log_s);
+    let neg_norm = v_neg(t, &norm);
+    v_sub(t, &neg_norm, &scaled)
 }
 
 pub fn gamma_lpdf(t: &mut Tape, x: &Val, alpha: &Val, beta: &Val) -> Val {
@@ -161,7 +184,7 @@ fn log_binomial_coeff(t: &mut Tape, y: &Val, n: &Val) -> Val {
     v_sub(t, &d, &rest)
 }
 
-/// `log(1 + exp(x))`, which both logit-scale counts below need.
+/// `log(1 + exp(x))`, which the logit-scale densities need.
 fn log1p_exp(t: &mut Tape, x: &Val) -> Val {
     let e = v_exp(t, x);
     let s = v_add(t, &Val::Num(1.0), &e);
@@ -326,6 +349,30 @@ pub fn categorical_lpmf(t: &mut Tape, y: &Val, theta: &[Val]) -> Result<Val> {
     Ok(v_log(t, &theta[zero_based as usize]))
 }
 
+/// `categorical_logit_lpmf(y | β)` — `β_y - log ∑ exp β`.
+pub fn categorical_logit_lpmf(t: &mut Tape, y: &Val, beta: &[Val]) -> Result<Val> {
+    let label = y.to_i32(t)?;
+    let zero_based = label - 1;
+    if zero_based < 0 || zero_based as usize >= beta.len() {
+        return Err(EvalError::IndexOutOfBounds {
+            index: label,
+            len: beta.len(),
+        });
+    }
+    let shift = beta.iter().try_fold(f64::NEG_INFINITY, |m, b| {
+        Ok::<f64, EvalError>(m.max(b.to_f64(t)?))
+    })?;
+    let mut total = Val::Num(0.0);
+    for b in beta {
+        let d = v_sub(t, b, &Val::Num(shift));
+        let e = v_exp(t, &d);
+        total = v_add(t, &total, &e);
+    }
+    let log_total = v_log(t, &total);
+    let norm = v_add(t, &log_total, &Val::Num(shift));
+    Ok(v_sub(t, &beta[zero_based as usize], &norm))
+}
+
 /// `dirichlet_lpdf(θ | α)` — both vectors of length K.
 /// log p = lgamma(∑αᵢ) − ∑ lgamma(αᵢ) + ∑ (αᵢ − 1) log θᵢ
 pub fn dirichlet_lpdf(t: &mut Tape, theta: &[Val], alpha: &[Val]) -> Val {
@@ -372,7 +419,8 @@ pub fn lkj_corr_cholesky_lpdf(t: &mut Tape, l_rows: &[Val], eta: &Val) -> Val {
 fn is_multivariate(name: &str) -> bool {
     matches!(
         name,
-        "multi_normal_cholesky"
+        "bernoulli_logit_glm"
+            | "multi_normal_cholesky"
             | "multi_normal"
             | "lkj_corr_cholesky"
             | "dirichlet"
@@ -386,7 +434,8 @@ fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "std_normal" => 0,
         "exponential" | "half_normal" | "bernoulli" | "bernoulli_logit" | "poisson"
-        | "poisson_log" | "dirichlet" | "lkj_corr_cholesky" | "multinomial" | "categorical" => 1,
+        | "poisson_log" | "dirichlet" | "lkj_corr_cholesky" | "multinomial" | "categorical"
+        | "categorical_logit" => 1,
         "normal"
         | "cauchy"
         | "lognormal"
@@ -398,10 +447,18 @@ fn arity(name: &str) -> Option<usize> {
         | "inv_gamma"
         | "uniform"
         | "multi_normal_cholesky"
+        | "logistic"
+        | "double_exponential"
         | "multi_normal" => 2,
-        "student_t" => 3,
+        "student_t" | "bernoulli_logit_glm" => 3,
         _ => return None,
     })
+}
+
+/// The elements of a container argument, or the type error naming what it wanted.
+fn val_elems<'a>(name: &str, v: &'a Val) -> Result<&'a [Val]> {
+    v.elems()
+        .ok_or_else(|| wrong_type(name, "a coefficient vector beta", v))
 }
 
 fn wrong_type(name: &str, expected: &str, got: &Val) -> EvalError {
@@ -430,6 +487,8 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
         "cauchy" => cauchy_lpdf(t, x, &args[0], &args[1]),
         "student_t" => student_t_lpdf(t, x, &args[0], &args[1], &args[2]),
         "lognormal" => lognormal_lpdf(t, x, &args[0], &args[1]),
+        "logistic" => logistic_lpdf(t, x, &args[0], &args[1]),
+        "double_exponential" => double_exponential_lpdf(t, x, &args[0], &args[1]),
         "gamma" => gamma_lpdf(t, x, &args[0], &args[1]),
         "beta" => beta_lpdf(t, x, &args[0], &args[1]),
         "bernoulli" => bernoulli_lpmf(t, x, &args[0]),
@@ -444,6 +503,30 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
         "categorical" => match &args[0] {
             Val::Vec(theta) => categorical_lpmf(t, x, theta)?,
             _ => return Err(wrong_type(name, "a simplex vector theta", &args[0])),
+        },
+        // `beta_y - log_sum_exp(beta)`, which is `categorical` on `softmax(beta)`
+        // without forming the simplex.
+        "categorical_logit" => match &args[0] {
+            Val::Vec(beta) => categorical_logit_lpmf(t, x, beta)?,
+            _ => return Err(wrong_type(name, "a vector of log odds beta", &args[0])),
+        },
+        // `y ~ bernoulli_logit_glm(x, alpha, beta)` is `bernoulli_logit(alpha +
+        // x * beta)`, but with `x * beta` recorded as one contraction per row
+        // rather than a chain per element.
+        "bernoulli_logit_glm" => match (x, &args[0]) {
+            (Val::Vec(y), Val::Vec(rows)) => {
+                if rows.len() != y.len() {
+                    return Err(EvalError::DistributionArgLength {
+                        name: name.to_string(),
+                        arg_len: rows.len(),
+                        var_len: y.len(),
+                    });
+                }
+                let xb = mat_vec_mul(t, rows, val_elems(name, &args[2])?);
+                let eta = v_add(t, &args[1], &Val::Vec(xb));
+                return eval_sample_vec(t, "bernoulli_logit", y, &[eta]);
+            }
+            _ => return Err(wrong_type(name, "a data matrix x", &args[0])),
         },
         // These used to fall back to `Val::Num(0.0)` on an unrecognized shape,
         // contributing nothing and returning a silently wrong posterior.
@@ -550,9 +633,14 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Re
     if is_multivariate(name) {
         return eval_dist(t, name, &Val::Vec(xs.to_vec()), args);
     }
-    // `categorical`'s theta is the simplex shared by every element of the variate,
-    // not a per-observation argument, so it skips the broadcast below.
-    if name == "categorical" {
+    // Before the length check below, which would otherwise blame the arguments
+    // of a distribution that does not exist here at all.
+    if arity(name).is_none() {
+        return Err(EvalError::UnknownDistribution(name.to_string()));
+    }
+    // `categorical`'s theta, and its logit form's beta, are shared by every element
+    // of the variate rather than being per-observation, so they skip the broadcast.
+    if name == "categorical" || name == "categorical_logit" {
         let terms: Vec<Val> = xs
             .iter()
             .map(|x| eval_dist(t, name, x, args))

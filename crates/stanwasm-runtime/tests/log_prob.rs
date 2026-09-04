@@ -418,3 +418,89 @@ fn a_degenerate_binomial_is_finite() {
     assert!((lp - 0.0).abs() < 1e-12, "{lp}");
     assert_eq!(g, vec![0.0]);
 }
+
+/// `bernoulli_logit_glm(x, alpha, beta)` is `bernoulli_logit(alpha + x * beta)`,
+/// and has to agree with it term for term.
+#[test]
+fn the_glm_form_matches_the_long_form() {
+    let mut d = Env::new();
+    d.set_scalar("N", 3.0);
+    d.set(
+        "x",
+        Val::Vec(
+            [[1.0, 0.5], [-1.0, 2.0], [0.25, -0.75]]
+                .iter()
+                .map(|r| Val::Vec(r.iter().map(|v| Val::Num(*v)).collect()))
+                .collect(),
+        ),
+    );
+    d.set(
+        "y",
+        Val::Vec([1.0, 0.0, 1.0].iter().map(|v| Val::Num(*v)).collect()),
+    );
+    let head = "data { int<lower=0> N; matrix[N, 2] x; array[N] int<lower=0,upper=1> y; }
+                parameters { real alpha; vector[2] beta; }
+                model { ";
+    let at = [0.3, -0.4, 0.9];
+    let glm = Model::parse_and_load(
+        &format!("{head} y ~ bernoulli_logit_glm(x, alpha, beta); }}"),
+        d.clone(),
+    )
+    .unwrap()
+    .log_prob_grad(&at)
+    .unwrap();
+    let long = Model::parse_and_load(
+        &format!("{head} y ~ bernoulli_logit(alpha + x * beta); }}"),
+        d,
+    )
+    .unwrap()
+    .log_prob_grad(&at)
+    .unwrap();
+    assert!((glm.0 - long.0).abs() < 1e-12, "{glm:?} vs {long:?}");
+    for (g, l) in glm.1.iter().zip(&long.1) {
+        assert!((g - l).abs() < 1e-12, "{glm:?} vs {long:?}");
+    }
+}
+
+/// An unknown distribution on a container variate used to be reported as an
+/// argument-length mismatch, which blames arguments it never had.
+#[test]
+fn an_unknown_distribution_on_a_vector_says_so() {
+    let mut d = Env::new();
+    d.set_vector("y", &[1.0, 2.0]);
+    let src = "data { vector[2] y; } parameters { real a; } model { y ~ not_a_dist(a, 1); }";
+    let msg = match Model::parse_and_load(src, d).unwrap().log_prob_grad(&[0.5]) {
+        Err(e) => e.to_string(),
+        Ok(v) => panic!("expected an error, got {v:?}"),
+    };
+    assert!(msg.contains("not_a_dist"), "{msg}");
+    assert!(!msg.contains("length"), "{msg}");
+}
+
+/// `categorical_logit(beta)` is `categorical(softmax(beta))`, and `beta` is
+/// shared by every element of the variate rather than broadcast across it.
+#[test]
+fn categorical_logit_matches_the_simplex_form() {
+    let mut d = Env::new();
+    d.set(
+        "y",
+        Val::Vec([1.0, 3.0, 2.0].iter().map(|v| Val::Num(*v)).collect()),
+    );
+    let head = "data { array[3] int<lower=1,upper=3> y; } parameters { vector[3] b; } model { ";
+    let at = [0.4, -1.1, 0.7];
+    let logit = Model::parse_and_load(&format!("{head} y ~ categorical_logit(b); }}"), d.clone())
+        .unwrap()
+        .log_prob_grad(&at)
+        .unwrap();
+    let simplex = Model::parse_and_load(&format!("{head} y ~ categorical(softmax(b)); }}"), d)
+        .unwrap()
+        .log_prob_grad(&at)
+        .unwrap();
+    assert!(
+        (logit.0 - simplex.0).abs() < 1e-12,
+        "{logit:?} vs {simplex:?}"
+    );
+    for (a, b) in logit.1.iter().zip(&simplex.1) {
+        assert!((a - b).abs() < 1e-12, "{logit:?} vs {simplex:?}");
+    }
+}
