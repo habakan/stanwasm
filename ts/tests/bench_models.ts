@@ -191,15 +191,16 @@ model {
   // formula rather than only that it runs.
   add(
     "binomial",
-    `data { int<lower=0> N; array[N] int<lower=0> trials; array[N] int<lower=0> hits; vector[N] x; }
+    `data { int<lower=0> N; array[N] int<lower=0> trials; array[N] int<lower=0> hits; array[N] int<lower=0,upper=1> flags; vector[N] x; }
 parameters { real<lower=0, upper=1> theta; real alpha; real beta; }
 model {
   theta ~ uniform(0, 1);
   alpha ~ normal(0, 5); beta ~ normal(0, 5);
   hits ~ binomial(trials, theta);
+  flags ~ bernoulli(theta);
   target += binomial_logit_lpmf(hits | trials, alpha + beta * x);
 }`,
-    { N: n, trials: counts.map((c) => c + 5), hits: counts, x },
+    { N: n, trials: counts.map((c) => c + 5), hits: counts, flags: bits, x },
     3,
   );
 
