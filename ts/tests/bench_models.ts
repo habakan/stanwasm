@@ -248,15 +248,16 @@ model {
   // formulas, not only that they run.
   add(
     "glm",
-    `data { int<lower=0> N; int<lower=0> K; matrix[N, K] xm; array[N] int<lower=0,upper=1> y; }
+    `data { int<lower=0> N; int<lower=0> K; matrix[N, K] xm; array[N] int<lower=0,upper=1> y; vector[N] yr; }
 parameters { real alpha; vector[K] beta; real<lower=0> s; }
 model {
   alpha ~ logistic(0, 1);
   beta ~ double_exponential(0, 2);
   s ~ exponential(1);
   y ~ bernoulli_logit_glm(xm, alpha, beta);
+  yr ~ normal_id_glm(xm, alpha, beta, s);
 }`,
-    { N: n, K: 4, xm: mat(4), y: bits },
+    { N: n, K: 4, xm: mat(4), y: bits, yr: y },
     6,
   );
 
