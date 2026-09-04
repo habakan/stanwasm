@@ -6,7 +6,8 @@ use crate::error::EvalError;
 use crate::matrix;
 use crate::ops::{
     v_abs, v_acos, v_add, v_asin, v_atan, v_cos, v_div, v_exp, v_inv_logit, v_lgamma, v_log,
-    v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_sub, v_sum, v_tan, v_tanh,
+    v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_student_t_lccdf, v_sub, v_sum, v_tan,
+    v_tanh,
 };
 use crate::value::{Shape, Val};
 use stanwasm_ast::{Expr, FuncDef, SliceIdx, StanType, Stmt};
@@ -717,6 +718,19 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             }
         }
         ("Phi", [a]) | ("std_normal_cdf", [a]) => v_phi(t, a),
+        // `student_t_lccdf(y | nu, mu, sigma)`. The variate is standardised with
+        // ordinary arithmetic, so `y`, `mu` and `sigma` differentiate through it.
+        ("student_t_lccdf", [y, nu, mu, sigma]) => {
+            let Val::Num(nu) = nu else {
+                return Err(EvalError::NonDifferentiableArgument {
+                    func: "student_t_lccdf".into(),
+                    arg: "degrees of freedom".into(),
+                });
+            };
+            let centred = v_sub(t, y, mu);
+            let z = v_div(t, &centred, sigma);
+            v_student_t_lccdf(t, &z, *nu)
+        }
         ("log10", [a]) => {
             let l = v_log(t, a);
             v_div(t, &l, &Val::Num(std::f64::consts::LN_10))
