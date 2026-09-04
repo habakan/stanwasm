@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-posteriordb coverage goes from 93 to 107 of 147, and from 39 to 41 of the 47
+posteriordb coverage goes from 93 to 124 of 147, and from 39 to 41 of the 47
 posteriors that come with a reference posterior.
 
 ### Added
@@ -24,7 +24,15 @@ posteriors that come with a reference posterior.
   container of matching length or a scalar to fill the span.
 - **A bound on a container declaration.** `matrix<lower=0>[M, T] p` transforms
   every entry the way a bound on a vector does.
-- `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`.
+- **A matrix literal.** `[a, b, c]` is a row vector of scalars, or a matrix of
+  its rows, so `[x', y']'` builds a matrix column by column.
+- **`bernoulli_logit_glm`.** The same density as `bernoulli_logit(alpha + x *
+  beta)`, but recording one contraction per row rather than a chain per element.
+- **`logistic`, `double_exponential` and `categorical_logit`**, each checked
+  against the reference implementation rather than only against itself.
+- `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`,
+  `to_vector`, `dot_self`, `pi`, `negative_infinity`, `sub_col`, `append_row`,
+  `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`.
 
 ### Changed
 
@@ -39,6 +47,8 @@ posteriors that come with a reference posterior.
 - **`bernoulli` and `binomial` at a probability of 0 or 1 are no longer NaN.**
   The term the observation does not select was `0 * log 0`, which is NaN where
   the density is perfectly finite.
+- **An unknown distribution on a container variate says so.** It had been
+  reported as an argument-length mismatch, blaming arguments it never had.
 - **`transformed data` is its own block, evaluated once when the model loads.**
   Its statements had been appended to `model`, so a variable declared in one
   statement and assigned in the next was undefined, and nothing it declared was

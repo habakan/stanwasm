@@ -22,8 +22,8 @@ worked through below, ordered by effort.
 
 | | Supported | TODO |
 |---|---|---|
-| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`*, `cauchy`, `student_t`, `lognormal`, `gamma`, `beta`, `inv_gamma`, `uniform` | |
-| Discrete | `bernoulli`, `bernoulli_logit`, `binomial`, `binomial_logit`, `poisson`, `poisson_log`, `neg_binomial_2`, `categorical` | |
+| Continuous | `normal`, `std_normal`, `exponential`, `half_normal`*, `cauchy`, `student_t`, `logistic`, `double_exponential`, `lognormal`, `gamma`, `beta`, `inv_gamma`, `uniform` | |
+| Discrete | `bernoulli`, `bernoulli_logit`, `bernoulli_logit_glm`, `binomial`, `binomial_logit`, `poisson`, `poisson_log`, `neg_binomial_2`, `categorical`, `categorical_logit` | |
 | Multivariate | `multi_normal_cholesky`, `multi_normal` (full covariance), `lkj_corr_cholesky`, `dirichlet`, `multinomial` | |
 | Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors, row vectors and matrices | |
 | Vector shape | `simplex`, `ordered`, `positive_ordered`, `unit_vector`, `row_vector` | |
@@ -32,7 +32,7 @@ worked through below, ordered by effort.
 | Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed and sliced assignment, ternary `?:`, a bare `{ ... }` block | |
 | Operators | arithmetic, comparison, short-circuiting `&&`/`\|\|`, `^`, matrix product (`X * beta`, `A * B`), transpose `x'`, element-wise `.*` `./` `.^` | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
-| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose`, `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector` | `norm`, `sub_col`, `append_row`, `append_col`, `quad_form_diag`, `dims` |
+| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose`, `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`, `to_vector`, `dot_self`, `pi`, `negative_infinity`, `sub_col`, `append_row`, `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`, a `[a, b]` literal | `norm`, `eigenvectors_sym`, `student_t_lccdf` |
 
 \* `half_normal` is not a Stan distribution — stanc rejects it. Write
 `real<lower=0> tau; tau ~ normal(0, s);` for a model that also runs under Stan.
@@ -78,17 +78,16 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**107 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+**124 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
 47 that come with a reference posterior, 41 are usable. What stops the rest:
 
 | | count |
 |---|---:|
-| a function: `sub_col`, `append_row`/`append_col`, `quad_form_diag`, `dims`, `negative_infinity`, `multiply_lower_tri_self_transpose`, `student_t_lccdf` | 13 |
-| a matrix literal — `[a, b]` | 9 |
-| five shape mismatches, a bound that depends on another parameter, an array of vectors as a multivariate variate | 8 |
+| six shape mismatches, a bound that depends on another parameter, an array of vectors as a multivariate variate, a ragged container | 9 |
 | an array literal — `{1, 2, 3}`, and indexing by one | 5 |
-| did not finish tracing in two minutes | 3 |
-| `double_exponential`, `data` as a function qualifier | 2 |
+| `student_t_lccdf` (3) and `eigenvectors_sym` | 4 |
+| did not finish tracing in two minutes | 4 |
+| `data` as a function-argument qualifier | 1 |
 
 Each row is the *first* thing a model hit, so fixing one does not always
 unlock its models — some will land on the next.
@@ -195,7 +194,7 @@ disables the proposal will reject the module.
 
 `make compare-cmdstan` compiles the models in `ts/tests/bench_models.ts` with a
 CmdStan of your choosing, evaluates both at the same point in the unconstrained
-space, and compares what they compute. Across fifteen models the gradients
+space, and compares what they compute. Across sixteen models the gradients
 agree to **3e-13** relative at worst, and the log densities differ by exactly
 the normalising constants Stan's `~` drops — checked at two points, since a
 constant offset is the expected difference and one that moves with the point is
@@ -212,6 +211,9 @@ anything if what it does compute is right.
   `student_t`'s tail — pays a host transcendental call per observation, and a
   block containing one cannot be widened because `exp` and `log` have no
   lane-wise form. Those are the slowest models here per element.
+- `bernoulli_logit_glm` is built here out of a matrix-vector product and the
+  ordinary logit density, where the reference implementation has a likelihood
+  written for that one shape. It is the widest margin in the table.
 - A hand-written module of the same shape reaches 8.9 µs on the matrix model
   against the emitter's 17.4, by fusing the mean into the density loop. Merging
   those two loops was measured on its own and was a *loss*, so the remaining
