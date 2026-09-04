@@ -248,7 +248,7 @@ fn check_value(
             Ok(())
         }
         Shaped::Vector(n) => {
-            let Val::Vec(xs) = val else {
+            let Some(xs) = val.elems() else {
                 return Err(mismatch());
             };
             if xs.len() != *n {
@@ -261,7 +261,7 @@ fn check_value(
             Ok(())
         }
         Shaped::Matrix(r, c) => {
-            let Val::Vec(rows) = val else {
+            let Some(rows) = val.elems() else {
                 return Err(mismatch());
             };
             if rows.len() != *r {
@@ -274,7 +274,7 @@ fn check_value(
             Ok(())
         }
         Shaped::Array(n, elem) => {
-            let Val::Vec(xs) = val else {
+            let Some(xs) = val.elems() else {
                 return Err(mismatch());
             };
             if xs.len() != *n {

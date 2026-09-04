@@ -106,14 +106,16 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
         // would copy the whole container to index it, which is quadratic in a
         // loop over its elements.
         Expr::Index(..) => {
-            let mut idxs: Vec<i32> = Vec::new();
+            let mut path: Vec<Path> = Vec::new();
             let mut cur = expr;
             while let Expr::Index(base, idx_e) = cur {
-                idxs.push(eval_expr(t, idx_e, env)?.to_i32(t)?);
+                let i = eval_expr(t, idx_e, env)?;
+                path.push(index_path(t, &i)?);
                 cur = base;
             }
+            path.reverse();
             let owned;
-            let mut v = match cur {
+            let base = match cur {
                 Expr::Var(n) => env
                     .get(n)
                     .ok_or_else(|| EvalError::UndefinedVariable(n.clone()))?,
@@ -122,14 +124,19 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                     &owned
                 }
             };
-            for one_based in idxs.into_iter().rev() {
+            if path.iter().any(|p| matches!(p, Path::Gather(_))) {
+                return slice_val(base, &path);
+            }
+            let mut v = base;
+            for step in &path {
+                let Path::At(one_based) = step else { break };
                 // Indexing a scalar yields the scalar, as it did before.
                 let Some(xs) = v.elems() else { break };
                 v = usize::try_from(one_based - 1)
                     .ok()
                     .and_then(|k| xs.get(k))
                     .ok_or(EvalError::IndexOutOfBounds {
-                        index: one_based,
+                        index: *one_based,
                         len: xs.len(),
                     })?;
             }
@@ -155,17 +162,33 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
 
 /// A `SliceIdx` with its bounds evaluated. One-based, like Stan's; `None` is
 /// the container's own end, which is only known once the walk reaches it.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Path {
     At(i32),
+    /// `v[idx]` with `idx` an array of positions. Keeps the dimension, the way
+    /// a range does, but says where each entry comes from.
+    Gather(Vec<i32>),
     Range(Option<i32>, Option<i32>),
+}
+
+/// One index, which Stan lets be either a position or a whole array of them.
+fn index_path(t: &Tape, v: &Val) -> Result<Path> {
+    match v.elems() {
+        Some(xs) => Ok(Path::Gather(
+            xs.iter().map(|x| x.to_i32(t)).collect::<Result<_>>()?,
+        )),
+        None => Ok(Path::At(v.to_i32(t)?)),
+    }
 }
 
 fn resolve_idxs(t: &mut Tape, idxs: &[SliceIdx], env: &Env) -> Result<Vec<Path>> {
     idxs.iter()
         .map(|i| {
             Ok(match i {
-                SliceIdx::At(e) => Path::At(eval_expr(t, e, env)?.to_i32(t)?),
+                SliceIdx::At(e) => {
+                    let v = eval_expr(t, e, env)?;
+                    index_path(t, &v)?
+                }
                 SliceIdx::Range(lo, hi) => Path::Range(
                     lo.as_ref()
                         .map(|e| eval_expr(t, e, env)?.to_i32(t))
@@ -209,6 +232,19 @@ fn slice_val(v: &Val, path: &[Path]) -> Result<Val> {
                 },
             )?;
             slice_val(at, rest)
+        }
+        Path::Gather(idxs) => {
+            let mut out = Vec::with_capacity(idxs.len());
+            for i in idxs {
+                let at = usize::try_from(i - 1).ok().and_then(|k| xs.get(k)).ok_or(
+                    EvalError::IndexOutOfBounds {
+                        index: *i,
+                        len: xs.len(),
+                    },
+                )?;
+                out.push(slice_val(at, rest)?);
+            }
+            Ok(v.like(out))
         }
         Path::Range(lo, hi) => {
             let (lo, hi) = range_bounds(*lo, *hi, xs.len())?;
@@ -503,7 +539,8 @@ fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<(
             Expr::Var(name) => Ok(name),
             Expr::Index(base, idx_e) => {
                 let root = walk(t, base, env, path)?;
-                path.push(Path::At(eval_expr(t, idx_e, env)?.to_i32(t)?));
+                let i = eval_expr(t, idx_e, env)?;
+                path.push(index_path(t, &i)?);
                 Ok(root)
             }
             Expr::Slice(base, idxs) => {
@@ -531,6 +568,26 @@ fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<(
                     .and_then(|k| xs.get_mut(k))
                     .ok_or(EvalError::IndexOutOfBounds { index: *i, len })?;
                 put(slot, rest, val)
+            }
+            Path::Gather(idxs) => {
+                let src = val.elems();
+                if let Some(es) = src {
+                    if es.len() != idxs.len() {
+                        return Err(EvalError::ShapeMismatch {
+                            op: "=".into(),
+                            lhs: Shape::Vector(idxs.len()).to_string(),
+                            rhs: val.shape().to_string(),
+                        });
+                    }
+                }
+                for (k, i) in idxs.iter().enumerate() {
+                    let slot = usize::try_from(i - 1)
+                        .ok()
+                        .and_then(|p| xs.get_mut(p))
+                        .ok_or(EvalError::IndexOutOfBounds { index: *i, len })?;
+                    put(slot, rest, src.map_or(val, |es| &es[k]))?;
+                }
+                Ok(())
             }
             Path::Range(lo, hi) => {
                 let (lo, hi) = range_bounds(*lo, *hi, len)?;

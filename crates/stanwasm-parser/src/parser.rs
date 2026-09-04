@@ -388,6 +388,7 @@ impl Parser {
 
     fn parse_postfix(&mut self) -> Result<Expr> {
         let mut e = self.parse_primary()?;
+        let mut indexed = false;
         loop {
             // `'` binds tighter than `^`, so it lives here with indexing.
             if self.try_tok(&Token::Quote) {
@@ -408,11 +409,17 @@ impl Parser {
                     SliceIdx::Range(..) => None,
                 })
                 .collect();
+            // Indices inside one bracket compose — `A[i, j]` reads `j` within
+            // `A[i]`. A second bracket does not: `A[idx][j]` indexes what the
+            // first one produced. The two differ once an index is an array, so
+            // `Slice` keeps the boundary that `Index` would fold away.
+            let first_bracket = !indexed;
+            indexed = true;
             e = match plain {
-                Some(xs) => xs
+                Some(xs) if first_bracket => xs
                     .into_iter()
                     .fold(e, |acc, x| Expr::Index(Box::new(acc), Box::new(x))),
-                None => Expr::Slice(Box::new(e), idxs),
+                _ => Expr::Slice(Box::new(e), idxs),
             };
         }
         Ok(e)
