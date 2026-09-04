@@ -7,15 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-posteriordb coverage goes from 93 to 101 of 147.
+posteriordb coverage goes from 93 to 107 of 147, and from 39 to 41 of the 47
+posteriors that come with a reference posterior.
 
 ### Added
 
-- **Transpose.** `x'` is a row vector, `M'` a reflected matrix, and orientation
-  is what makes `x' * y` the inner product Stan means and `x * y'` the outer
-  one. `rep_matrix` reads it too — a row lies along the rows, a column along
-  the columns. `row_vector` still cannot be declared, and a matrix's row still
-  indexes as a column vector, so orientation is carried only where `'` wrote it.
+- **Transpose, and the row vector that makes it mean something.** `x'` is a row
+  vector, `M'` a reflected matrix, and orientation is what makes `x' * y` the
+  inner product Stan means and `x * y'` the outer one. `row_vector` can be
+  declared, and `rep_matrix` reads the orientation — a row lies along the rows,
+  a column along the columns. A matrix's row still indexes as a column vector,
+  so orientation is carried only where `'` or a declaration wrote it.
+- **Range indexing in any dimension.** `W[1:rows(W), k]` is a column,
+  `adj[2, 2:K]` a row slice, and an omitted bound (`x[ : ]`, `x[2 : ]`) is the
+  container's own end. A slice is an assignment target too, taking either a
+  container of matching length or a scalar to fill the span.
+- **A bound on a container declaration.** `matrix<lower=0>[M, T] p` transforms
+  every entry the way a bound on a vector does.
+- `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`.
 
 ### Changed
 
@@ -25,6 +34,11 @@ posteriordb coverage goes from 93 to 101 of 147.
 
 ### Fixed
 
+- **`&&` and `||` short-circuit.** Both operands had been evaluated, so the
+  guard in `i <= n && x[i] > 0` did not stop `x[i]` from indexing past the end.
+- **`bernoulli` and `binomial` at a probability of 0 or 1 are no longer NaN.**
+  The term the observation does not select was `0 * log 0`, which is NaN where
+  the density is perfectly finite.
 - **`transformed data` is its own block, evaluated once when the model loads.**
   Its statements had been appended to `model`, so a variable declared in one
   statement and assigned in the next was undefined, and nothing it declared was
