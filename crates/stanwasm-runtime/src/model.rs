@@ -146,12 +146,12 @@ impl std::fmt::Display for Shaped {
 }
 
 fn describe(v: &Val) -> String {
-    match v {
-        Val::Vec(xs) => match xs.first() {
-            Some(Val::Vec(row)) => format!("a {}x{} nested array", xs.len(), row.len()),
-            _ => format!("a length-{} array", xs.len()),
+    match v.elems() {
+        Some(xs) => match xs.first().and_then(Val::elems) {
+            Some(row) => format!("a {}x{} nested array", xs.len(), row.len()),
+            None => format!("a length-{} array", xs.len()),
         },
-        _ => "a scalar".to_string(),
+        None => "a scalar".to_string(),
     }
 }
 
@@ -316,9 +316,48 @@ fn validate_data(prog: &StanProgram, env: &mut Env) -> Result<(), DataMismatch> 
         check_value(&decl.name, "", &val, &shape, is_int, bounds)?;
         if is_int {
             env.set_int_typed(&decl.name, val);
+        } else if let Some(oriented) = orient_rows(&decl.typ, &val) {
+            env.set(&decl.name, oriented);
         }
     }
     Ok(())
+}
+
+/// A declared matrix's rows are row vectors; an `array[N] vector[K]`'s are
+/// columns. The JSON is the same nested array either way, so the declaration is
+/// the only thing that can say which. `None` when nothing needed changing.
+fn orient_rows(typ: &StanType, val: &Val) -> Option<Val> {
+    match typ {
+        StanType::Matrix(..)
+        | StanType::CholeskyFactorCorr(_)
+        | StanType::CholeskyFactorCov(_)
+        | StanType::CovMatrix(_)
+        | StanType::CorrMatrix(_) => {
+            let Val::Vec(rows) = val else { return None };
+            Some(Val::Vec(
+                rows.iter()
+                    .map(|r| match r.elems() {
+                        Some(cells) => Val::Row(cells.to_vec()),
+                        None => r.clone(),
+                    })
+                    .collect(),
+            ))
+        }
+        StanType::Array(_, elem) => {
+            let Val::Vec(xs) = val else { return None };
+            let inner: Vec<Option<Val>> = xs.iter().map(|x| orient_rows(elem, x)).collect();
+            inner.iter().any(Option::is_some).then(|| {
+                Val::Vec(
+                    inner
+                        .into_iter()
+                        .zip(xs)
+                        .map(|(new, old)| new.unwrap_or_else(|| old.clone()))
+                        .collect(),
+                )
+            })
+        }
+        _ => None,
+    }
 }
 
 pub struct Model {

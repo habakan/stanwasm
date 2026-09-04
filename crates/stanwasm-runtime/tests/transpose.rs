@@ -174,3 +174,47 @@ fn rep_row_vector_makes_a_row() {
                model { target += a * (rep_row_vector(2, 3) * y); }";
     assert!((lp(src, xy(), &[1.0]) - 30.0).abs() < 1e-12);
 }
+
+/// A matrix's rows are row vectors, so `M[i] * v` is the inner product Stan
+/// means. An `array[N] vector[K]`'s rows are columns, so the same spelling
+/// there is the error Stan makes it — the declaration is what separates them.
+#[test]
+fn a_matrix_row_is_a_row_and_an_array_element_is_a_column() {
+    let mut d = Env::new();
+    d.set("M", matrix(&[&[1.0, 2.0], &[3.0, 4.0]]));
+    d.set("A", matrix(&[&[1.0, 2.0], &[3.0, 4.0]]));
+    d.set_vector("w", &[10.0, 20.0]);
+
+    let src = "data { matrix[2, 2] M; array[2] vector[2] A; vector[2] w; }
+               parameters { real a; }
+               model { target += a * (M[2] * w); }";
+    assert!((lp(src, d.clone(), &[1.0]) - 110.0).abs() < 1e-12);
+
+    let as_array = "data { matrix[2, 2] M; array[2] vector[2] A; vector[2] w; }
+                    parameters { real a; }
+                    model { target += a * (A[2] * w); }";
+    let msg = err(as_array, d.clone(), &[1.0]);
+    assert!(msg.contains("vector[2]"), "{msg}");
+
+    // and a matrix row transposes back to a column
+    let back = "data { matrix[2, 2] M; array[2] vector[2] A; vector[2] w; }
+                parameters { real a; }
+                model { target += a * (w' * M[2]'); }";
+    assert!((lp(back, d, &[1.0]) - 110.0).abs() < 1e-12);
+}
+
+/// A matrix parameter's rows carry the orientation too, not only data's.
+#[test]
+fn a_matrix_parameters_row_is_a_row() {
+    let mut d = Env::new();
+    d.set_vector("w", &[1.0, 1.0]);
+    let src = "data { vector[2] w; }
+               parameters { matrix[2, 2] P; }
+               model { target += P[1] * w; }";
+    let (lp, g) = Model::parse_and_load(src, d)
+        .unwrap()
+        .log_prob_grad(&[1.0, 2.0, 3.0, 4.0])
+        .unwrap();
+    assert!((lp - 3.0).abs() < 1e-12);
+    assert_eq!(g, vec![1.0, 1.0, 0.0, 0.0]);
+}

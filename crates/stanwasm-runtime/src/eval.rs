@@ -282,7 +282,7 @@ fn same_width(op: &str, rows: Vec<Vec<Val>>) -> Result<Vec<Val>> {
             lhs: Shape::Vector(w).to_string(),
             rhs: Shape::Vector(bad.len()).to_string(),
         }),
-        None => Ok(rows.into_iter().map(Val::Vec).collect()),
+        None => Ok(rows.into_iter().map(Val::Row).collect()),
     }
 }
 
@@ -297,7 +297,7 @@ fn transpose_rows(rows: &[Val]) -> Vec<Val> {
         .unwrap_or(0);
     (0..cols)
         .map(|j| {
-            Val::Vec(
+            Val::Row(
                 rows.iter()
                     .filter_map(|r| r.elems().and_then(|xs| xs.get(j)).cloned())
                     .collect(),
@@ -335,7 +335,7 @@ fn mul_or_matmul(t: &mut Tape, lhs: &Val, rhs: &Val) -> Result<Val> {
             };
             let mut rows = Vec::with_capacity(a.len());
             for x in a {
-                rows.push(Val::Vec(b.iter().map(|y| v_mul(t, x, y)).collect()));
+                rows.push(Val::Row(b.iter().map(|y| v_mul(t, x, y)).collect()));
             }
             Ok(Val::Vec(rows))
         }
@@ -560,9 +560,9 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
         ("rep_matrix", [v, n_e]) => {
             let n = n_e.to_i32(t)?.max(0) as usize;
             return Ok(match v {
-                Val::Row(xs) => Val::Vec(vec![Val::Vec(xs.clone()); n]),
-                Val::Vec(xs) => Val::Vec(xs.iter().map(|x| Val::Vec(vec![x.clone(); n])).collect()),
-                scalar => Val::Vec(vec![Val::Vec(vec![scalar.clone(); n]); n]),
+                Val::Row(xs) => Val::Vec(vec![Val::Row(xs.clone()); n]),
+                Val::Vec(xs) => Val::Vec(xs.iter().map(|x| Val::Row(vec![x.clone(); n])).collect()),
+                scalar => Val::Vec(vec![Val::Row(vec![scalar.clone(); n]); n]),
             });
         }
         // A matrix or a row vector on either side stacks rows; two columns, or
@@ -677,7 +677,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             for (i, d) in diag.iter().enumerate() {
                 let mut row = vec![Val::Num(0.0); n];
                 row[i] = d.clone();
-                rows.push(Val::Vec(row));
+                rows.push(Val::Row(row));
             }
             Val::Vec(rows)
         }
@@ -711,7 +711,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                     let e = v_exp(t, &q);
                     row.push(v_mul(t, &a2, &e));
                 }
-                rows.push(Val::Vec(row));
+                rows.push(Val::Row(row));
             }
             Val::Vec(rows)
         }
@@ -856,7 +856,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                     let left = v_mul(t, &d[i], c);
                     scaled.push(v_mul(t, &left, &d[j]));
                 }
-                out.push(Val::Vec(scaled));
+                out.push(Val::Row(scaled));
             }
             Val::Vec(out)
         }
@@ -878,7 +878,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                     }
                     row.push(acc);
                 }
-                out.push(Val::Vec(row));
+                out.push(Val::Row(row));
             }
             Val::Vec(out)
         }
@@ -899,9 +899,9 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             Val::Num(xs.len() as f64)
         }
         ("size", [_]) | ("num_elements", [_]) => Val::Num(1.0),
-        ("cols", [Val::Vec(xs)]) => Val::Num(match xs.first() {
-            Some(Val::Vec(row)) => row.len() as f64,
-            _ => 1.0,
+        ("cols", [Val::Vec(xs)]) => Val::Num(match xs.first().and_then(Val::elems) {
+            Some(row) => row.len() as f64,
+            None => 1.0,
         }),
         ("rep_row_vector", [v, n_e]) => {
             let n = n_e.to_i32(t)?.max(0) as usize;
@@ -916,7 +916,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 r_e.to_i32(t)?.max(0) as usize,
                 c_e.to_i32(t)?.max(0) as usize,
             );
-            Val::Vec(vec![Val::Vec(vec![v.clone(); c]); r])
+            Val::Vec(vec![Val::Row(vec![v.clone(); c]); r])
         }
         ("dot_self", [Val::Vec(a)]) => {
             let mut acc = Val::Num(0.0);
@@ -1156,14 +1156,14 @@ pub fn default_for_type(t: &mut Tape, typ: &StanType, env: &Env) -> Result<Val> 
         StanType::RowVector(n, _) => Val::Row(vec![Val::Num(0.0); size_of(t, n, env)?]),
         StanType::Matrix(r, c, _) => {
             let (rows, cols) = (size_of(t, r, env)?, size_of(t, c, env)?);
-            Val::Vec(vec![Val::Vec(vec![Val::Num(0.0); cols]); rows])
+            Val::Vec(vec![Val::Row(vec![Val::Num(0.0); cols]); rows])
         }
         StanType::CholeskyFactorCorr(k)
         | StanType::CholeskyFactorCov(k)
         | StanType::CovMatrix(k)
         | StanType::CorrMatrix(k) => {
             let kk = size_of(t, k, env)?;
-            Val::Vec(vec![Val::Vec(vec![Val::Num(0.0); kk]); kk])
+            Val::Vec(vec![Val::Row(vec![Val::Num(0.0); kk]); kk])
         }
         StanType::Array(n, elem) => {
             let len = size_of(t, n, env)?;

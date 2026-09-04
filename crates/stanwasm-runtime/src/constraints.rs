@@ -55,7 +55,7 @@ fn corr_l_from_raw(t: &mut Tape, raw: &[Val], kk: usize) -> (Vec<Val>, Val) {
             }
             row[i] = v_sqrt(t, &rem);
         }
-        mat.push(Val::Vec(row));
+        mat.push(Val::Row(row));
     }
     (mat, log_jac)
 }
@@ -77,7 +77,7 @@ fn tri_from_raw(t: &mut Tape, raw: &[Val], kk: usize) -> (Vec<Val>, Val, Vec<Val
         let d = v_exp(t, &d_raw);
         diag.push(d.clone());
         row[i] = d;
-        rows.push(Val::Vec(row));
+        rows.push(Val::Row(row));
     }
     (rows, log_jac, diag)
 }
@@ -324,7 +324,7 @@ pub fn constrain(
             };
             let mat = flat
                 .chunks(cols)
-                .map(|row| Val::Vec(row.to_vec()))
+                .map(|row| Val::Row(row.to_vec()))
                 .collect();
             (Val::Vec(mat), log_jac)
         }

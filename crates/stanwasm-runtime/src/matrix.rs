@@ -1,5 +1,6 @@
 //! Matrix / vector helpers used by multivariate distributions and constraint
-//! transforms. A matrix is represented as `Val::Vec` of `Val::Vec` rows.
+//! transforms. A matrix is a `Val::Vec` of `Val::Row` rows — the orientation is
+//! what separates it from an `array[N] vector[K]`, whose rows are columns.
 
 use crate::ops::{v_add, v_div, v_mul, v_sqrt, v_sub};
 use crate::value::Val;
@@ -22,7 +23,7 @@ pub fn mat_mdiv_ltri_low(t: &mut Tape, l_rows: &[Val], b: &[Val]) -> Vec<Val> {
     let mut x = Vec::with_capacity(n);
     for i in 0..n {
         let mut s = b[i].clone();
-        if let Val::Vec(row) = &l_rows[i] {
+        if let Some(row) = l_rows[i].elems() {
             for j in 0..i {
                 let prod = v_mul(t, &row[j], &x[j]);
                 s = v_sub(t, &s, &prod);
@@ -53,8 +54,6 @@ fn tape_run(xs: &[Val]) -> Option<(u32, u32)> {
         .then_some((first, stride))
 }
 
-/// Cholesky decomposition of a symmetric positive-definite matrix: `Σ = L Lᵀ`,
-/// rows of `Val::Vec`. Lets full-covariance `multi_normal` reuse the Cholesky math.
 /// `A * b` where `a_rows` is a vec of row containers. Returns the length-rows vector.
 pub fn mat_vec_mul(t: &mut Tape, a_rows: &[Val], b: &[Val]) -> Vec<Val> {
     // Data on the left against parameters on the right — `X * beta`, the shape
@@ -62,14 +61,14 @@ pub fn mat_vec_mul(t: &mut Tape, a_rows: &[Val], b: &[Val]) -> Vec<Val> {
     // the `2K` multiplies and adds the chain would record.
     if let Some((base, stride)) = tape_run(b) {
         let all_data = a_rows.iter().all(|row| {
-            matches!(row, Val::Vec(cells)
-                if cells.len() == b.len() && cells.iter().all(|c| matches!(c, Val::Num(_))))
+            row.elems()
+                .is_some_and(|c| c.len() == b.len() && c.iter().all(|c| matches!(c, Val::Num(_))))
         });
         if all_data {
             let mut out = Vec::with_capacity(a_rows.len());
             let mut coeffs = Vec::with_capacity(b.len());
             for row in a_rows {
-                let Val::Vec(cells) = row else {
+                let Some(cells) = row.elems() else {
                     unreachable!("checked above")
                 };
                 coeffs.clear();
@@ -85,10 +84,7 @@ pub fn mat_vec_mul(t: &mut Tape, a_rows: &[Val], b: &[Val]) -> Vec<Val> {
     a_rows
         .iter()
         .map(|row| {
-            let cells = match row {
-                Val::Vec(xs) => xs.as_slice(),
-                _ => std::slice::from_ref(row),
-            };
+            let cells = row.elems().unwrap_or(std::slice::from_ref(row));
             let mut acc = Val::Num(0.0);
             for (x, y) in cells.iter().zip(b) {
                 let p = v_mul(t, x, y);
@@ -103,16 +99,16 @@ pub fn mat_vec_mul(t: &mut Tape, a_rows: &[Val], b: &[Val]) -> Vec<Val> {
 /// loop walks `b_rows[k][j]` rather than a transposed copy.
 pub fn mat_mat_mul(t: &mut Tape, a_rows: &[Val], b_rows: &[Val], cols: usize) -> Vec<Val> {
     let cell = |t: &mut Tape, row: &Val, j: usize| -> Val {
-        let cells = match row {
-            Val::Vec(xs) => xs.clone(),
-            _ => vec![row.clone()],
-        };
+        let cells = row
+            .elems()
+            .map(<[Val]>::to_vec)
+            .unwrap_or_else(|| vec![row.clone()]);
         let mut acc = Val::Num(0.0);
         for (k, x) in cells.iter().enumerate() {
             let Some(brow) = b_rows.get(k) else { break };
-            let bv = match brow {
-                Val::Vec(xs) => xs.get(j).cloned(),
-                other => Some(other.clone()),
+            let bv = match brow.elems() {
+                Some(xs) => xs.get(j).cloned(),
+                None => Some(brow.clone()),
             };
             let Some(bv) = bv else { break };
             let p = v_mul(t, x, &bv);
@@ -122,7 +118,7 @@ pub fn mat_mat_mul(t: &mut Tape, a_rows: &[Val], b_rows: &[Val], cols: usize) ->
     };
     a_rows
         .iter()
-        .map(|row| Val::Vec((0..cols).map(|j| cell(t, row, j)).collect()))
+        .map(|row| Val::Row((0..cols).map(|j| cell(t, row, j)).collect()))
         .collect()
 }
 
@@ -130,7 +126,10 @@ pub fn mat_mat_mul(t: &mut Tape, a_rows: &[Val], b_rows: &[Val], cols: usize) ->
 /// diagonal are read, so the zeros above it never enter the sum.
 pub fn mat_mat_mul_transpose_rhs(t: &mut Tape, l_rows: &[Val], k: usize) -> Vec<Val> {
     let cell = |t: &mut Tape, i: usize, j: usize| -> Val {
-        let (Some(Val::Vec(ri)), Some(Val::Vec(rj))) = (l_rows.get(i), l_rows.get(j)) else {
+        let (Some(ri), Some(rj)) = (
+            l_rows.get(i).and_then(Val::elems),
+            l_rows.get(j).and_then(Val::elems),
+        ) else {
             return Val::Num(0.0);
         };
         let mut acc = Val::Num(0.0);
@@ -144,18 +143,20 @@ pub fn mat_mat_mul_transpose_rhs(t: &mut Tape, l_rows: &[Val], k: usize) -> Vec<
         acc
     };
     (0..k)
-        .map(|i| Val::Vec((0..k).map(|j| cell(t, i, j)).collect()))
+        .map(|i| Val::Row((0..k).map(|j| cell(t, i, j)).collect()))
         .collect()
 }
 
+/// Cholesky decomposition of a symmetric positive-definite matrix: `Σ = L Lᵀ`.
+/// Lets full-covariance `multi_normal` reuse the Cholesky math.
 pub fn cholesky_decompose(t: &mut Tape, sigma_rows: &[Val]) -> Vec<Val> {
     let n = sigma_rows.len();
     let mut l: Vec<Vec<Val>> = vec![Vec::new(); n];
     for i in 0..n {
-        let row_i: Vec<Val> = match &sigma_rows[i] {
-            Val::Vec(r) => r.clone(),
-            other => vec![other.clone()],
-        };
+        let row_i: Vec<Val> = sigma_rows[i]
+            .elems()
+            .map(<[Val]>::to_vec)
+            .unwrap_or_else(|| vec![sigma_rows[i].clone()]);
         for j in 0..=i {
             let mut sum = row_i.get(j).cloned().unwrap_or(Val::Num(0.0));
             // `l[i]` and `l[j]` are both indexed by `k`, so this is not the
@@ -173,5 +174,5 @@ pub fn cholesky_decompose(t: &mut Tape, sigma_rows: &[Val]) -> Vec<Val> {
             }
         }
     }
-    l.into_iter().map(Val::Vec).collect()
+    l.into_iter().map(Val::Row).collect()
 }

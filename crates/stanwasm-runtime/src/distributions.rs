@@ -290,7 +290,7 @@ pub fn multi_normal_cholesky_lpdf(t: &mut Tape, y: &[Val], mu: &[Val], l_rows: &
     let r = mat_mdiv_ltri_low(t, l_rows, &diff);
     let mut sum_log_diag = Val::Num(0.0);
     for (i, row_v) in l_rows.iter().enumerate() {
-        if let Val::Vec(row) = row_v {
+        if let Some(row) = row_v.elems() {
             if i < row.len() {
                 let lr = v_log(t, &row[i]);
                 sum_log_diag = v_add(t, &sum_log_diag, &lr);
@@ -402,7 +402,7 @@ pub fn lkj_corr_cholesky_lpdf(t: &mut Tape, l_rows: &[Val], eta: &Val) -> Val {
     let mut lp = Val::Num(0.0);
     for (k, row_v) in l_rows.iter().enumerate() {
         let base_wt = (kk - 1 - k) as f64;
-        if let Val::Vec(row) = row_v {
+        if let Some(row) = row_v.elems() {
             if k < row.len() {
                 let weight = v_add(t, &Val::Num(base_wt), &two_eta_minus_2);
                 let lr = v_log(t, &row[k]);
@@ -534,7 +534,7 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
             (Val::Vec(y), Val::Vec(mu), Val::Vec(l_rows)) => {
                 // `array[N] vector[K] y; y ~ multi_normal_cholesky(mu, L);` is legal
                 // Stan but arrives as one N-row container, not N observations.
-                if matches!(y.first(), Some(Val::Vec(_))) {
+                if y.first().and_then(Val::elems).is_some() {
                     return Err(EvalError::MultivariateNotVectorized {
                         name: name.to_string(),
                         got: x.shape().to_string(),
@@ -560,7 +560,7 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
         "multi_normal" => match (x, &args[0], &args[1]) {
             (Val::Vec(y), Val::Vec(mu), Val::Vec(sigma_rows)) => {
                 // Same `array[N] vector[K] y` footgun as `multi_normal_cholesky`.
-                if matches!(y.first(), Some(Val::Vec(_))) {
+                if y.first().and_then(Val::elems).is_some() {
                     return Err(EvalError::MultivariateNotVectorized {
                         name: name.to_string(),
                         got: x.shape().to_string(),
