@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-posteriordb coverage goes from 93 to 125 of 147, and from 39 to 41 of the 47
+posteriordb coverage goes from 93 to 128 of 147, and from 39 to 41 of the 47
 posteriors that come with a reference posterior.
 
 ### Added
@@ -51,6 +51,15 @@ posteriors that come with a reference posterior.
   the density is perfectly finite.
 - **An unknown distribution on a container variate says so.** It had been
   reported as an argument-length mismatch, blaming arguments it never had.
+- **Reading or writing one element no longer costs the whole container.**
+  Indexing evaluated its base first, and evaluating a variable copies its
+  binding, so a loop over a matrix's elements was quadratic; an indexed write
+  copied the container out and back. A 1600-row matrix traces 190x faster.
+- **Emitting a model that re-rolls into many blocks is linear in the tape.**
+  Deciding whether a node can live in a wasm local asks which block owns each
+  of its arguments, and that search scanned every block. The three posteriordb
+  posteriors that could not compile in two minutes now take seconds; the module
+  each produces is byte for byte the one the quadratic version would have.
 - **`transformed data` is its own block, evaluated once when the model loads.**
   Its statements had been appended to `model`, so a variable declared in one
   statement and assigned in the next was undefined, and nothing it declared was

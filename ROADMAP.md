@@ -79,7 +79,7 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**125 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+**128 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
 47 that come with a reference posterior, 41 are usable. What stops the rest:
 
 | | count |
@@ -87,8 +87,8 @@ it was chosen by this project.
 | five shape mismatches, a bound that depends on another parameter, an array of vectors as a multivariate variate, a ragged container | 8 |
 | an array literal — `{1, 2, 3}`, and indexing by one | 5 |
 | `student_t_lccdf` (3) and `eigenvectors_sym` | 4 |
-| did not finish tracing in two minutes | 4 |
 | `data` as a function-argument qualifier | 1 |
+| did not finish in two minutes — 60,000 MNIST digits against 78,500 weights | 1 |
 
 Each row is the *first* thing a model hit, so fixing one does not always
 unlock its models — some will land on the next.
