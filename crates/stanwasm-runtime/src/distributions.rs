@@ -420,6 +420,7 @@ fn is_multivariate(name: &str) -> bool {
     matches!(
         name,
         "bernoulli_logit_glm"
+            | "normal_id_glm"
             | "multi_normal_cholesky"
             | "multi_normal"
             | "lkj_corr_cholesky"
@@ -451,6 +452,7 @@ fn arity(name: &str) -> Option<usize> {
         | "double_exponential"
         | "multi_normal" => 2,
         "student_t" | "bernoulli_logit_glm" => 3,
+        "normal_id_glm" => 4,
         _ => return None,
     })
 }
@@ -510,10 +512,9 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
             Val::Vec(beta) => categorical_logit_lpmf(t, x, beta)?,
             _ => return Err(wrong_type(name, "a vector of log odds beta", &args[0])),
         },
-        // `y ~ bernoulli_logit_glm(x, alpha, beta)` is `bernoulli_logit(alpha +
-        // x * beta)`, but with `x * beta` recorded as one contraction per row
-        // rather than a chain per element.
-        "bernoulli_logit_glm" => match (x, &args[0]) {
+        // The GLM forms are `dist(alpha + x * beta, ...)`, but with `x * beta`
+        // recorded as one contraction per row rather than a chain per element.
+        "bernoulli_logit_glm" | "normal_id_glm" => match (x, &args[0]) {
             (Val::Vec(y), Val::Vec(rows)) => {
                 if rows.len() != y.len() {
                     return Err(EvalError::DistributionArgLength {
@@ -524,7 +525,11 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
                 }
                 let xb = mat_vec_mul(t, rows, val_elems(name, &args[2])?);
                 let eta = v_add(t, &args[1], &Val::Vec(xb));
-                return eval_sample_vec(t, "bernoulli_logit", y, &[eta]);
+                let (base, rest) = match name {
+                    "normal_id_glm" => ("normal", vec![eta, args[3].clone()]),
+                    _ => ("bernoulli_logit", vec![eta]),
+                };
+                return eval_sample_vec(t, base, y, &rest);
             }
             _ => return Err(wrong_type(name, "a data matrix x", &args[0])),
         },

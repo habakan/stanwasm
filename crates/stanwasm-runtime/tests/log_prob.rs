@@ -462,6 +462,46 @@ fn the_glm_form_matches_the_long_form() {
     }
 }
 
+/// `normal_id_glm(x, alpha, beta, sigma)` is `normal(alpha + x * beta, sigma)`,
+/// and has to agree with it term for term.
+#[test]
+fn the_normal_glm_form_matches_the_long_form() {
+    let mut d = Env::new();
+    d.set_scalar("N", 3.0);
+    d.set(
+        "x",
+        Val::Vec(
+            [[1.0, 0.5], [-1.0, 2.0], [0.25, -0.75]]
+                .iter()
+                .map(|r| Val::Row(r.iter().map(|v| Val::Num(*v)).collect()))
+                .collect(),
+        ),
+    );
+    d.set_vector("y", &[0.3, -1.2, 0.8]);
+    let head = "data { int<lower=0> N; matrix[N, 2] x; vector[N] y; }
+                parameters { real alpha; vector[2] beta; real<lower=0> sigma; }
+                model { ";
+    let at = [0.3, -0.4, 0.9, 0.2];
+    let glm = Model::parse_and_load(
+        &format!("{head} y ~ normal_id_glm(x, alpha, beta, sigma); }}"),
+        d.clone(),
+    )
+    .unwrap()
+    .log_prob_grad(&at)
+    .unwrap();
+    let long = Model::parse_and_load(
+        &format!("{head} y ~ normal(alpha + x * beta, sigma); }}"),
+        d,
+    )
+    .unwrap()
+    .log_prob_grad(&at)
+    .unwrap();
+    assert!((glm.0 - long.0).abs() < 1e-12, "{glm:?} vs {long:?}");
+    for (g, l) in glm.1.iter().zip(&long.1) {
+        assert!((g - l).abs() < 1e-12, "{glm:?} vs {long:?}");
+    }
+}
+
 /// An unknown distribution on a container variate used to be reported as an
 /// argument-length mismatch, which blames arguments it never had.
 #[test]
