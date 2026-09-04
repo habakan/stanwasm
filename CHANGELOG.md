@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-posteriordb coverage goes from 93 to 132 of 147, and from 39 to 41 of the 47
+posteriordb coverage goes from 93 to 134 of 147, and from 39 to 41 of the 47
 posteriors that come with a reference posterior.
 
 ### Added
@@ -30,8 +30,11 @@ posteriors that come with a reference posterior.
   first produced; the two differ only once an index is an array.
 - **A bound on a container declaration.** `matrix<lower=0>[M, T] p` transforms
   every entry the way a bound on a vector does.
-- **A matrix literal.** `[a, b, c]` is a row vector of scalars, or a matrix of
-  its rows, so `[x', y']'` builds a matrix column by column.
+- **Array and matrix literals.** `{1, 2, 3}` is an array; `[a, b, c]` is a row
+  vector of scalars, or a matrix of its rows, so `[x', y']'` builds a matrix
+  column by column.
+- **`data` on a function argument** parses. It promises the argument is not a
+  parameter, which changes nothing this runtime records.
 - **`bernoulli_logit_glm`.** The same density as `bernoulli_logit(alpha + x *
   beta)`, but recording one contraction per row rather than a chain per element.
 - **`logistic`, `double_exponential` and `categorical_logit`**, each checked
@@ -53,6 +56,10 @@ posteriors that come with a reference posterior.
 - **`bernoulli` and `binomial` at a probability of 0 or 1 are no longer NaN.**
   The term the observation does not select was `0 * log 0`, which is NaN where
   the density is perfectly finite.
+- **An ODE integrator says why it is refused.** `integrate_ode_rk45(dz_dt, …)`
+  reported `undefined variable: dz_dt`, blaming the system function it was
+  handed. It now names the integrator and the reason: an adaptive step count
+  cannot survive being recorded once and replayed.
 - **An unknown distribution on a container variate says so.** It had been
   reported as an argument-length mismatch, blaming arguments it never had.
 - **Reading or writing one element no longer costs the whole container.**

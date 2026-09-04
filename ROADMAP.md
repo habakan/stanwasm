@@ -32,13 +32,14 @@ worked through below, ordered by effort.
 | Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed, gathered and sliced assignment, ternary `?:`, a bare `{ ... }` block | |
 | Operators | arithmetic, comparison, short-circuiting `&&`/`\|\|`, `^`, matrix product (`X * beta`, `A * B`), transpose `x'`, element-wise `.*` `./` `.^` | |
 | Indexing | a position, a range (`x[1:5]`, `x[ : ]`), an array of positions (`phi[node1]`), and any mix across dimensions (`W[1:rows(W), k]`) — reading and assigning | |
+| Literals | an array `{1, 2, 3}`, a row vector or matrix `[a, b]` | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
 | Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose`, `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`, `to_vector`, `dot_self`, `pi`, `negative_infinity`, `sub_col`, `append_row`, `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`, a `[a, b]` literal | `norm`, `eigenvectors_sym`, `student_t_lccdf` |
 
 \* `half_normal` is not a Stan distribution — stanc rejects it. Write
 `real<lower=0> tau; tau ~ normal(0, s);` for a model that also runs under Stan.
 
-Five caveats the table can't carry:
+Six caveats the table can't carry:
 
 - **Branches on a sampled parameter.** `if`/`while` conditions that depend on a
   parameter work in `generated quantities` (re-evaluated natively per draw) but
@@ -58,6 +59,12 @@ Five caveats the table can't carry:
   columns, so `M[i] * v` and `A[i] * v` differ the way Stan says they do — the
   declaration is what separates two values the data file spells identically.
   Every operator but `*` reads the elements and ignores orientation.
+- **An ODE integrator is refused rather than approximated.** An adaptive
+  solver's step count depends on the parameters, and `sample()` records the log
+  density once and replays it, so the step sequence would freeze at whatever
+  the first evaluation chose. `integrate_ode_*` and `ode_*` say that instead of
+  returning a number. Solving the system on a fixed grid outside the model and
+  passing the result in as data is the form that works here.
 - **Stan's static typing is honored where it changes results.** `int / int` is
   integer division (`N / 2` with `N = 3` is `1`), and `^` binds tighter than
   unary minus and associates right (`-a^2` is `-(a^2)`, `2^3^2` is `512`).
@@ -80,15 +87,14 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**132 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+**134 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
 47 that come with a reference posterior, 41 are usable. What stops the rest:
 
 | | count |
 |---|---:|
-| an array literal — `{1, 2, 3}`, and indexing by one | 5 |
+| an ODE integrator — `integrate_ode_rk45`, `integrate_ode_bdf` | 4 |
 | `student_t_lccdf` (3) and `eigenvectors_sym` | 4 |
 | two ragged containers, a bound that depends on another parameter, an array of vectors as a multivariate variate | 4 |
-| `data` as a function-argument qualifier | 1 |
 | did not finish in two minutes — 60,000 MNIST digits against 78,500 weights | 1 |
 
 Each row is the *first* thing a model hit, so fixing one does not always
