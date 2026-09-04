@@ -309,40 +309,36 @@ fn drop_orientation(args: Vec<Val>) -> Vec<Val> {
 }
 
 /// A value seen as rows of elements: a matrix as itself, a column vector as one
-/// column, a row vector as one row, a scalar as a single cell.
-fn as_rows(v: &Val) -> Vec<Vec<Val>> {
+/// column, a row vector as one row, a scalar as a single cell. Borrows: the
+/// data block is the largest thing here, and copying it to append a column
+/// costs more than the result.
+fn row_views(v: &Val) -> Vec<&[Val]> {
     match v {
-        Val::Row(xs) => vec![xs.clone()],
+        Val::Row(xs) => vec![xs.as_slice()],
         Val::Vec(xs) if xs.iter().any(|x| x.elems().is_some()) => xs
             .iter()
-            .map(|r| {
-                r.elems()
-                    .map(<[Val]>::to_vec)
-                    .unwrap_or_else(|| vec![r.clone()])
-            })
+            .map(|r| r.elems().unwrap_or(std::slice::from_ref(r)))
             .collect(),
-        Val::Vec(xs) => xs.iter().map(|x| vec![x.clone()]).collect(),
-        scalar => vec![vec![scalar.clone()]],
+        Val::Vec(xs) => xs.iter().map(std::slice::from_ref).collect(),
+        scalar => vec![std::slice::from_ref(scalar)],
     }
 }
 
 /// One element of a `[...]` literal as a row.
-fn as_rows_flat(v: &Val) -> Vec<Val> {
-    v.elems()
-        .map(<[Val]>::to_vec)
-        .unwrap_or_else(|| vec![v.clone()])
+fn as_rows_flat(v: &Val) -> &[Val] {
+    v.elems().unwrap_or(std::slice::from_ref(v))
 }
 
 /// Rows into a matrix, refusing a ragged one — the shape a `Val` cannot carry.
-fn same_width(op: &str, rows: Vec<Vec<Val>>) -> Result<Vec<Val>> {
-    let w = rows.first().map_or(0, Vec::len);
+fn same_width(op: &str, rows: &[&[Val]]) -> Result<Vec<Val>> {
+    let w = rows.first().map_or(0, |r| r.len());
     match rows.iter().find(|r| r.len() != w) {
         Some(bad) => Err(EvalError::ShapeMismatch {
             op: op.to_string(),
             lhs: Shape::Vector(w).to_string(),
             rhs: Shape::Vector(bad.len()).to_string(),
         }),
-        None => Ok(rows.into_iter().map(Val::Row).collect()),
+        None => Ok(rows.iter().map(|r| Val::Row(r.to_vec())).collect()),
     }
 }
 
@@ -377,6 +373,16 @@ fn transpose(v: &Val) -> Val {
     }
 }
 
+/// Refuse a product before recording it. The count is known from the shapes, so
+/// a model whose data multiplies out past what the tape can hold hears that in
+/// a moment rather than after minutes of allocating toward an abort.
+fn room_for(t: &Tape, nodes: usize) -> Result<()> {
+    if t.len().saturating_add(nodes) > Tape::MAX_NODES {
+        return Err(EvalError::TapeTooLarge(Tape::MAX_NODES));
+    }
+    Ok(())
+}
+
 /// otherwise; `check_binop_shapes` has already rejected the mismatched cases.
 fn mul_or_matmul(t: &mut Tape, lhs: &Val, rhs: &Val) -> Result<Val> {
     use Shape::*;
@@ -407,16 +413,18 @@ fn mul_or_matmul(t: &mut Tape, lhs: &Val, rhs: &Val) -> Result<Val> {
             let mt = transpose_rows(m);
             Ok(Val::Row(matrix::mat_vec_mul(t, &mt, r)))
         }
-        (Matrix(_, Some(_)), Vector(_)) => {
+        (Matrix(ra, Some(ca)), Vector(_)) => {
             let (Val::Vec(a), Val::Vec(b)) = (lhs, rhs) else {
                 return Err(EvalError::NotAScalar);
             };
+            room_for(t, ra.saturating_mul(2).saturating_mul(ca))?;
             Ok(Val::Vec(matrix::mat_vec_mul(t, a, b)))
         }
-        (Matrix(_, Some(_)), Matrix(_, Some(cb))) => {
+        (Matrix(ra, Some(ca)), Matrix(_, Some(cb))) => {
             let (Val::Vec(a), Val::Vec(b)) = (lhs, rhs) else {
                 return Err(EvalError::NotAScalar);
             };
+            room_for(t, ra.saturating_mul(cb).saturating_mul(2).saturating_mul(ca))?;
             Ok(Val::Vec(matrix::mat_mat_mul(t, a, b, cb)))
         }
         _ => Ok(v_mul(t, lhs, rhs)),
@@ -655,16 +663,16 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
         ("append_row", [a, b]) => {
             let lies_across =
                 |v: &Val| matches!(v.shape(), Shape::Matrix(..) | Shape::RowVector(_));
-            let mut rows = as_rows(a);
-            rows.extend(as_rows(b));
+            let mut rows = row_views(a);
+            rows.extend(row_views(b));
             if !lies_across(a) && !lies_across(b) {
-                return Ok(Val::Vec(rows.into_iter().flatten().collect()));
+                return Ok(Val::Vec(rows.concat()));
             }
-            return Ok(Val::Vec(same_width("append_row", rows)?));
+            return Ok(Val::Vec(same_width("append_row", &rows)?));
         }
         // Mirrors `append_row`: two rows stay a row, anything else is a matrix.
         ("append_col", [a, b]) => {
-            let (ra, rb) = (as_rows(a), as_rows(b));
+            let (ra, rb) = (row_views(a), row_views(b));
             if ra.len() != rb.len() {
                 return Err(EvalError::ShapeMismatch {
                     op: "append_col".into(),
@@ -672,19 +680,25 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                     rhs: b.shape().to_string(),
                 });
             }
-            let joined: Vec<Vec<Val>> = ra
-                .into_iter()
-                .zip(rb)
-                .map(|(mut x, y)| {
-                    x.extend(y);
-                    x
-                })
-                .collect();
+            let w = ra.first().map_or(0, |r| r.len()) + rb.first().map_or(0, |r| r.len());
+            if let Some((x, y)) = ra.iter().zip(&rb).find(|(x, y)| x.len() + y.len() != w) {
+                return Err(EvalError::ShapeMismatch {
+                    op: "append_col".into(),
+                    lhs: Shape::Vector(w).to_string(),
+                    rhs: Shape::Vector(x.len() + y.len()).to_string(),
+                });
+            }
+            let joined = ra.iter().zip(&rb).map(|(x, y)| {
+                let mut row = Vec::with_capacity(w);
+                row.extend_from_slice(x);
+                row.extend_from_slice(y);
+                row
+            });
             let lies_along = |v: &Val| matches!(v.shape(), Shape::RowVector(_) | Shape::Scalar);
             if lies_along(a) && lies_along(b) {
-                return Ok(Val::Row(joined.into_iter().flatten().collect()));
+                return Ok(Val::Row(joined.flatten().collect()));
             }
-            return Ok(Val::Vec(same_width("append_col", joined)?));
+            return Ok(Val::Vec(joined.map(Val::Row).collect()));
         }
         _ => {}
     }
@@ -917,7 +931,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             if args.iter().all(|a| a.elems().is_none()) {
                 Val::Row(args.to_vec())
             } else {
-                Val::Vec(same_width("[]", args.iter().map(as_rows_flat).collect())?)
+                Val::Vec(same_width("[]", &args.iter().map(as_rows_flat).collect::<Vec<_>>())?)
             }
         }
         // `sub_col(m, i, j, n)` — `n` entries of column `j`, starting at row `i`.
@@ -1101,6 +1115,12 @@ fn eval_block(t: &mut Tape, stmts: &[Stmt], env: &mut Env) -> Result<Flow> {
     let mut acc = Val::Num(0.0);
     let mut result = None;
     for s in stmts {
+        // Between statements is where a runaway trace can still be reported. An
+        // allocator that runs out mid-expression aborts instead, and on wasm an
+        // abort is a trap that takes the module instance down.
+        if t.over_limit() {
+            return Err(EvalError::TapeTooLarge(Tape::MAX_NODES));
+        }
         match eval_stmt(t, s, env)? {
             Flow::Val(v) => acc = v_add(t, &acc, &v),
             Flow::Break(v) => {
@@ -1187,6 +1207,9 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
             let saved_len = env.len();
             let mut acc = Val::Num(0.0);
             for i in lo..=hi {
+                if t.over_limit() {
+                    return Err(EvalError::TapeTooLarge(Tape::MAX_NODES));
+                }
                 // Loop counters are `int` in Stan, so `i / 2` truncates.
                 env.set_int_typed(var, Val::Num(i as f64));
                 match eval_block(t, body, env)? {

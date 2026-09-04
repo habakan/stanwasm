@@ -393,7 +393,7 @@ fn orient_rows(typ: &StanType, val: &mut Val) {
 
 pub struct Model {
     pub prog: StanProgram,
-    pub data_env: Env,
+    pub data_env: Rc<Env>,
     pub n_params: usize,
 }
 
@@ -418,7 +418,7 @@ impl Model {
             .sum();
         Ok(Self {
             prog,
-            data_env,
+            data_env: Rc::new(data_env),
             n_params,
         })
     }
@@ -478,7 +478,7 @@ impl Model {
     /// `Env` with data bound and parameters evaluated from `unconstrained`. Shared
     /// by `constrained_draw`/`generated_quantities`, which need no Jacobian.
     fn build_env(&self, tape: &mut Tape, leaves: &[u32]) -> Result<Env, EvalError> {
-        let mut env = self.data_env.clone();
+        let mut env = Env::nested(Rc::clone(&self.data_env));
         let mut leaf_idx = 0usize;
         for decl in &self.prog.parameters {
             let k = param_dims(&decl.typ, &self.data_env);
@@ -584,7 +584,7 @@ impl Model {
         leaves: &[u32],
         strict: bool,
     ) -> Result<u32, EvalError> {
-        let mut env = self.data_env.clone();
+        let mut env = Env::nested(Rc::clone(&self.data_env));
         env.set_strict_no_param_branch(strict);
 
         // Apply constraint transforms; accumulate Jacobian into lp.

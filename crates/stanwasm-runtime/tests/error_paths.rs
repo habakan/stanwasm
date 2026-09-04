@@ -3,7 +3,8 @@
 //! and forces a page reload in the browser). Every case here is reachable from
 //! hand-written Stan source, e.g. via the gallery's Wasm Sandbox tab.
 
-use stanwasm_runtime::{data_from_json, Model};
+use stanwasm_autodiff::Tape;
+use stanwasm_runtime::{data_from_json, Model, Val};
 
 fn load(src: &str, data: &str) -> Result<Model, String> {
     let env = data_from_json(data).map_err(|e| e.to_string())?;
@@ -319,4 +320,35 @@ fn an_ode_integrator_says_what_it_is() {
     };
     assert!(msg.contains("integrate_ode_rk45"), "{msg}");
     assert!(msg.contains("adaptive"), "{msg}");
+}
+
+/// The data block is deserialised straight into `Val`, so the rejections that
+/// used to come from a `serde_json::Value` walk have to still happen — and say
+/// which field.
+#[test]
+fn a_data_field_that_is_not_a_number_says_which() {
+    for bad in [
+        r#"{"x": "hello"}"#,
+        r#"{"x": [1, true]}"#,
+        r#"{"x": {"a": 1}}"#,
+    ] {
+        let msg = data_from_json(bad).map(|_| ()).unwrap_err().to_string();
+        assert!(msg.contains("\"x\""), "{bad} gave {msg}");
+    }
+    assert!(data_from_json("[1, 2]").is_err());
+    assert!(data_from_json("{ not json").is_err());
+}
+
+#[test]
+fn nested_arrays_keep_their_shape() {
+    let env = data_from_json(r#"{"N": 2, "M": [[1, 2, 3], [4, 5, 6]], "v": [7.5, -8]}"#).unwrap();
+    let Some(Val::Vec(rows)) = env.get("M") else {
+        panic!("M is not a container");
+    };
+    assert_eq!(rows.len(), 2);
+    let Some(Val::Vec(first)) = rows.first() else {
+        panic!("row is not a container");
+    };
+    assert_eq!(first.len(), 3);
+    assert_eq!(env.get("N").unwrap().to_f64(&Tape::new()).unwrap(), 2.0);
 }

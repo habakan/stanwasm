@@ -20,6 +20,9 @@ struct Binding {
 #[derive(Debug, Default, Clone)]
 pub struct Env {
     vars: Vec<Binding>,
+    /// Bindings read through rather than copied. The data block is the largest
+    /// value here, and a scope per call or per trace duplicated all of it.
+    base: Option<Rc<Env>>,
     /// Shared RNG for `_rng` calls, set only while evaluating `generated
     /// quantities`. `Rc` means a cloned `Env` advances the same stream.
     rng: Option<Rc<RefCell<ChaCha8Rng>>>,
@@ -38,6 +41,26 @@ impl Env {
         Self::default()
     }
 
+    /// A scope that reads through to `base` and writes into its own bindings.
+    pub fn nested(base: Rc<Env>) -> Self {
+        Self {
+            vars: Vec::new(),
+            rng: base.rng.clone(),
+            strict_no_param_branch: base.strict_no_param_branch,
+            funcs: base.funcs.clone(),
+            call_stack: base.call_stack.clone(),
+            base: Some(base),
+        }
+    }
+
+    fn binding(&self, name: &str) -> Option<&Binding> {
+        self.vars
+            .iter()
+            .rev()
+            .find(|b| b.name == name)
+            .or_else(|| self.base.as_ref()?.binding(name))
+    }
+
     /// Rebind `name`, keeping whatever int-ness the existing binding declared
     /// (`int k; k = k + 1;` stays an int). New names default to real.
     pub fn set(&mut self, name: &str, val: Val) {
@@ -47,10 +70,11 @@ impl Env {
                 return;
             }
         }
+        let is_int = self.is_int(name);
         self.vars.push(Binding {
             name: name.to_string(),
             val,
-            is_int: false,
+            is_int,
         });
     }
 
@@ -81,16 +105,18 @@ impl Env {
     }
 
     pub fn get(&self, name: &str) -> Option<&Val> {
-        self.vars
-            .iter()
-            .rev()
-            .find(|b| b.name == name)
-            .map(|b| &b.val)
+        self.binding(name).map(|b| &b.val)
     }
 
     /// Mutable access to a binding, so an indexed write can edit in place
     /// rather than rebuild the container it lives in.
     pub fn get_mut(&mut self, name: &str) -> Option<&mut Val> {
+        if !self.vars.iter().any(|b| b.name == name) {
+            // Writing through to a shared binding would edit every scope holding
+            // it, so the write gets its own copy. Stan data is never assigned.
+            let b = self.base.as_ref()?.binding(name)?.clone();
+            self.vars.push(b);
+        }
         self.vars
             .iter_mut()
             .rev()
@@ -105,13 +131,14 @@ impl Env {
         }
     }
 
+    /// Whether `name` is bound in this scope or any it reads through.
+    pub fn has(&self, name: &str) -> bool {
+        self.binding(name).is_some()
+    }
+
     /// Whether `name` was declared with an integral Stan type.
     pub fn is_int(&self, name: &str) -> bool {
-        self.vars
-            .iter()
-            .rev()
-            .find(|b| b.name == name)
-            .is_some_and(|b| b.is_int)
+        self.binding(name).is_some_and(|b| b.is_int)
     }
 
     pub fn len(&self) -> usize {

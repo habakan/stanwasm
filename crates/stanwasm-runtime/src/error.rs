@@ -33,6 +33,14 @@ pub enum EvalError {
     UnsupportedAssignmentTarget,
     #[error("while loop exceeded {0} iterations — possible infinite loop")]
     WhileLoopOverflow(u64),
+    #[error(
+        "the recorded computation graph passed {0} nodes. Every scalar \
+         operation the model performs is one, so this is a model whose data \
+         and parameters multiply out beyond what fits in memory — 60,000 rows \
+         against 78,500 weights is billions. Fit a subset, or reduce the \
+         model's width"
+    )]
+    TapeTooLarge(usize),
     #[error("invalid parameters: {0}")]
     InvalidRngParams(String),
     #[error("index {index} out of bounds for a length-{len} array/vector")]
