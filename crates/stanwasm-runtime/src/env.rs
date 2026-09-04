@@ -88,6 +88,16 @@ impl Env {
             .map(|b| &b.val)
     }
 
+    /// Mutable access to a binding, so an indexed write can edit in place
+    /// rather than rebuild the container it lives in.
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut Val> {
+        self.vars
+            .iter_mut()
+            .rev()
+            .find(|b| b.name == name)
+            .map(|b| &mut b.val)
+    }
+
     /// Whether `name` was declared with an integral Stan type.
     pub fn is_int(&self, name: &str) -> bool {
         self.vars

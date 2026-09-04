@@ -102,29 +102,52 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 eval_expr(t, else_e, env)
             }
         }
-        Expr::Index(arr_e, idx_e) => {
-            let one_based = eval_expr(t, idx_e, env)?.to_i32(t)?;
-            let idx = one_based - 1;
-            let arr = eval_expr(t, arr_e, env)?;
-            match arr {
-                Val::Vec(xs) | Val::Row(xs) => {
-                    if idx >= 0 {
-                        if let Some(v) = xs.get(idx as usize) {
-                            return Ok(v.clone());
-                        }
-                    }
-                    Err(EvalError::IndexOutOfBounds {
+        // `M[i, j]` reads one element out of the binding. Evaluating `M` first
+        // would copy the whole container to index it, which is quadratic in a
+        // loop over its elements.
+        Expr::Index(..) => {
+            let mut idxs: Vec<i32> = Vec::new();
+            let mut cur = expr;
+            while let Expr::Index(base, idx_e) = cur {
+                idxs.push(eval_expr(t, idx_e, env)?.to_i32(t)?);
+                cur = base;
+            }
+            let owned;
+            let mut v = match cur {
+                Expr::Var(n) => env
+                    .get(n)
+                    .ok_or_else(|| EvalError::UndefinedVariable(n.clone()))?,
+                other => {
+                    owned = eval_expr(t, other, env)?;
+                    &owned
+                }
+            };
+            for one_based in idxs.into_iter().rev() {
+                // Indexing a scalar yields the scalar, as it did before.
+                let Some(xs) = v.elems() else { break };
+                v = usize::try_from(one_based - 1)
+                    .ok()
+                    .and_then(|k| xs.get(k))
+                    .ok_or(EvalError::IndexOutOfBounds {
                         index: one_based,
                         len: xs.len(),
-                    })
-                }
-                other => Ok(other),
+                    })?;
             }
+            Ok(v.clone())
         }
         Expr::Slice(base_e, idxs) => {
-            let base = eval_expr(t, base_e, env)?;
             let path = resolve_idxs(t, idxs, env)?;
-            slice_val(&base, &path)
+            let owned;
+            let base = match base_e.as_ref() {
+                Expr::Var(n) => env
+                    .get(n)
+                    .ok_or_else(|| EvalError::UndefinedVariable(n.clone()))?,
+                other => {
+                    owned = eval_expr(t, other, env)?;
+                    &owned
+                }
+            };
+            slice_val(base, &path)
         }
         Expr::Call(name, args) => eval_call(t, name, args, env),
     }
@@ -537,13 +560,12 @@ fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<(
 
     let mut path = Vec::new();
     let root = walk(t, lhs, env, &mut path)?.clone();
-    let mut updated = env
-        .get(&root)
-        .cloned()
+    // In place: copying the container out and back would be quadratic in a loop
+    // that fills it one element at a time.
+    let slot = env
+        .get_mut(&root)
         .ok_or(EvalError::UndefinedVariable(root.clone()))?;
-    put(&mut updated, &path, &val)?;
-    env.set(&root, updated);
-    Ok(())
+    put(slot, &path, &val)
 }
 
 fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> {
