@@ -14,10 +14,11 @@ stanwasm-ast.workspace = true
 stanwasm-autodiff.workspace = true
 stanwasm-parser.workspace = true
 thiserror.workspace = true
+serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 rand.workspace = true
 rand_distr = "0.6"
 
 [features]
 default = ["json"]
-json = ["dep:serde_json"]
+json = ["dep:serde", "dep:serde_json"]
