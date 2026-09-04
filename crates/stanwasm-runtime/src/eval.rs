@@ -235,6 +235,57 @@ pub fn stan_type_is_int(typ: &StanType) -> bool {
 }
 
 /// Stan's `*` is a matrix product when the ranks call for one and element-wise
+/// Orientation only ever changes what `*` does, so everything else — the
+/// remaining builtins, and every density — reads the same list of numbers
+/// either way. A `Val::Row` left in place would fall through their
+/// `Val::Vec` arms unmatched.
+fn drop_orientation(args: Vec<Val>) -> Vec<Val> {
+    args.into_iter()
+        .map(|v| match v {
+            Val::Row(xs) => Val::Vec(xs),
+            other => other,
+        })
+        .collect()
+}
+
+/// A value seen as rows of elements: a matrix as itself, a column vector as one
+/// column, a row vector as one row, a scalar as a single cell.
+fn as_rows(v: &Val) -> Vec<Vec<Val>> {
+    match v {
+        Val::Row(xs) => vec![xs.clone()],
+        Val::Vec(xs) if xs.iter().any(|x| x.elems().is_some()) => xs
+            .iter()
+            .map(|r| {
+                r.elems()
+                    .map(<[Val]>::to_vec)
+                    .unwrap_or_else(|| vec![r.clone()])
+            })
+            .collect(),
+        Val::Vec(xs) => xs.iter().map(|x| vec![x.clone()]).collect(),
+        scalar => vec![vec![scalar.clone()]],
+    }
+}
+
+/// One element of a `[...]` literal as a row.
+fn as_rows_flat(v: &Val) -> Vec<Val> {
+    v.elems()
+        .map(<[Val]>::to_vec)
+        .unwrap_or_else(|| vec![v.clone()])
+}
+
+/// Rows into a matrix, refusing a ragged one — the shape a `Val` cannot carry.
+fn same_width(op: &str, rows: Vec<Vec<Val>>) -> Result<Vec<Val>> {
+    let w = rows.first().map_or(0, Vec::len);
+    match rows.iter().find(|r| r.len() != w) {
+        Some(bad) => Err(EvalError::ShapeMismatch {
+            op: op.to_string(),
+            lhs: Shape::Vector(w).to_string(),
+            rhs: Shape::Vector(bad.len()).to_string(),
+        }),
+        None => Ok(rows.into_iter().map(Val::Vec).collect()),
+    }
+}
+
 /// Rows of a matrix as columns. The caller has already established that every
 /// element is a container, so a shorter row simply contributes fewer entries.
 fn transpose_rows(rows: &[Val]) -> Vec<Val> {
@@ -503,25 +554,56 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
     if let Some(def) = env.func(name) {
         return eval_user_call(t, name, &def, evaled, env);
     }
-    // Stan lays a row vector out along the rows and a column vector along the
-    // columns, so this one reads the orientation before it is dropped below.
-    if let ("rep_matrix", [v, n_e]) = (name, evaled.as_slice()) {
-        let n = n_e.to_i32(t)?.max(0) as usize;
-        return Ok(match v {
-            Val::Row(xs) => Val::Vec(vec![Val::Vec(xs.clone()); n]),
-            Val::Vec(xs) => Val::Vec(xs.iter().map(|x| Val::Vec(vec![x.clone(); n])).collect()),
-            scalar => Val::Vec(vec![Val::Vec(vec![scalar.clone(); n]); n]),
-        });
+    // These read their operands' orientation — which way a 1-D value lies decides
+    // the result's shape — so they are answered before it is dropped below.
+    match (name, evaled.as_slice()) {
+        ("rep_matrix", [v, n_e]) => {
+            let n = n_e.to_i32(t)?.max(0) as usize;
+            return Ok(match v {
+                Val::Row(xs) => Val::Vec(vec![Val::Vec(xs.clone()); n]),
+                Val::Vec(xs) => Val::Vec(xs.iter().map(|x| Val::Vec(vec![x.clone(); n])).collect()),
+                scalar => Val::Vec(vec![Val::Vec(vec![scalar.clone(); n]); n]),
+            });
+        }
+        // A matrix or a row vector on either side stacks rows; two columns, or
+        // scalars, run together into one column.
+        ("append_row", [a, b]) => {
+            let lies_across =
+                |v: &Val| matches!(v.shape(), Shape::Matrix(..) | Shape::RowVector(_));
+            let mut rows = as_rows(a);
+            rows.extend(as_rows(b));
+            if !lies_across(a) && !lies_across(b) {
+                return Ok(Val::Vec(rows.into_iter().flatten().collect()));
+            }
+            return Ok(Val::Vec(same_width("append_row", rows)?));
+        }
+        // Mirrors `append_row`: two rows stay a row, anything else is a matrix.
+        ("append_col", [a, b]) => {
+            let (ra, rb) = (as_rows(a), as_rows(b));
+            if ra.len() != rb.len() {
+                return Err(EvalError::ShapeMismatch {
+                    op: "append_col".into(),
+                    lhs: a.shape().to_string(),
+                    rhs: b.shape().to_string(),
+                });
+            }
+            let joined: Vec<Vec<Val>> = ra
+                .into_iter()
+                .zip(rb)
+                .map(|(mut x, y)| {
+                    x.extend(y);
+                    x
+                })
+                .collect();
+            let lies_along = |v: &Val| matches!(v.shape(), Shape::RowVector(_) | Shape::Scalar);
+            if lies_along(a) && lies_along(b) {
+                return Ok(Val::Row(joined.into_iter().flatten().collect()));
+            }
+            return Ok(Val::Vec(same_width("append_col", joined)?));
+        }
+        _ => {}
     }
-    // Every remaining builtin works on the elements, and a row reaching one of
-    // them as a `Val::Row` would fall through its `Val::Vec` arm unmatched.
-    let evaled: Vec<Val> = evaled
-        .into_iter()
-        .map(|v| match v {
-            Val::Row(xs) => Val::Vec(xs),
-            other => other,
-        })
-        .collect();
+    let evaled = drop_orientation(evaled);
     Ok(match (name, evaled.as_slice()) {
         ("log", [a]) => v_log(t, a),
         ("exp", [a]) => v_exp(t, a),
@@ -704,7 +786,115 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             let total = v_sum(t, &es);
             Val::Vec(es.iter().map(|e| v_div(t, e, &total)).collect())
         }
+        ("negative_infinity", []) => Val::Num(f64::NEG_INFINITY),
+        ("pi", []) => Val::Num(PI),
+        // `tail(v, n)` — the last `n` entries.
+        ("tail", [Val::Vec(xs), n_e]) => {
+            let n = n_e.to_i32(t)?;
+            let start = xs.len() as i32 - n;
+            if n < 0 || start < 0 {
+                return Err(EvalError::IndexOutOfBounds {
+                    index: n,
+                    len: xs.len(),
+                });
+            }
+            Val::Vec(xs[start as usize..].to_vec())
+        }
+        // `to_vector` flattens whatever it is given, in row-major order.
+        ("to_vector", [v]) => {
+            fn flat(v: &Val, out: &mut Vec<Val>) {
+                match v.elems() {
+                    Some(xs) => xs.iter().for_each(|x| flat(x, out)),
+                    None => out.push(v.clone()),
+                }
+            }
+            let mut out = Vec::new();
+            flat(v, &mut out);
+            Val::Vec(out)
+        }
+        // `[a, b, c]`: scalars make a row vector, containers make its rows.
+        ("[]", args) if !args.is_empty() => {
+            if args.iter().all(|a| a.elems().is_none()) {
+                Val::Row(args.to_vec())
+            } else {
+                Val::Vec(same_width("[]", args.iter().map(as_rows_flat).collect())?)
+            }
+        }
+        // `sub_col(m, i, j, n)` — `n` entries of column `j`, starting at row `i`.
+        ("sub_col", [Val::Vec(rows), i_e, j_e, n_e]) => {
+            let (i, j, n) = (i_e.to_i32(t)?, j_e.to_i32(t)?, n_e.to_i32(t)?);
+            let mut out = Vec::with_capacity(n.max(0) as usize);
+            for k in 0..n {
+                let row = usize::try_from(i - 1 + k)
+                    .ok()
+                    .and_then(|r| rows.get(r))
+                    .ok_or(EvalError::IndexOutOfBounds {
+                        index: i + k,
+                        len: rows.len(),
+                    })?;
+                let cell = row
+                    .elems()
+                    .and_then(|xs| usize::try_from(j - 1).ok().and_then(|c| xs.get(c)))
+                    .ok_or(EvalError::IndexOutOfBounds {
+                        index: j,
+                        len: row.elems().map_or(1, <[Val]>::len),
+                    })?;
+                out.push(cell.clone());
+            }
+            Val::Vec(out)
+        }
+        // `diag(v) m diag(v)`, which is how a correlation matrix and a vector of
+        // scales become a covariance.
+        ("quad_form_diag", [Val::Vec(rows), Val::Vec(d)]) => {
+            let mut out = Vec::with_capacity(rows.len());
+            for (i, row) in rows.iter().enumerate() {
+                let Some(cells) = row.elems() else {
+                    return Err(EvalError::NotAScalar);
+                };
+                let mut scaled = Vec::with_capacity(cells.len());
+                for (j, c) in cells.iter().enumerate() {
+                    let left = v_mul(t, &d[i], c);
+                    scaled.push(v_mul(t, &left, &d[j]));
+                }
+                out.push(Val::Vec(scaled));
+            }
+            Val::Vec(out)
+        }
+        // `L Lᵀ` from the lower triangle of `L`, so entry (i, j) sums to
+        // `min(i, j)` rather than over the whole row.
+        ("multiply_lower_tri_self_transpose", [Val::Vec(rows)]) => {
+            let n = rows.len();
+            let mut out = Vec::with_capacity(n);
+            for i in 0..n {
+                let mut row = Vec::with_capacity(n);
+                for j in 0..n {
+                    let mut acc = Val::Num(0.0);
+                    for k in 0..=i.min(j) {
+                        let (Some(li), Some(lj)) = (rows[i].elems(), rows[j].elems()) else {
+                            return Err(EvalError::NotAScalar);
+                        };
+                        let p = v_mul(t, &li[k], &lj[k]);
+                        acc = v_add(t, &acc, &p);
+                    }
+                    row.push(acc);
+                }
+                out.push(Val::Vec(row));
+            }
+            Val::Vec(out)
+        }
         // Sizes are structural, so they read off the container rather than the tape.
+        ("dims", [v]) => {
+            let mut out = Vec::new();
+            let mut cur = v;
+            while let Some(xs) = cur.elems() {
+                out.push(Val::Num(xs.len() as f64));
+                match xs.first() {
+                    Some(first) => cur = first,
+                    None => break,
+                }
+            }
+            Val::Vec(out)
+        }
         ("size", [Val::Vec(xs)]) | ("num_elements", [Val::Vec(xs)]) | ("rows", [Val::Vec(xs)]) => {
             Val::Num(xs.len() as f64)
         }
@@ -727,6 +917,14 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 c_e.to_i32(t)?.max(0) as usize,
             );
             Val::Vec(vec![Val::Vec(vec![v.clone(); c]); r])
+        }
+        ("dot_self", [Val::Vec(a)]) => {
+            let mut acc = Val::Num(0.0);
+            for x in a {
+                let sq = v_mul(t, x, x);
+                acc = v_add(t, &acc, &sq);
+            }
+            acc
         }
         ("dot_product", [Val::Vec(a), Val::Vec(b)]) => {
             if a.len() != b.len() {
@@ -764,7 +962,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 Val::Num(0.0)
             } else {
                 let x = &args[0];
-                let rest: Vec<Val> = args[1..].to_vec();
+                let rest = drop_orientation(args[1..].to_vec());
                 match x {
                     Val::Vec(xs) | Val::Row(xs) => eval_sample_vec(t, base, xs, &rest)?,
                     _ => eval_dist(t, base, x, &rest)?,
@@ -827,10 +1025,11 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
     match stmt {
         Stmt::Sample(lhs, dist, args) => {
             let x = eval_expr(t, lhs, env)?;
-            let evaled_args: Vec<Val> = args
-                .iter()
-                .map(|a| eval_expr(t, a, env))
-                .collect::<Result<_>>()?;
+            let evaled_args = drop_orientation(
+                args.iter()
+                    .map(|a| eval_expr(t, a, env))
+                    .collect::<Result<Vec<_>>>()?,
+            );
             let v = match &x {
                 Val::Vec(xs) | Val::Row(xs) => eval_sample_vec(t, dist, xs, &evaled_args)?,
                 _ => eval_dist(t, dist, &x, &evaled_args)?,

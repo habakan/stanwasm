@@ -489,6 +489,18 @@ impl Parser {
                 self.expect_tok(&Token::RParen)?;
                 Ok(e)
             }
+            // `[a, b, c]` — a row vector of scalars, or a matrix of its rows.
+            // Spelled as a call because it needs no evaluation rule of its own,
+            // and `[]` is not something a Stan program can name.
+            Token::LBrack => {
+                self.consume();
+                let mut args = vec![self.parse_expr(0)?];
+                while self.try_tok(&Token::Comma) {
+                    args.push(self.parse_expr(0)?);
+                }
+                self.expect_tok(&Token::RBrack)?;
+                Ok(Expr::Call("[]".into(), args))
+            }
             got => Err(ParseError::UnexpectedInExpr { got }),
         }
     }
