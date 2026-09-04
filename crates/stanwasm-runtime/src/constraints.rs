@@ -86,8 +86,8 @@ pub fn param_dims(typ: &StanType, env: &Env) -> usize {
     match typ {
         StanType::Real(_) => 1,
         StanType::Int(_) => 0,
-        StanType::Vector(size, _) => eval_plain_int(size, env),
-        StanType::Matrix(r, c) => eval_plain_int(r, env) * eval_plain_int(c, env),
+        StanType::Vector(size, _) | StanType::RowVector(size, _) => eval_plain_int(size, env),
+        StanType::Matrix(r, c, _) => eval_plain_int(r, env) * eval_plain_int(c, env),
         StanType::Simplex(k) => eval_plain_int(k, env).saturating_sub(1),
         StanType::Ordered(k) => eval_plain_int(k, env),
         StanType::Array(size, elem) => eval_plain_int(size, env) * param_dims(elem, env),
@@ -143,6 +143,21 @@ pub fn constrain(
             let lo = eval_plain(t, lo_e, env)?;
             let hi = eval_plain(t, hi_e, env)?;
             apply_lower_upper(t, &raw[0], &lo, &hi)
+        }
+        // A row vector's entries transform exactly as a column's; only the
+        // orientation of the result differs.
+        StanType::RowVector(size, c) => {
+            let (v, jac) = constrain(
+                t,
+                name,
+                &StanType::Vector(size.clone(), c.clone()),
+                raw,
+                env,
+            )?;
+            let Val::Vec(xs) = v else {
+                return Err(EvalError::NotAScalar);
+            };
+            (Val::Row(xs), jac)
         }
         StanType::Vector(_, Constraint::None) => (Val::Vec(raw.to_vec()), Val::Num(0.0)),
         StanType::Vector(_, Constraint::Lower(lo_e)) => {
@@ -276,9 +291,10 @@ pub fn constrain(
             }
             (Val::Vec(out), log_jac)
         }
-        // matrix[R, C] — unconstrained, but reshaped into rows so indexing and the
-        // matrix-shaped distributions see structure rather than one flat vector.
-        StanType::Matrix(r_e, c_e) => {
+        // matrix[R, C] — reshaped into rows so indexing and the matrix-shaped
+        // distributions see structure rather than one flat vector. An element
+        // bound transforms each entry the way a vector's does.
+        StanType::Matrix(r_e, c_e, elem_c) => {
             let cols = match eval_plain(t, c_e, env)? {
                 Val::Num(v) => v as usize,
                 other => return Err(bad_size(name, &other)),
@@ -296,8 +312,21 @@ pub fn constrain(
                     ),
                 });
             }
-            let mat = raw.chunks(cols).map(|row| Val::Vec(row.to_vec())).collect();
-            (Val::Vec(mat), Val::Num(0.0))
+            let (flat, log_jac) = constrain(
+                t,
+                name,
+                &StanType::Vector(c_e.clone(), elem_c.clone()),
+                raw,
+                env,
+            )?;
+            let Val::Vec(flat) = flat else {
+                return Err(EvalError::NotAScalar);
+            };
+            let mat = flat
+                .chunks(cols)
+                .map(|row| Val::Vec(row.to_vec()))
+                .collect();
+            (Val::Vec(mat), log_jac)
         }
         // cholesky_factor_cov[K]: K(K+1)/2 raw → lower-triangular L with a positive
         // diagonal. L[m][m] = exp(raw), L[m][n<m] = raw; log_jac = Σ raw diagonal.
@@ -376,6 +405,7 @@ fn type_name(t: &StanType) -> String {
         StanType::Real(_) => "real".into(),
         StanType::Int(_) => "int".into(),
         StanType::Vector(..) => "vector".into(),
+        StanType::RowVector(..) => "row_vector".into(),
         StanType::Matrix(..) => "matrix".into(),
         StanType::Simplex(_) => "simplex".into(),
         StanType::Ordered(_) => "ordered".into(),

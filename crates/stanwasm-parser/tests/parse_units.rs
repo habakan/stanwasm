@@ -1,7 +1,7 @@
 //! Targeted unit-level tests pinning down specific parsing behavior that the
 //! whole-model integration test would not detect at fine granularity.
 
-use stanwasm_ast::{Constraint, Expr, StanType, Stmt};
+use stanwasm_ast::{Constraint, Expr, SliceIdx, StanType, Stmt};
 use stanwasm_parser::parse;
 
 #[test]
@@ -57,7 +57,7 @@ model {
 }
 
 #[test]
-fn range_index_lowers_to_segment_call() {
+fn a_range_index_becomes_a_slice() {
     let src = r#"
 data { vector[10] y; }
 parameters { real mu; }
@@ -66,18 +66,53 @@ model {
 }
 "#;
     let prog = parse(src).unwrap();
-    // model[0] is target += sum(y[2:5]); the y[2:5] should become segment(y, 2, 5-2+1)
-    let s = &prog.model[0];
-    match s {
-        Stmt::TargetIncr(Expr::Call(name, args)) if name == "sum" => match &args[0] {
-            Expr::Call(seg, seg_args) if seg == "segment" => {
-                assert_eq!(seg_args.len(), 3);
-                assert_eq!(&seg_args[1], &Expr::IntNum(2));
-            }
-            other => panic!("expected segment call, got {other:?}"),
-        },
-        other => panic!("expected target += sum(...), got {other:?}"),
-    }
+    let Stmt::TargetIncr(Expr::Call(name, args)) = &prog.model[0] else {
+        panic!("expected target += sum(...), got {:?}", prog.model[0]);
+    };
+    assert_eq!(name, "sum");
+    let Expr::Slice(base, idxs) = &args[0] else {
+        panic!("expected a slice, got {:?}", args[0]);
+    };
+    assert_eq!(**base, Expr::Var("y".into()));
+    assert_eq!(
+        idxs.as_slice(),
+        [SliceIdx::Range(
+            Some(Expr::IntNum(2)),
+            Some(Expr::IntNum(5))
+        )]
+    );
+}
+
+/// A range on one dimension and an index on another — the form that a plain
+/// `segment` lowering could not express.
+#[test]
+fn a_range_may_be_mixed_with_an_index() {
+    let prog = parse("model { target += sum(W[1:rows(W), k]); }").unwrap();
+    let Stmt::TargetIncr(Expr::Call(_, args)) = &prog.model[0] else {
+        panic!("expected a call, got {:?}", prog.model[0]);
+    };
+    let Expr::Slice(_, idxs) = &args[0] else {
+        panic!("expected a slice, got {:?}", args[0]);
+    };
+    assert!(matches!(idxs[0], SliceIdx::Range(Some(_), Some(_))));
+    assert_eq!(idxs[1], SliceIdx::At(Expr::Var("k".into())));
+}
+
+/// `x[ : ]` and `x[2 : ]` leave a bound to the container's own end.
+#[test]
+fn a_range_bound_may_be_omitted() {
+    let prog = parse("model { target += sum(M[ : , 2]) + sum(v[3 : ]); }").unwrap();
+    let Stmt::TargetIncr(Expr::BinOp(_, lhs, rhs)) = &prog.model[0] else {
+        panic!("expected a sum of two, got {:?}", prog.model[0]);
+    };
+    let (Expr::Call(_, la), Expr::Call(_, ra)) = (lhs.as_ref(), rhs.as_ref()) else {
+        panic!("expected two calls");
+    };
+    let (Expr::Slice(_, li), Expr::Slice(_, ri)) = (&la[0], &ra[0]) else {
+        panic!("expected two slices");
+    };
+    assert_eq!(li[0], SliceIdx::Range(None, None));
+    assert_eq!(ri[0], SliceIdx::Range(Some(Expr::IntNum(3)), None));
 }
 
 #[test]

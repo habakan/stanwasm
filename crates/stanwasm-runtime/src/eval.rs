@@ -9,7 +9,7 @@ use crate::ops::{
     v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_sub, v_sum, v_tan, v_tanh,
 };
 use crate::value::{Shape, Val};
-use stanwasm_ast::{Expr, FuncDef, StanType, Stmt};
+use stanwasm_ast::{Expr, FuncDef, SliceIdx, StanType, Stmt};
 use stanwasm_autodiff::Tape;
 use std::f64::consts::PI;
 
@@ -113,7 +113,80 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 other => Ok(other),
             }
         }
+        Expr::Slice(base_e, idxs) => {
+            let base = eval_expr(t, base_e, env)?;
+            let path = resolve_idxs(t, idxs, env)?;
+            slice_val(&base, &path)
+        }
         Expr::Call(name, args) => eval_call(t, name, args, env),
+    }
+}
+
+/// A `SliceIdx` with its bounds evaluated. One-based, like Stan's; `None` is
+/// the container's own end, which is only known once the walk reaches it.
+#[derive(Debug, Clone, Copy)]
+enum Path {
+    At(i32),
+    Range(Option<i32>, Option<i32>),
+}
+
+fn resolve_idxs(t: &mut Tape, idxs: &[SliceIdx], env: &Env) -> Result<Vec<Path>> {
+    idxs.iter()
+        .map(|i| {
+            Ok(match i {
+                SliceIdx::At(e) => Path::At(eval_expr(t, e, env)?.to_i32(t)?),
+                SliceIdx::Range(lo, hi) => Path::Range(
+                    lo.as_ref()
+                        .map(|e| eval_expr(t, e, env)?.to_i32(t))
+                        .transpose()?,
+                    hi.as_ref()
+                        .map(|e| eval_expr(t, e, env)?.to_i32(t))
+                        .transpose()?,
+                ),
+            })
+        })
+        .collect()
+}
+
+/// The half-open span a range covers, checked against the container it indexes.
+/// `hi == lo - 1` is Stan's empty slice and stays legal.
+fn range_bounds(lo: Option<i32>, hi: Option<i32>, len: usize) -> Result<(i32, i32)> {
+    let lo = lo.unwrap_or(1);
+    let hi = hi.unwrap_or(len as i32);
+    if lo < 1 || hi > len as i32 || hi < lo - 1 {
+        return Err(EvalError::IndexOutOfBounds {
+            index: if lo < 1 { lo } else { hi },
+            len,
+        });
+    }
+    Ok((lo, hi))
+}
+
+fn slice_val(v: &Val, path: &[Path]) -> Result<Val> {
+    let Some((head, rest)) = path.split_first() else {
+        return Ok(v.clone());
+    };
+    let Some(xs) = v.elems() else {
+        return Err(EvalError::NotAScalar);
+    };
+    match head {
+        Path::At(i) => {
+            let at = usize::try_from(i - 1).ok().and_then(|k| xs.get(k)).ok_or(
+                EvalError::IndexOutOfBounds {
+                    index: *i,
+                    len: xs.len(),
+                },
+            )?;
+            slice_val(at, rest)
+        }
+        Path::Range(lo, hi) => {
+            let (lo, hi) = range_bounds(*lo, *hi, xs.len())?;
+            let mut out = Vec::with_capacity((hi - lo + 1).max(0) as usize);
+            for k in lo..=hi {
+                out.push(slice_val(&xs[(k - 1) as usize], rest)?);
+            }
+            Ok(v.like(out))
+        }
     }
 }
 
@@ -129,7 +202,7 @@ fn is_int_expr(e: &Expr, env: &Env) -> bool {
         Expr::Num(_) => false,
         Expr::Var(n) => env.is_int(n),
         // `y[i]` is an int exactly when `y` is an `array[...] int`.
-        Expr::Index(base, _) => is_int_expr(base, env),
+        Expr::Index(base, _) | Expr::Slice(base, _) => is_int_expr(base, env),
         // Int only if it is int whichever way the condition goes.
         Expr::Ternary(_, a, b) => is_int_expr(a, env) && is_int_expr(b, env),
         Expr::UnOp(op, a) => op == "-" && is_int_expr(a, env),
@@ -342,49 +415,75 @@ fn eval_user_call(
 /// then rebuilds the containers on the way back out — `Val` is a tree of owned
 /// vectors, so the write has to replace each level rather than mutate in place.
 fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<()> {
-    let mut idxs: Vec<usize> = Vec::new();
-    let mut cur = lhs;
-    let root = loop {
-        match cur {
+    /// The index path from the outermost expression down to the root binding.
+    fn walk<'a>(t: &mut Tape, e: &'a Expr, env: &Env, path: &mut Vec<Path>) -> Result<&'a String> {
+        match e {
+            Expr::Var(name) => Ok(name),
             Expr::Index(base, idx_e) => {
-                let one_based = eval_expr(t, idx_e, env)?.to_i32(t)?;
-                if one_based < 1 {
-                    return Err(EvalError::IndexOutOfBounds {
-                        index: one_based,
-                        len: 0,
-                    });
-                }
-                idxs.push((one_based - 1) as usize);
-                cur = base;
+                let root = walk(t, base, env, path)?;
+                path.push(Path::At(eval_expr(t, idx_e, env)?.to_i32(t)?));
+                Ok(root)
             }
-            Expr::Var(name) => break name,
-            _ => return Err(EvalError::UnsupportedAssignmentTarget),
+            Expr::Slice(base, idxs) => {
+                let root = walk(t, base, env, path)?;
+                path.extend(resolve_idxs(t, idxs, env)?);
+                Ok(root)
+            }
+            _ => Err(EvalError::UnsupportedAssignmentTarget),
         }
-    };
-    idxs.reverse();
+    }
 
-    fn put(container: &mut Val, idxs: &[usize], val: Val) -> Result<()> {
-        let Some((&i, rest)) = idxs.split_first() else {
-            *container = val;
+    fn put(container: &mut Val, path: &[Path], val: &Val) -> Result<()> {
+        let Some((head, rest)) = path.split_first() else {
+            *container = val.clone();
             return Ok(());
         };
         let (Val::Vec(xs) | Val::Row(xs)) = container else {
             return Err(EvalError::NotAScalar);
         };
         let len = xs.len();
-        let slot = xs.get_mut(i).ok_or(EvalError::IndexOutOfBounds {
-            index: i as i32 + 1,
-            len,
-        })?;
-        put(slot, rest, val)
+        match head {
+            Path::At(i) => {
+                let slot = usize::try_from(i - 1)
+                    .ok()
+                    .and_then(|k| xs.get_mut(k))
+                    .ok_or(EvalError::IndexOutOfBounds { index: *i, len })?;
+                put(slot, rest, val)
+            }
+            Path::Range(lo, hi) => {
+                let (lo, hi) = range_bounds(*lo, *hi, len)?;
+                // A container on the right is written across the span; a scalar
+                // is written into every slot of it.
+                let src = val.elems();
+                if let Some(es) = src {
+                    if es.len() as i32 != hi - lo + 1 {
+                        return Err(EvalError::ShapeMismatch {
+                            op: "=".into(),
+                            lhs: Shape::Vector((hi - lo + 1).max(0) as usize).to_string(),
+                            rhs: val.shape().to_string(),
+                        });
+                    }
+                }
+                for (k, pos) in (lo..=hi).enumerate() {
+                    let piece = match src {
+                        Some(es) => &es[k],
+                        None => val,
+                    };
+                    put(&mut xs[(pos - 1) as usize], rest, piece)?;
+                }
+                Ok(())
+            }
+        }
     }
 
+    let mut path = Vec::new();
+    let root = walk(t, lhs, env, &mut path)?.clone();
     let mut updated = env
-        .get(root)
+        .get(&root)
         .cloned()
-        .ok_or_else(|| EvalError::UndefinedVariable(root.clone()))?;
-    put(&mut updated, &idxs, val)?;
-    env.set(root, updated);
+        .ok_or(EvalError::UndefinedVariable(root.clone()))?;
+    put(&mut updated, &path, &val)?;
+    env.set(&root, updated);
     Ok(())
 }
 
@@ -543,6 +642,60 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             }
             v_div(t, &acc, &Val::Num(n))
         }
+        // Stan's `min`/`max` return the extreme element itself, so the gradient
+        // reaches whichever one that is. Which one is chosen while tracing, so a
+        // container of parameters follows the same rule as a branch on one.
+        ("min", [Val::Vec(xs)]) | ("max", [Val::Vec(xs)]) => {
+            let want_max = name == "max";
+            let mut best: Option<&Val> = None;
+            for x in xs {
+                check_no_param_branch(env, x)?;
+                let better = match best {
+                    Some(b) => (x.to_f64(t)? > b.to_f64(t)?) == want_max,
+                    None => true,
+                };
+                if better {
+                    best = Some(x);
+                }
+            }
+            best.ok_or(EvalError::NotAScalar)?.clone()
+        }
+        ("min", [a, b]) | ("max", [a, b]) => {
+            check_no_param_branch(env, a)?;
+            check_no_param_branch(env, b)?;
+            let take_a = (a.to_f64(t)? > b.to_f64(t)?) == (name == "max");
+            if take_a {
+                a.clone()
+            } else {
+                b.clone()
+            }
+        }
+        ("cumulative_sum", [Val::Vec(xs)]) => {
+            let mut acc = Val::Num(0.0);
+            let mut out = Vec::with_capacity(xs.len());
+            for x in xs {
+                acc = v_add(t, &acc, x);
+                out.push(acc.clone());
+            }
+            Val::Vec(out)
+        }
+        ("softmax", [Val::Vec(xs)]) => {
+            // exp(xᵢ − max x) / ∑ exp(xⱼ − max x): the shift cancels and keeps
+            // the exponentials from overflowing.
+            let mut shift = f64::NEG_INFINITY;
+            for x in xs {
+                shift = shift.max(x.to_f64(t)?);
+            }
+            let es: Vec<Val> = xs
+                .iter()
+                .map(|x| {
+                    let d = v_sub(t, x, &Val::Num(shift));
+                    v_exp(t, &d)
+                })
+                .collect();
+            let total = v_sum(t, &es);
+            Val::Vec(es.iter().map(|e| v_div(t, e, &total)).collect())
+        }
         // Sizes are structural, so they read off the container rather than the tape.
         ("size", [Val::Vec(xs)]) | ("num_elements", [Val::Vec(xs)]) | ("rows", [Val::Vec(xs)]) => {
             Val::Num(xs.len() as f64)
@@ -552,6 +705,10 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             Some(Val::Vec(row)) => row.len() as f64,
             _ => 1.0,
         }),
+        ("rep_row_vector", [v, n_e]) => {
+            let n = n_e.to_i32(t)?.max(0) as usize;
+            Val::Row(vec![v.clone(); n])
+        }
         ("rep_vector", [v, n_e]) | ("rep_array", [v, n_e]) => {
             let n = n_e.to_i32(t)?.max(0) as usize;
             Val::Vec(vec![v.clone(); n])
@@ -677,7 +834,7 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
         Stmt::IncrAssign(lhs, rhs) => {
             // For target += rhs (lhs is `target`), already handled above.
             // Generic form: lhs += rhs.
-            if let Expr::Index(..) = lhs {
+            if let Expr::Index(..) | Expr::Slice(..) = lhs {
                 let cur = eval_expr(t, lhs, env)?;
                 let r = eval_expr(t, rhs, env)?;
                 let sum = v_add(t, &cur, &r);
@@ -700,7 +857,7 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
             let r = eval_expr(t, rhs, env)?;
             match lhs {
                 Expr::Var(name) => env.set(name, r),
-                Expr::Index(..) => assign_indexed(t, lhs, r, env)?,
+                Expr::Index(..) | Expr::Slice(..) => assign_indexed(t, lhs, r, env)?,
                 _ => return Err(EvalError::UnsupportedAssignmentTarget),
             }
             Ok(Flow::Val(Val::Num(0.0)))
@@ -789,7 +946,8 @@ pub fn default_for_type(t: &mut Tape, typ: &StanType, env: &Env) -> Result<Val> 
         | StanType::Ordered(n)
         | StanType::PositiveOrdered(n)
         | StanType::UnitVector(n) => Val::Vec(vec![Val::Num(0.0); size_of(t, n, env)?]),
-        StanType::Matrix(r, c) => {
+        StanType::RowVector(n, _) => Val::Row(vec![Val::Num(0.0); size_of(t, n, env)?]),
+        StanType::Matrix(r, c, _) => {
             let (rows, cols) = (size_of(t, r, env)?, size_of(t, c, env)?);
             Val::Vec(vec![Val::Vec(vec![Val::Num(0.0); cols]); rows])
         }

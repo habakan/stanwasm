@@ -32,7 +32,7 @@ fn flatten_val(tape: &Tape, v: &Val, out: &mut Vec<f64>) -> Result<(), EvalError
 /// `name[1]`..`name[N]`; matrix → `name[i,j]`.
 fn push_names_for(out: &mut Vec<String>, name: &str, typ: &StanType, env: &Env) {
     match typ {
-        StanType::Matrix(r_e, c_e) => {
+        StanType::Matrix(r_e, c_e, _) => {
             let rows = eval_int(r_e, env);
             let cols = eval_int(c_e, env);
             for i in 1..=rows {
@@ -173,8 +173,9 @@ fn shape_of(name: &str, typ: &StanType, env: &Env) -> Result<Shaped, DataMismatc
         | StanType::Simplex(n)
         | StanType::Ordered(n)
         | StanType::PositiveOrdered(n)
-        | StanType::UnitVector(n) => Shaped::Vector(size(n)?),
-        StanType::Matrix(r, c) => Shaped::Matrix(size(r)?, size(c)?),
+        | StanType::UnitVector(n)
+        | StanType::RowVector(n, _) => Shaped::Vector(size(n)?),
+        StanType::Matrix(r, c, _) => Shaped::Matrix(size(r)?, size(c)?),
         StanType::CholeskyFactorCorr(k)
         | StanType::CholeskyFactorCov(k)
         | StanType::CovMatrix(k)
@@ -190,6 +191,8 @@ fn shape_of(name: &str, typ: &StanType, env: &Env) -> Result<Shaped, DataMismatc
 fn elem_constraint(typ: &StanType) -> &Constraint {
     match typ {
         StanType::Real(c) | StanType::Int(c) | StanType::Vector(_, c) => c,
+        StanType::RowVector(_, c) => c,
+        StanType::Matrix(_, _, c) => c,
         StanType::Array(_, elem) => elem_constraint(elem),
         _ => &Constraint::None,
     }

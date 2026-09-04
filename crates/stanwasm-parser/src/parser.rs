@@ -2,7 +2,7 @@
 
 use crate::lexer::tokenize;
 use crate::token::Token;
-use stanwasm_ast::{Constraint, Expr, FuncDef, StanProgram, StanType, Stmt, VarDecl};
+use stanwasm_ast::{Constraint, Expr, FuncDef, SliceIdx, StanProgram, StanType, Stmt, VarDecl};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -210,7 +210,7 @@ impl Parser {
             ("simplex", 1),
             ("ordered", 1),
         ] {
-            if self.check_kw(kw) {
+            if self.check_kw(kw) || self.check_id(kw) {
                 self.consume();
                 let c = self.parse_constraints()?;
                 if self.check_tok(&Token::LBrack) {
@@ -223,9 +223,10 @@ impl Parser {
                 }
                 let zero = Expr::Num(0.0);
                 return Ok(match (kw, build) {
-                    ("matrix", _) => StanType::Matrix(zero.clone(), zero),
+                    ("matrix", _) => StanType::Matrix(zero.clone(), zero, c),
                     ("simplex", _) => StanType::Simplex(zero),
                     ("ordered", _) => StanType::Ordered(zero),
+                    ("row_vector", _) => StanType::RowVector(zero, c),
                     _ => StanType::Vector(zero, c),
                 });
             }
@@ -253,12 +254,13 @@ impl Parser {
                 Ok(StanType::Vector(size, c))
             }
             Token::Kw(s) if s == "matrix" => {
+                let c = self.parse_constraints()?;
                 self.expect_tok(&Token::LBrack)?;
                 let rows = self.parse_expr(0)?;
                 self.expect_tok(&Token::Comma)?;
                 let cols = self.parse_expr(0)?;
                 self.expect_tok(&Token::RBrack)?;
-                Ok(StanType::Matrix(rows, cols))
+                Ok(StanType::Matrix(rows, cols, c))
             }
             Token::Kw(s) if s == "simplex" => {
                 self.expect_tok(&Token::LBrack)?;
@@ -271,6 +273,13 @@ impl Parser {
                 let k = self.parse_expr(0)?;
                 self.expect_tok(&Token::RBrack)?;
                 Ok(StanType::Ordered(k))
+            }
+            Token::Id(s) if s == "row_vector" => {
+                let c = self.parse_constraints()?;
+                self.expect_tok(&Token::LBrack)?;
+                let size = self.parse_expr(0)?;
+                self.expect_tok(&Token::RBrack)?;
+                Ok(StanType::RowVector(size, c))
             }
             Token::Id(s) if s == "cholesky_factor_corr" => {
                 self.expect_tok(&Token::LBrack)?;
@@ -389,30 +398,59 @@ impl Parser {
                 break;
             }
             self.consume(); // [
-            let idx = self.parse_expr(0)?;
-            // Range index v[a:b] → segment(v, a, b-a+1)
-            if self.try_tok(&Token::Colon) {
-                let hi = self.parse_expr(0)?;
-                self.expect_tok(&Token::RBrack)?;
-                // `IntNum(1)`, not `Num(1.0)`: the length must stay int-typed so `/`
-                // in a slice bound keeps integer division.
-                let len = Expr::BinOp(
-                    "+".into(),
-                    Box::new(Expr::BinOp("-".into(), Box::new(hi), Box::new(idx.clone()))),
-                    Box::new(Expr::IntNum(1)),
-                );
-                e = Expr::Call("segment".into(), vec![e, idx, len]);
-            } else {
-                e = Expr::Index(Box::new(e), Box::new(idx));
-                // A[i,j] → Index(Index(A, i), j)
-                while self.try_tok(&Token::Comma) {
-                    let idx2 = self.parse_expr(0)?;
-                    e = Expr::Index(Box::new(e), Box::new(idx2));
-                }
-                self.expect_tok(&Token::RBrack)?;
-            }
+            let idxs = self.parse_index_list()?;
+            // Every dimension a plain index is `A[i, j]` → `Index(Index(A, i), j)`,
+            // which is the shape the evaluator and `is_int_expr` already walk.
+            let plain: Option<Vec<Expr>> = idxs
+                .iter()
+                .map(|i| match i {
+                    SliceIdx::At(x) => Some(x.clone()),
+                    SliceIdx::Range(..) => None,
+                })
+                .collect();
+            e = match plain {
+                Some(xs) => xs
+                    .into_iter()
+                    .fold(e, |acc, x| Expr::Index(Box::new(acc), Box::new(x))),
+                None => Expr::Slice(Box::new(e), idxs),
+            };
         }
         Ok(e)
+    }
+
+    /// The comma-separated indices inside one `[...]`, up to and including the
+    /// closing bracket.
+    fn parse_index_list(&mut self) -> Result<Vec<SliceIdx>> {
+        let mut out = Vec::new();
+        loop {
+            let lo = if self.check_tok(&Token::Colon) {
+                None
+            } else {
+                Some(self.parse_expr(0)?)
+            };
+            if self.try_tok(&Token::Colon) {
+                let hi = if self.check_tok(&Token::RBrack) || self.check_tok(&Token::Comma) {
+                    None
+                } else {
+                    Some(self.parse_expr(0)?)
+                };
+                out.push(SliceIdx::Range(lo, hi));
+            } else {
+                match lo {
+                    Some(e) => out.push(SliceIdx::At(e)),
+                    None => {
+                        return Err(ParseError::UnexpectedInExpr {
+                            got: self.consume(),
+                        })
+                    }
+                }
+            }
+            if !self.try_tok(&Token::Comma) {
+                break;
+            }
+        }
+        self.expect_tok(&Token::RBrack)?;
+        Ok(out)
     }
 
     fn parse_primary(&mut self) -> Result<Expr> {
@@ -802,7 +840,8 @@ fn is_type_kw(tok: &Token) -> bool {
         ),
         Token::Id(s) => matches!(
             s.as_str(),
-            "cholesky_factor_corr"
+            "row_vector"
+                | "cholesky_factor_corr"
                 | "cholesky_factor_cov"
                 | "cov_matrix"
                 | "corr_matrix"

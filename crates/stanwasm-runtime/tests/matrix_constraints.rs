@@ -161,3 +161,18 @@ fn corr_matrix_has_a_unit_diagonal_and_is_symmetric() {
 fn corr_matrix_gradients_agree_with_finite_differences() {
     finite_diff_matches("corr_matrix[3] R;", &[0.4, -0.2, 0.7]);
 }
+
+/// A bound on a matrix declaration transforms every entry, the way a bound on
+/// a vector does.
+#[test]
+fn a_matrix_parameter_can_carry_an_element_bound() {
+    let src = "parameters { matrix<lower=0>[2, 2] M; } model { target += sum(M[1]) + sum(M[2]); }";
+    let m = Model::parse_and_load(src, Env::new()).unwrap();
+    assert_eq!(m.n_params(), 4);
+    let (lp, _) = m.log_prob_grad(&[0.0, 0.0, 0.0, 0.0]).unwrap();
+    // every entry is exp(0) = 1, and the Jacobian contributes ∑ raw = 0
+    assert!((lp - 4.0).abs() < 1e-12, "{lp}");
+
+    let draw = m.constrained_draw(&[0.0, 0.0, 0.0, 0.0]).unwrap();
+    assert_eq!(draw, vec![1.0; 4]);
+}

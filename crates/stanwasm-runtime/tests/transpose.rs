@@ -149,3 +149,28 @@ fn the_inner_product_differentiates_a_parameter_vector() {
     assert!((lp - 32.0).abs() < 1e-12);
     assert_eq!(g, vec![4.0, 5.0, 6.0]);
 }
+
+/// A declared `row_vector` is a row without a `'` having written it, so it
+/// multiplies against a column the same way.
+#[test]
+fn a_declared_row_vector_is_a_row() {
+    let src = "data { vector[3] y; }
+               parameters { row_vector[3] r; }
+               model { target += r * y; }";
+    let mut d = Env::new();
+    d.set_vector("y", &[4.0, 5.0, 6.0]);
+    let (lp, g) = Model::parse_and_load(src, d)
+        .unwrap()
+        .log_prob_grad(&[1.0, 2.0, 3.0])
+        .unwrap();
+    assert!((lp - 32.0).abs() < 1e-12);
+    assert_eq!(g, vec![4.0, 5.0, 6.0]);
+}
+
+#[test]
+fn rep_row_vector_makes_a_row() {
+    let src = "data { vector[3] x; vector[3] y; }
+               parameters { real a; }
+               model { target += a * (rep_row_vector(2, 3) * y); }";
+    assert!((lp(src, xy(), &[1.0]) - 30.0).abs() < 1e-12);
+}

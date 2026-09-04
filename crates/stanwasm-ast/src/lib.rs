@@ -21,8 +21,10 @@ pub enum StanType {
     Int(Constraint),
     /// vector[size] with optional element constraint
     Vector(Expr, Constraint),
-    /// matrix[rows, cols]
-    Matrix(Expr, Expr),
+    /// row_vector[size] — a `Vector` laid the other way, which only `*` reads
+    RowVector(Expr, Constraint),
+    /// matrix[rows, cols] with an optional element constraint
+    Matrix(Expr, Expr, Constraint),
     Simplex(Expr),
     Ordered(Expr),
     /// array[size] of element_type
@@ -49,10 +51,24 @@ pub enum Expr {
     UnOp(String, Box<Expr>),
     /// arr[idx]
     Index(Box<Expr>, Box<Expr>),
+    /// `arr[i1, i2, ...]` where at least one index is a range. A range keeps
+    /// its dimension, so the result is still a container; a plain index drops
+    /// it, which is what `Index` on its own already does.
+    Slice(Box<Expr>, Vec<SliceIdx>),
     /// func(args)
     Call(String, Vec<Expr>),
     /// cond ? a : b
     Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
+}
+
+/// One dimension of a `Slice`.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub enum SliceIdx {
+    At(Expr),
+    /// `a:b`. An omitted bound is the container's own end, which is how
+    /// `x[ : ]` and `x[2 : ]` are spelled.
+    Range(Option<Expr>, Option<Expr>),
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
