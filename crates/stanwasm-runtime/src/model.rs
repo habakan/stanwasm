@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::constraints::{constrain, param_dims};
+use crate::constraints::{constrain, constrained_dims, param_dims, unconstrain};
 use crate::env::Env;
 use crate::error::EvalError;
 use crate::eval::{eval_expr, eval_stmt, stan_type_is_int};
@@ -521,6 +521,59 @@ impl Model {
                 .get(&decl.name)
                 .unwrap_or_else(|| panic!("internal: missing transformed parameter {}", decl.name));
             flatten_val(&tape, v, &mut out)?;
+        }
+        Ok(out)
+    }
+
+    /// Names of the `parameters` block alone, which is what `unconstrain_draw`
+    /// reads — `param_names` also covers `transformed parameters`, and those are
+    /// derived rather than free.
+    pub fn constrained_param_names(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for d in &self.prog.parameters {
+            push_names_for(&mut out, &d.name, &d.typ, &self.data_env);
+        }
+        out
+    }
+
+    /// Inverse of `constrained_draw` over the `parameters` block: a draw someone
+    /// else produced, in `constrained_param_names()` order, back to the
+    /// unconstrained vector `log_prob_grad` and `generated_quantities` take.
+    pub fn unconstrain_draw(&self, constrained: &[f64]) -> Result<Vec<f64>, EvalError> {
+        let mut out = Vec::with_capacity(self.n_params);
+        let mut at = 0usize;
+        for decl in &self.prog.parameters {
+            let k = constrained_dims(&decl.typ, &self.data_env);
+            let end = at + k;
+            if end > constrained.len() {
+                return Err(EvalError::BadParameterDeclaration {
+                    name: decl.name.clone(),
+                    detail: format!(
+                        "the draw ends after {} values, and this parameter needs {k} more",
+                        constrained.len()
+                    ),
+                });
+            }
+            let before = out.len();
+            unconstrain(&decl.name, &decl.typ, &constrained[at..end], &self.data_env, &mut out)?;
+            // A value off its own support gives an infinity here rather than
+            // downstream, where it would read as the model's fault.
+            if let Some(bad) = out[before..].iter().position(|v| !v.is_finite()) {
+                return Err(EvalError::BadParameterDeclaration {
+                    name: decl.name.clone(),
+                    detail: format!(
+                        "entry {} of the draw is outside what this declaration allows",
+                        bad + 1
+                    ),
+                });
+            }
+            at = end;
+        }
+        if at != constrained.len() {
+            return Err(EvalError::BadParameterDeclaration {
+                name: "parameters".into(),
+                detail: format!("expected {at} constrained values, got {}", constrained.len()),
+            });
         }
         Ok(out)
     }

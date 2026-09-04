@@ -17,8 +17,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   point is one the sampler takes. `sample` still uses whatever it is handed.
 - **`categorical_rng` and `categorical_logit_rng`.** A category, not one draw
   per weight — which is what picking a posterior draw to predict from needs.
+- **`unconstrainDraw(values)` and `constrainedParamNames()`.** The inverse of
+  `constrainDraw`, which had no counterpart: a posterior fitted elsewhere
+  arrives on the model's own scale, and every other method takes the
+  unconstrained vector. Covers every constraint the runtime constrains,
+  including `simplex`, the `cholesky_factor_*` pair and `cov_matrix`, which is
+  read back through a Cholesky factorisation.
 
 ### Fixed
+
+- **A model too large for memory reports it rather than trapping.** An
+  allocator abort is a wasm trap, and a trap takes the module instance down —
+  the page has to be reloaded. The data block now deserialises straight into
+  the runtime's own representation instead of through an intermediate JSON
+  tree, scopes read through to the data rather than copying it, and the
+  recorded computation graph has a ceiling checked between statements and
+  predicted from the shapes before a matrix product is recorded.
 
 - **An array of a constrained type is sized by what it holds, not by what it
   costs to sample.** `array[N] simplex[K]` in `generated quantities` was

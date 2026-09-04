@@ -110,6 +110,18 @@ if (!(constrained[1] > 0)) {
   process.exit(1);
 }
 
+// The path a user takes with a posterior fitted elsewhere: constrained draws
+// in, unconstrained back, generated quantities from those.
+const freed = gqModel.unconstrainDraw(constrained);
+const again = gqModel.constrainDraw(freed);
+for (let i = 0; i < constrained.length; i++) {
+  if (Math.abs(again[i] - constrained[i]) > 1e-9) {
+    console.error(`FAIL: unconstrainDraw round trip moved slot ${i}: ${constrained[i]} -> ${again[i]}`);
+    process.exit(1);
+  }
+}
+console.log(`unconstrainDraw round-trips ${gqModel.constrainedParamNames().join(", ")}`);
+
 const gq = gqModel.generatedQuantities(gqPostWarmup, 20, 123n);
 for (let i = 0; i < 20; i++) {
   const [yLn, yExp, yUnif, yGam] = gq.slice(i * 4, i * 4 + 4);

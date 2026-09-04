@@ -74,6 +74,7 @@ responsive.
 | `.sample(init, warmup, draws, seed)` | NUTS. `seed` is a `BigInt`. |
 | `.startStepSampling(init, warmup, draws, seed)`, `.stepDraw()`, `.finishStepSampling()` | One draw at a time, for live visualisation. |
 | `.constrainDraw(draw)` | Unconstrained draw back to the model's own scale. |
+| `.constrainedParamNames()`, `.unconstrainDraw(values)` | The inverse: a draw fitted elsewhere, in the model's own scale, back to the unconstrained vector the other methods take. |
 | `.genQuantityNames()`, `.generatedQuantities(draws, nDraws, seed)` | `generated quantities` block. |
 | `.compileToWasm()`, `.sampleViaAot(...)` | Ahead-of-time compile this model to its own wasm module and sample through it — 1.6x to 12x faster per gradient than tape replay across the repository's fifteen benchmark models. The emitted module uses fixed-width SIMD (Safari 16.4+). Needs `setAotExports` wiring; see the repository. |
 

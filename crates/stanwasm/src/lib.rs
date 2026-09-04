@@ -321,6 +321,22 @@ impl StanModel {
         self.model.constrained_draw(unconstrained).map_err(jserr)
     }
 
+    /// Names of the `parameters` block alone, which is the order
+    /// `unconstrainDraw()` reads. `paramNames()` also covers `transformed
+    /// parameters`, and those are derived rather than free.
+    #[wasm_bindgen(js_name = constrainedParamNames)]
+    pub fn constrained_param_names(&self) -> Vec<String> {
+        self.model.constrained_param_names()
+    }
+
+    /// Inverse of `constrainDraw()` over the `parameters` block: a draw fitted
+    /// elsewhere, in `constrainedParamNames()` order, becomes the unconstrained
+    /// vector `logProbGrad()` and `generatedQuantities()` take.
+    #[wasm_bindgen(js_name = unconstrainDraw)]
+    pub fn unconstrain_draw(&self, constrained: &[f64]) -> Result<Vec<f64>, JsError> {
+        self.model.unconstrain_draw(constrained).map_err(jserr)
+    }
+
     /// Names of the top-level `generated quantities` declarations, flattened
     /// the same way as `paramNames()`.
     #[wasm_bindgen(js_name = genQuantityNames)]

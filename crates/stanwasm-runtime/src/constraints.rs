@@ -418,3 +418,174 @@ fn type_name(t: &StanType) -> String {
         StanType::UnitVector(_) => "unit_vector".into(),
     }
 }
+
+/// How many numbers the *constrained* value holds — what `constrained_draw`
+/// writes and `unconstrain` reads. A transform that adds structure makes this
+/// larger than `param_dims`.
+pub fn constrained_dims(typ: &StanType, env: &Env) -> usize {
+    match typ {
+        StanType::Simplex(k) => eval_plain_int(k, env),
+        StanType::CholeskyFactorCorr(k)
+        | StanType::CholeskyFactorCov(k)
+        | StanType::CovMatrix(k)
+        | StanType::CorrMatrix(k) => {
+            let kk = eval_plain_int(k, env);
+            kk * kk
+        }
+        StanType::Array(size, elem) => eval_plain_int(size, env) * constrained_dims(elem, env),
+        other => param_dims(other, env),
+    }
+}
+
+/// Inverse of `constrain`: a constrained draw back to the unconstrained vector
+/// a sampler works in. No tape and no Jacobian — this reads values someone else
+/// produced, so `x` is plain numbers in `param_names()` order.
+pub fn unconstrain(
+    name: &str,
+    typ: &StanType,
+    x: &[f64],
+    env: &Env,
+    out: &mut Vec<f64>,
+) -> Result<(), EvalError> {
+    let wrong_len = |want: usize| EvalError::BadParameterDeclaration {
+        name: name.to_string(),
+        detail: format!("expected {want} constrained values, got {}", x.len()),
+    };
+    match typ {
+        StanType::Int(_) => return Err(EvalError::IntParameter(name.to_string())),
+        StanType::Real(c) => out.push(free_scalar(x[0], c, env)?),
+        StanType::Vector(_, c) | StanType::RowVector(_, c) | StanType::Matrix(_, _, c) => {
+            for v in x {
+                out.push(free_scalar(*v, c, env)?);
+            }
+        }
+        // Stick-breaking run backwards: z is what the remaining stick was cut by,
+        // and the shift is what puts the uniform simplex at the origin.
+        StanType::Simplex(_) => {
+            let k = x.len();
+            let mut stick = 1.0_f64;
+            for (i, xi) in x.iter().take(k - 1).enumerate() {
+                let z = xi / stick;
+                out.push(logit(z) + ((k - 1 - i) as f64).ln());
+                stick *= 1.0 - z;
+            }
+        }
+        StanType::Ordered(_) => {
+            out.push(x[0]);
+            out.extend(x.windows(2).map(|w| (w[1] - w[0]).ln()));
+        }
+        StanType::PositiveOrdered(_) => {
+            out.push(x[0].ln());
+            out.extend(x.windows(2).map(|w| (w[1] - w[0]).ln()));
+        }
+        // The radius the transform divided out is not recoverable, and does not
+        // need to be: any preimage on the unit sphere gives back the same x.
+        StanType::UnitVector(_) => out.extend_from_slice(x),
+        StanType::CholeskyFactorCorr(k_e) => {
+            let kk = eval_plain_int(k_e, env);
+            if x.len() != kk * kk {
+                return Err(wrong_len(kk * kk));
+            }
+            free_corr_l(x, kk, out);
+        }
+        StanType::CorrMatrix(k_e) => {
+            let kk = eval_plain_int(k_e, env);
+            if x.len() != kk * kk {
+                return Err(wrong_len(kk * kk));
+            }
+            free_corr_l(&cholesky(x, kk, name)?, kk, out);
+        }
+        StanType::CholeskyFactorCov(k_e) => {
+            let kk = eval_plain_int(k_e, env);
+            if x.len() != kk * kk {
+                return Err(wrong_len(kk * kk));
+            }
+            free_tri(x, kk, out);
+        }
+        StanType::CovMatrix(k_e) => {
+            let kk = eval_plain_int(k_e, env);
+            if x.len() != kk * kk {
+                return Err(wrong_len(kk * kk));
+            }
+            free_tri(&cholesky(x, kk, name)?, kk, out);
+        }
+        StanType::Array(_, elem) => {
+            let chunk = constrained_dims(elem, env);
+            if chunk == 0 || !x.len().is_multiple_of(chunk) {
+                return Err(wrong_len(chunk));
+            }
+            for part in x.chunks(chunk) {
+                unconstrain(name, elem, part, env, out)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn free_scalar(x: f64, c: &Constraint, env: &Env) -> Result<f64, EvalError> {
+    Ok(match c {
+        Constraint::None => x,
+        Constraint::Lower(lo) => (x - bound(lo, env)?).ln(),
+        Constraint::Upper(hi) => (bound(hi, env)? - x).ln(),
+        Constraint::LowerUpper(lo, hi) => {
+            let (lo, hi) = (bound(lo, env)?, bound(hi, env)?);
+            logit((x - lo) / (hi - lo))
+        }
+    })
+}
+
+/// Inverse of `corr_l_from_raw`, reading the same row-major lower triangle.
+fn free_corr_l(l: &[f64], kk: usize, out: &mut Vec<f64>) {
+    for i in 1..kk {
+        let mut rem = 1.0_f64;
+        for j in 0..i {
+            let z = l[i * kk + j] / rem.sqrt();
+            out.push(z.atanh());
+            rem *= 1.0 - z * z;
+        }
+    }
+}
+
+/// Inverse of `tri_from_raw`: each row's off-diagonals, then its log diagonal.
+fn free_tri(l: &[f64], kk: usize, out: &mut Vec<f64>) {
+    for i in 0..kk {
+        out.extend_from_slice(&l[i * kk..i * kk + i]);
+        out.push(l[i * kk + i].ln());
+    }
+}
+
+/// Lower-triangular factor of a symmetric positive-definite matrix, row-major.
+fn cholesky(a: &[f64], kk: usize, name: &str) -> Result<Vec<f64>, EvalError> {
+    let mut l = vec![0.0_f64; kk * kk];
+    for i in 0..kk {
+        for j in 0..=i {
+            let dot: f64 = (0..j).map(|m| l[i * kk + m] * l[j * kk + m]).sum();
+            l[i * kk + j] = if i == j {
+                let d = a[i * kk + i] - dot;
+                if d <= 0.0 {
+                    return Err(EvalError::BadParameterDeclaration {
+                        name: name.to_string(),
+                        detail: "the matrix given is not symmetric positive definite".into(),
+                    });
+                }
+                d.sqrt()
+            } else {
+                (a[i * kk + j] - dot) / l[j * kk + j]
+            };
+        }
+    }
+    Ok(l)
+}
+
+fn logit(p: f64) -> f64 {
+    (p / (1.0 - p)).ln()
+}
+
+fn bound(expr: &stanwasm_ast::Expr, env: &Env) -> Result<f64, EvalError> {
+    let mut t = Tape::new();
+    match eval_plain(&mut t, expr, env)? {
+        Val::Num(v) => Ok(v),
+        Val::Tape(i) => Ok(t.value(i)),
+        other => Err(bad_size("bound", &other)),
+    }
+}
