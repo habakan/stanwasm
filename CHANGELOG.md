@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-posteriordb coverage goes from 93 to 124 of 147, and from 39 to 41 of the 47
+posteriordb coverage goes from 93 to 125 of 147, and from 39 to 41 of the 47
 posteriors that come with a reference posterior.
 
 ### Added
@@ -16,8 +16,10 @@ posteriors that come with a reference posterior.
   vector, `M'` a reflected matrix, and orientation is what makes `x' * y` the
   inner product Stan means and `x * y'` the outer one. `row_vector` can be
   declared, and `rep_matrix` reads the orientation — a row lies along the rows,
-  a column along the columns. A matrix's row still indexes as a column vector,
-  so orientation is carried only where `'` or a declaration wrote it.
+  a column along the columns.
+- **A matrix's rows are row vectors.** `M[i] * v` is the inner product, while
+  `A[i] * v` on an `array[N] vector[K]` is the error Stan makes it. A data file
+  spells the two identically, so the declaration is what decides.
 - **Range indexing in any dimension.** `W[1:rows(W), k]` is a column,
   `adj[2, 2:K]` a row slice, and an omitted bound (`x[ : ]`, `x[2 : ]`) is the
   container's own end. A slice is an assignment target too, taking either a

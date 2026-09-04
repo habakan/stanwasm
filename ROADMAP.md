@@ -51,11 +51,12 @@ Five caveats the table can't carry:
   have no emitter for `tan`/`asin`/`acos`/`atan` (hence `atan2`), `erf`/`erfc`
   or `digamma`, and report `CodegenError::UnsupportedOp` rather than emitting a
   module that traps. Adding them needs new math imports on the host side.
-- **Orientation comes from `'` and from a `row_vector` declaration.** `x' * y`
-  is the inner product, `x * y'` the outer one, and `vector * vector` is the
-  error Stan makes it. A matrix's row still indexes as a column vector where
-  Stan gives a row, so orientation defaults to a column anywhere neither of the
-  two wrote it. Every operator but `*` reads the elements and ignores it.
+- **A row vector is a distinct shape, not a spelling.** `x' * y` is the inner
+  product, `x * y'` the outer one, and `vector * vector` is the error Stan makes
+  it. A `matrix`'s rows are row vectors and an `array[N] vector[K]`'s are
+  columns, so `M[i] * v` and `A[i] * v` differ the way Stan says they do — the
+  declaration is what separates two values the data file spells identically.
+  Every operator but `*` reads the elements and ignores orientation.
 - **Stan's static typing is honored where it changes results.** `int / int` is
   integer division (`N / 2` with `N = 3` is `1`), and `^` binds tighter than
   unary minus and associates right (`-a^2` is `-(a^2)`, `2^3^2` is `512`).
@@ -78,12 +79,12 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**124 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+**125 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
 47 that come with a reference posterior, 41 are usable. What stops the rest:
 
 | | count |
 |---|---:|
-| six shape mismatches, a bound that depends on another parameter, an array of vectors as a multivariate variate, a ragged container | 9 |
+| five shape mismatches, a bound that depends on another parameter, an array of vectors as a multivariate variate, a ragged container | 8 |
 | an array literal — `{1, 2, 3}`, and indexing by one | 5 |
 | `student_t_lccdf` (3) and `eigenvectors_sym` | 4 |
 | did not finish tracing in two minutes | 4 |
