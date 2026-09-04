@@ -69,6 +69,16 @@ posteriors that come with a reference posterior.
 - **`bernoulli` and `binomial` at a probability of 0 or 1 are no longer NaN.**
   The term the observation does not select was `0 * log 0`, which is NaN where
   the density is perfectly finite.
+- **A root of an underflowed value no longer poisons the gradient.** `x^n` with
+  `n < 1` — `sqrt` among them — has an infinite slope at zero, and one
+  intermediate that underflows to zero turned every gradient downstream of it
+  into NaN. A spectral-density GP reaches that in the ordinary course of
+  evaluating itself: seven of its forty terms are `exp(-500)`. The log density
+  was right the whole time, which is what made it hard to see.
+- **The sampler says which parameters make a starting point unusable.** It
+  refuses one whose gradient has a zero component, and reported only "Invalid
+  initial point" — naming neither the rule nor the parameters. Several real
+  models have a parameter the data says nothing about at the obvious start.
 - **An ODE integrator says why it is refused.** `integrate_ode_rk45(dz_dt, …)`
   reported `undefined variable: dz_dt`, blaming the system function it was
   handed. It now names the integrator and the reason: an adaptive step count
