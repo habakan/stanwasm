@@ -98,6 +98,13 @@ impl Env {
             .map(|b| &mut b.val)
     }
 
+    /// Mark an existing binding int-typed, leaving its value where it is.
+    pub fn mark_int(&mut self, name: &str) {
+        if let Some(b) = self.vars.iter_mut().rev().find(|b| b.name == name) {
+            b.is_int = true;
+        }
+    }
+
     /// Whether `name` was declared with an integral Stan type.
     pub fn is_int(&self, name: &str) -> bool {
         self.vars

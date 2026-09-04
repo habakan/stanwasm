@@ -326,11 +326,11 @@ fn check_value(
 /// which bindings are int-typed (Stan's `/` is integer division on two ints).
 fn validate_data(prog: &StanProgram, env: &mut Env) -> Result<(), DataMismatch> {
     for decl in &prog.data {
-        let Some(val) = env.get(&decl.name).cloned() else {
+        if env.get(&decl.name).is_none() {
             return Err(DataMismatch::Missing {
                 name: decl.name.clone(),
             });
-        };
+        }
         let shape = shape_of(&decl.name, &decl.typ, env)?;
         let is_int = stan_type_is_int(&decl.typ);
         let bounds = {
@@ -346,11 +346,17 @@ fn validate_data(prog: &StanProgram, env: &mut Env) -> Result<(), DataMismatch> 
                 Constraint::LowerUpper(lo, hi) => (resolve(lo), resolve(hi)),
             }
         };
-        check_value(&decl.name, "", &val, &shape, is_int, bounds)?;
+        // Borrowed and retagged in place. A `data` block holding an MNIST-sized
+        // matrix is gigabytes as `Val`, and a copy to check it and another to
+        // orient it were two more.
+        let val = env
+            .get(&decl.name)
+            .expect("checked above that the binding is there");
+        check_value(&decl.name, "", val, &shape, is_int, bounds)?;
         if is_int {
-            env.set_int_typed(&decl.name, val);
-        } else if let Some(oriented) = orient_rows(&decl.typ, &val) {
-            env.set(&decl.name, oriented);
+            env.mark_int(&decl.name);
+        } else if let Some(slot) = env.get_mut(&decl.name) {
+            orient_rows(&decl.typ, slot);
         }
     }
     Ok(())
@@ -358,38 +364,30 @@ fn validate_data(prog: &StanProgram, env: &mut Env) -> Result<(), DataMismatch> 
 
 /// A declared matrix's rows are row vectors; an `array[N] vector[K]`'s are
 /// columns. The JSON is the same nested array either way, so the declaration is
-/// the only thing that can say which. `None` when nothing needed changing.
-fn orient_rows(typ: &StanType, val: &Val) -> Option<Val> {
+/// the only thing that can say which.
+fn orient_rows(typ: &StanType, val: &mut Val) {
     match typ {
         StanType::Matrix(..)
         | StanType::CholeskyFactorCorr(_)
         | StanType::CholeskyFactorCov(_)
         | StanType::CovMatrix(_)
         | StanType::CorrMatrix(_) => {
-            let Val::Vec(rows) = val else { return None };
-            Some(Val::Vec(
-                rows.iter()
-                    .map(|r| match r.elems() {
-                        Some(cells) => Val::Row(cells.to_vec()),
-                        None => r.clone(),
-                    })
-                    .collect(),
-            ))
+            if let Val::Vec(rows) = val {
+                for r in rows.iter_mut() {
+                    if let Val::Vec(cells) = r {
+                        *r = Val::Row(std::mem::take(cells));
+                    }
+                }
+            }
         }
         StanType::Array(_, elem) => {
-            let Val::Vec(xs) = val else { return None };
-            let inner: Vec<Option<Val>> = xs.iter().map(|x| orient_rows(elem, x)).collect();
-            inner.iter().any(Option::is_some).then(|| {
-                Val::Vec(
-                    inner
-                        .into_iter()
-                        .zip(xs)
-                        .map(|(new, old)| new.unwrap_or_else(|| old.clone()))
-                        .collect(),
-                )
-            })
+            if let Val::Vec(xs) = val {
+                for x in xs.iter_mut() {
+                    orient_rows(elem, x);
+                }
+            }
         }
-        _ => None,
+        _ => {}
     }
 }
 
