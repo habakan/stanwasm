@@ -137,19 +137,22 @@ package: wasm ## Dry-run packaging every crate + the npm tarball
 # `.npmignore` sits beside it, and that once published a package carrying no
 # wasm at all. A published version cannot be taken back, so both are asserted
 # rather than assumed.
-	@for f in target/package/*.crate; do \
-	  tar tzf "$$f" | grep -q '/LICENSE$$' \
-	    || { echo "error: $$f ships no LICENSE" >&2; exit 1; }; \
-	done
+	@list=$$(mktemp); \
+	for f in target/package/*.crate; do \
+	  tar tzf "$$f" > "$$list"; \
+	  grep -q '/LICENSE$$' "$$list" \
+	    || { echo "error: $$f ships no LICENSE" >&2; rm -f "$$list"; exit 1; }; \
+	done; \
+	rm -f "$$list"
 	@echo "LICENSE present in every .crate"
-	cd ts && npm pack --dry-run --json > /tmp/stanwasm-pack.json
-	@node -e 'const f=require("/tmp/stanwasm-pack.json")[0].files.map(x=>x.path); \
-	  if(!f.some(p=>/^LICENSE$$/.test(p))) { \
-	    console.error("error: npm tarball ships no LICENSE:\n"+f.join("\n")); process.exit(1) } \
-	  const wasm=f.filter(p=>/\.wasm$$/.test(p)); \
-	  if(wasm.length!==1) { \
-	    console.error("error: expected exactly one .wasm in the npm tarball, got "+wasm.length+":\n"+f.join("\n")); process.exit(1) } \
-	  console.log("npm tarball ok: "+f.length+" files, LICENSE, "+wasm[0])'
+# The check is a script rather than a `node -e` here: make 4.3 and make 3.81
+# disagree about a backslash-continued line inside a recipe, and the older one
+# is what macOS ships, so the inline form passed locally and could never run
+# on CI.
+	@pack=$$(mktemp); \
+	(cd ts && npm pack --dry-run --json) > "$$pack" \
+	  && node ts/tests/check_pack.mjs "$$pack"; \
+	status=$$?; rm -f "$$pack"; exit $$status
 
 .PHONY: clean
 clean: ## Remove cargo target/ and the generated ts/pkg/
