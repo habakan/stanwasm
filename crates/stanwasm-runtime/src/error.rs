@@ -18,8 +18,8 @@ pub enum EvalError {
     #[error("unsupported or wrong-arity call: {0}_rng")]
     UnknownRng(String),
     #[error(
-        "assignment to indexed/compound targets (e.g. `arr[i] = ...`) is not \
-         yet supported — only `name = expr` works"
+        "assignment target must be a name, optionally indexed or sliced \
+         (`x`, `x[i]`, `M[1:n, k]`) — this one is neither"
     )]
     UnsupportedAssignmentTarget,
     #[error("while loop exceeded {0} iterations — possible infinite loop")]
@@ -31,8 +31,8 @@ pub enum EvalError {
     #[error(
         "expected a scalar but got a vector/matrix — this operation is not \
          vectorized. Common causes: comparing containers with `==`, or a \
-         matrix product (`X * beta`), which this runtime does not implement \
-         yet; write the loop form (`for (n in 1:N) ... X[n] * beta`) instead"
+         function given a container where Stan defines it only on reals; \
+         write the loop form instead"
     )]
     NotAScalar,
     #[error("shape mismatch: cannot apply `{op}` to {lhs} and {rhs}")]
@@ -98,10 +98,9 @@ pub enum EvalError {
     ParamDependentBranch,
     #[error(
         "generated quantity `{name}` is declared to hold {expected} value(s) but its \
-         expression produced {got}. A scalar `_rng` does not fill a container — \
-         vectorized `_rng` and indexed assignment (`y_rep[n] = ...`) are both \
-         unimplemented, so a `vector[N]` generated quantity has no way to be \
-         populated yet."
+         expression produced {got}. A scalar `_rng` given only scalars returns a \
+         scalar — pass it a container (`normal_rng(rep_vector(mu, N), sigma)`) or \
+         fill the declaration element by element."
     )]
     GenQuantityShape {
         name: String,
