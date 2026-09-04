@@ -544,3 +544,27 @@ fn categorical_logit_matches_the_simplex_form() {
         assert!((a - b).abs() < 1e-12, "{logit:?} vs {simplex:?}");
     }
 }
+
+/// An underflowed intermediate used to poison the whole gradient. `x^n` with
+/// `n < 1` — `sqrt` among them — has an infinite slope at zero, and that
+/// infinity meeting an adjoint gives NaN. The reference implementation drops
+/// the term at a zero base; so does this one.
+#[test]
+fn a_root_of_an_underflowed_value_does_not_poison_the_gradient() {
+    // exp(-1000) is exactly zero in f64, so sqrt sees a zero base
+    let src = "parameters { real a; } model { target += sqrt(exp(-1000 * (a * a + 1))) + a; }";
+    let (lp, g) = Model::parse_and_load(src, Env::new())
+        .unwrap()
+        .log_prob_grad(&[0.0])
+        .unwrap();
+    assert_eq!(lp, 0.0);
+    assert_eq!(g, vec![1.0]);
+
+    // and a base that is merely small still carries its slope
+    let small = "parameters { real a; } model { target += sqrt(exp(-40 * (a * a + 1))); }";
+    let (_, g) = Model::parse_and_load(small, Env::new())
+        .unwrap()
+        .log_prob_grad(&[0.5])
+        .unwrap();
+    assert!(g[0] < 0.0 && g[0].is_finite(), "{g:?}");
+}
