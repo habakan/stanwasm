@@ -39,8 +39,12 @@ worked through below, ordered by effort.
 \* `half_normal` is not a Stan distribution — stanc rejects it. Write
 `real<lower=0> tau; tau ~ normal(0, s);` for a model that also runs under Stan.
 
-Six caveats the table can't carry:
+Seven caveats the table can't carry:
 
+- **A starting point has to be one the sampler accepts.** It refuses a gradient
+  with a zero component, which is where a parameter the data says nothing about
+  sits at any obvious starting point. The error names those parameters, and
+  `randomInit(seed)` draws a point that works.
 - **Branches on a sampled parameter.** `if`/`while` conditions that depend on a
   parameter work in `generated quantities` (re-evaluated natively per draw) but
   are a compile-time error in `model`/`transformed parameters` — NUTS traces

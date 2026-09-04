@@ -141,4 +141,24 @@ for (const [what, run] of [
 }
 console.log("zero warmup rejected on every entry point");
 
+// A starting point the sampler refuses has to say which parameters make it one,
+// and `randomInit` has to find one that works.
+{
+  const src = `parameters { real a; real b; }
+               model { a ~ normal(0, 1); target += a * b; }`;
+  const m = new StanModel(src, "{}");
+  let message = "";
+  try {
+    m.sample(new Float64Array([0, 0.1]), 5, 5, 1n);
+  } catch (e) {
+    message = String(e);
+  }
+  if (!message.includes("does not move with") || !message.includes("b")) {
+    console.error(`FAIL: a zero-gradient start gave ${message || "no error"}`);
+    process.exit(1);
+  }
+  m.sample(m.randomInit(1n), 10, 10, 1n);
+  console.log("a refused start names its parameters; randomInit finds one");
+}
+
 console.log("OK");

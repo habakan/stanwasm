@@ -19,7 +19,11 @@ use nuts_rs::{
     sample_sequentially, Chain, CpuLogpFunc, CpuMath, CpuMathError, DiagNutsSettings, HasDims,
     LogpError, Settings,
 };
-use rand::{rngs::ChaCha8Rng, SeedableRng};
+use rand::{
+    distr::{Distribution, Uniform},
+    rngs::ChaCha8Rng,
+    SeedableRng,
+};
 use stanwasm_runtime::{data_from_json, Compiled, EvalError, Model};
 use thiserror::Error;
 use wasm_bindgen::prelude::*;
@@ -145,8 +149,8 @@ pub fn init_gradient_check(names: &[String], lp: f64, grad: &[f64]) -> Result<()
     Err(format!(
         "the log density does not move with {} of the {} parameters at the \
          starting point ({shown}{rest}), and the sampler cannot begin from \
-         there. Start somewhere the model constrains every parameter, or drop \
-         the ones the data says nothing about",
+         there. `randomInit(seed)` finds one, or drop the parameters the data \
+         says nothing about",
         bad.len(),
         grad.len(),
     ))
@@ -186,14 +190,47 @@ impl StanModel {
     /// Refuse a starting point the sampler would reject, while the names of
     /// the parameters that make it one are still to hand.
     fn check_start(&mut self, init: &[f64]) -> Result<(), JsError> {
+        self.check_start_inner(init).map_err(|e| JsError::new(&e))
+    }
+
+    fn check_start_inner(&mut self, init: &[f64]) -> Result<(), String> {
         let names = self.model.unconstrained_param_names();
         let compiled = self
             .compiled
             .as_mut()
-            .ok_or_else(|| compiled_checked_out("sample"))?;
+            .ok_or_else(|| "sample: the compiled tape is checked out".to_string())?;
         let mut grad = vec![0.0_f64; init.len()];
         let lp = compiled.log_prob_grad(init, &mut grad);
-        init_gradient_check(&names, lp, &grad).map_err(|e| JsError::new(&e))
+        init_gradient_check(&names, lp, &grad)
+    }
+
+    /// A starting point the sampler will accept: uniform on `[-2, 2]` per
+    /// unconstrained parameter, the way CmdStan initialises, redrawn until the
+    /// gradient there has no zero component. `sample` still takes whatever it
+    /// is given — this only removes the guesswork from finding one.
+    #[wasm_bindgen(js_name = randomInit)]
+    pub fn random_init(&mut self, seed: u64) -> Result<Vec<f64>, JsError> {
+        const TRIES: u32 = 100;
+        let n = self.model.n_params();
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let span = Uniform::new(-2.0_f64, 2.0).map_err(|e| JsError::new(&e.to_string()))?;
+        let mut last = String::new();
+        for _ in 0..TRIES {
+            let at: Vec<f64> = (0..n).map(|_| span.sample(&mut rng)).collect();
+            match self.check_start(&at) {
+                Ok(()) => return Ok(at),
+                Err(_) => last = self.start_problem(&at),
+            }
+        }
+        Err(JsError::new(&format!(
+            "no starting point in [-2, 2] worked in {TRIES} tries. The last one \
+             failed because {last}"
+        )))
+    }
+
+    /// Why `check_start` refused, as text, for the message above.
+    fn start_problem(&mut self, at: &[f64]) -> String {
+        self.check_start_inner(at).err().unwrap_or_default()
     }
 
     #[wasm_bindgen(js_name = logProbGrad)]

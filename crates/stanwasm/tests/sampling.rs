@@ -363,3 +363,19 @@ fn a_starting_point_the_sampler_refuses_names_the_parameters() {
     let nan = init_gradient_check(&names, f64::NAN, &[1.0, 2.0, 3.0]).unwrap_err();
     assert!(nan.contains("log density is NaN"), "{nan}");
 }
+
+/// `b` enters only through `a`, so its gradient is zero wherever `a` is — and
+/// zero is where the obvious starting point puts it. `randomInit` is what finds
+/// a point the sampler accepts. (The refusal itself is a `JsError`, which
+/// cannot be built off wasm, so the smoke test covers that half.)
+#[test]
+fn random_init_finds_a_startable_point() {
+    let src = "parameters { real a; real b; }
+               model { a ~ normal(0, 1); target += a * b; }";
+    let mut model = StanModel::new(src, "{}").unwrap();
+    let at = model.random_init(1).unwrap();
+    assert_eq!(at.len(), 2);
+    assert!(at.iter().all(|v| (-2.0..=2.0).contains(v)), "{at:?}");
+    assert!(at[0] != 0.0, "a must be somewhere b's gradient is not zero");
+    model.sample(&at, 10, 10, 1).unwrap();
+}

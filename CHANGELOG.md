@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`randomInit(seed)`.** The sampler refuses a starting point whose gradient
+  has a zero component, and the obvious one — 0.1 everywhere — is exactly where
+  a parameter the data says nothing about has no slope. Six posteriordb
+  posteriors could be compiled but not sampled for that reason. This draws
+  uniformly on `[-2, 2]`, the way CmdStan initialises, and redraws until the
+  point is one the sampler takes. `sample` still uses whatever it is handed.
 - **`categorical_rng` and `categorical_logit_rng`.** A category, not one draw
   per weight — which is what picking a posterior draw to predict from needs.
 
