@@ -1,6 +1,5 @@
-//! Indexing by an array of positions — `phi[node1]`, `alpha[ii] .* theta[jj]`.
-//! The index keeps its dimension, so the result is a container the length of
-//! the index, not of the thing indexed.
+//! Indexing by an array of positions — `phi[node1]`. The result is as long as
+//! the index, not as the thing indexed.
 
 use stanwasm_runtime::{Env, Model, Val};
 
@@ -102,8 +101,8 @@ fn the_gradient_reaches_every_gathered_position() {
     assert_eq!(g, vec![2.0, 0.0, 1.0, 0.0]);
 }
 
-/// A second bracket indexes what the first one produced, where indices inside
-/// one bracket compose. The two only differ once an index is an array.
+/// Indices inside one bracket compose; a second bracket indexes what the first
+/// produced. They differ only once an index is an array.
 #[test]
 fn a_second_bracket_indexes_the_gathered_result() {
     // M[idx, 2] is column 2 of rows 3, 1, 1 — a length-3 vector

@@ -1,11 +1,8 @@
-//! Reading and writing one element of a container must not cost the whole
-//! container. Both used to: indexing evaluated its base, and evaluating a
-//! variable copies its binding, so a loop over a matrix's elements was
-//! quadratic. Four posteriordb models did not finish tracing in two minutes.
+//! Reading or writing one element must not cost the whole container. Both
+//! used to, which left four posteriordb models unable to trace in two minutes.
 //!
-//! The bounds below are wall clock, so they are set two orders of magnitude
-//! above what the linear version takes — enough to catch the quadratic return
-//! on any machine, not to measure anything.
+//! The bounds are wall clock, set two orders of magnitude above what the linear
+//! version takes: enough to catch the quadratic return, not to measure.
 
 use std::time::Instant;
 

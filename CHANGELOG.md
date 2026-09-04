@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`categorical_rng` and `categorical_logit_rng`.** A category, not one draw
+  per weight — which is what picking a posterior draw to predict from needs.
+
+### Fixed
+
+- **An array of a constrained type is sized by what it holds, not by what it
+  costs to sample.** `array[N] simplex[K]` in `generated quantities` was
+  counted as `N * (K - 1)` and refused the `N * K` values it produced; the same
+  went for an array of `cholesky_factor_*`, `cov_matrix` or `corr_matrix`.
+- `paramNames()` and `genQuantityNames()` now index an array element the way
+  Stan writes it: `array[2] vector[3] v` is `v[1,1]`..`v[2,3]`, where it used
+  to flatten to `v[1]`..`v[6]`.
+
 ## [0.3.0] — 2026-09-04 (npm only)
 
 Published to npm as `stanwasm@0.3.0`. The crates stay off crates.io for the
