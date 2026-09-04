@@ -118,14 +118,17 @@ pub fn beta_lpdf(t: &mut Tape, x: &Val, a: &Val, b: &Val) -> Val {
     v_add(t, &prefix_plus_a, &bm1_log1mx)
 }
 
+/// `log theta` or `log(1 - theta)` — the term `y` selects, rather than the sum
+/// of both weighted by `y` and `1 - y`. At theta 0 or 1 the unselected term is
+/// `0 * log 0`, which is NaN where the density is perfectly finite. `y` is an
+/// observation, so choosing on it is not a branch on a parameter.
 pub fn bernoulli_lpmf(t: &mut Tape, y: &Val, theta: &Val) -> Val {
-    let log_th = v_log(t, theta);
-    let y_logth = v_mul(t, y, &log_th);
-    let one_minus_y = v_sub(t, &Val::Num(1.0), y);
-    let one_minus_th = v_sub(t, &Val::Num(1.0), theta);
-    let log_1mth = v_log(t, &one_minus_th);
-    let r = v_mul(t, &one_minus_y, &log_1mth);
-    v_add(t, &y_logth, &r)
+    if y.to_f64(t).unwrap_or(f64::NAN) != 0.0 {
+        v_log(t, theta)
+    } else {
+        let one_minus_th = v_sub(t, &Val::Num(1.0), theta);
+        v_log(t, &one_minus_th)
+    }
 }
 
 pub fn bernoulli_logit_lpmf(t: &mut Tape, y: &Val, alpha: &Val) -> Val {
@@ -165,16 +168,24 @@ fn log1p_exp(t: &mut Tape, x: &Val) -> Val {
     v_log(t, &s)
 }
 
+/// A zero count drops its term rather than weighting it: `0 * log 0` is NaN at
+/// theta 0 or 1, where the density itself is finite. Both counts are
+/// observations, so skipping on them is not a branch on a parameter.
 pub fn binomial_lpmf(t: &mut Tape, y: &Val, n: &Val, theta: &Val) -> Val {
-    let coeff = log_binomial_coeff(t, y, n);
-    let log_theta = v_log(t, theta);
-    let one_minus = v_sub(t, &Val::Num(1.0), theta);
-    let log_1m = v_log(t, &one_minus);
-    let hit = v_mul(t, y, &log_theta);
+    let mut acc = log_binomial_coeff(t, y, n);
     let n_y = v_sub(t, n, y);
-    let miss = v_mul(t, &n_y, &log_1m);
-    let s = v_add(t, &coeff, &hit);
-    v_add(t, &s, &miss)
+    if y.to_f64(t).unwrap_or(f64::NAN) != 0.0 {
+        let log_theta = v_log(t, theta);
+        let hit = v_mul(t, y, &log_theta);
+        acc = v_add(t, &acc, &hit);
+    }
+    if n_y.to_f64(t).unwrap_or(f64::NAN) != 0.0 {
+        let one_minus = v_sub(t, &Val::Num(1.0), theta);
+        let log_1m = v_log(t, &one_minus);
+        let miss = v_mul(t, &n_y, &log_1m);
+        acc = v_add(t, &acc, &miss);
+    }
+    acc
 }
 
 /// `log C + y log inv_logit(a) + (n - y) log(1 - inv_logit(a))`, written with

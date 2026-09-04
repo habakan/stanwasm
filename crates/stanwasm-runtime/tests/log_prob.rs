@@ -384,3 +384,37 @@ model { y ~ normal(X * b, 1.0); }
         "grad = {grad:?}"
     );
 }
+
+/// `bernoulli(1)` and `binomial(n | n, 1)` are certainties, not NaN: the term
+/// the observation doesn't select used to be `0 * log 0`.
+#[test]
+fn a_degenerate_bernoulli_is_finite() {
+    let mut d = Env::new();
+    d.set_scalar("y", 1.0);
+    let src = "data { int y; } parameters { real a; } model { y ~ bernoulli(1.0); }";
+    let (lp, g) = Model::parse_and_load(src, d.clone())
+        .unwrap()
+        .log_prob_grad(&[0.0])
+        .unwrap();
+    assert_eq!(lp, 0.0);
+    assert_eq!(g, vec![0.0]);
+
+    let src0 = "data { int y; } parameters { real a; } model { y ~ bernoulli(0.0); }";
+    let lp0 = Model::parse_and_load(src0, d)
+        .unwrap()
+        .log_prob_grad(&[0.0])
+        .unwrap()
+        .0;
+    assert_eq!(lp0, f64::NEG_INFINITY);
+}
+
+#[test]
+fn a_degenerate_binomial_is_finite() {
+    let src = "parameters { real a; } model { 3 ~ binomial(3, 1.0); }";
+    let (lp, g) = Model::parse_and_load(src, Env::new())
+        .unwrap()
+        .log_prob_grad(&[0.0])
+        .unwrap();
+    assert!((lp - 0.0).abs() < 1e-12, "{lp}");
+    assert_eq!(g, vec![0.0]);
+}
