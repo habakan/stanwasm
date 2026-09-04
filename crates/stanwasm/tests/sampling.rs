@@ -3,7 +3,7 @@
 //! for linear regression by checking that the mean of the post-warmup draws
 //! lies near the (data-implied) maximum-likelihood point.
 
-use stanwasm::StanModel;
+use stanwasm::{init_gradient_check, StanModel};
 
 const LINEAR_REGRESSION: &str = r#"
 data {
@@ -347,4 +347,19 @@ fn compile_to_wasm_returns_valid_module() {
     );
     let result = wasmparser::Validator::new().validate_all(&wasm);
     assert!(result.is_ok(), "wasm did not validate: {:?}", result.err());
+}
+
+/// The sampler refuses a starting point whose gradient has a zero component —
+/// nuts-rs says only "Invalid initial point" — so the message has to name the
+/// parameters that make it one.
+#[test]
+fn a_starting_point_the_sampler_refuses_names_the_parameters() {
+    let names: Vec<String> = ["a", "unused", "b"].iter().map(|s| s.to_string()).collect();
+    let msg = init_gradient_check(&names, -3.0, &[1.0, 0.0, 2.0]).unwrap_err();
+    assert!(msg.contains("(unused)"), "{msg}");
+    assert!(msg.contains("1 of the 3 parameters"), "{msg}");
+
+    assert!(init_gradient_check(&names, -3.0, &[1.0, 2.0, 3.0]).is_ok());
+    let nan = init_gradient_check(&names, f64::NAN, &[1.0, 2.0, 3.0]).unwrap_err();
+    assert!(nan.contains("log density is NaN"), "{nan}");
 }

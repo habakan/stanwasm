@@ -117,6 +117,41 @@ fn no_warmup_check(num_warmup: u32) -> Result<(), JsError> {
     Ok(())
 }
 
+/// nuts-rs refuses a starting point whose gradient has a zero component — the
+/// mass matrix it adapts is scaled by that gradient — and reports only
+/// "Invalid initial point", which names neither the rule nor the parameter.
+pub fn init_gradient_check(names: &[String], lp: f64, grad: &[f64]) -> Result<(), String> {
+    if !lp.is_finite() {
+        return Err(format!(
+            "log density is {lp} at the starting point; the sampler needs a \
+             finite one to begin from"
+        ));
+    }
+    let bad: Vec<&str> = grad
+        .iter()
+        .enumerate()
+        .filter(|(_, g)| !g.is_finite() || **g == 0.0)
+        .map(|(i, _)| names.get(i).map_or("?", String::as_str))
+        .collect();
+    if bad.is_empty() {
+        return Ok(());
+    }
+    let shown = bad.iter().take(6).copied().collect::<Vec<_>>().join(", ");
+    let rest = if bad.len() > 6 {
+        format!(" and {} more", bad.len() - 6)
+    } else {
+        String::new()
+    };
+    Err(format!(
+        "the log density does not move with {} of the {} parameters at the \
+         starting point ({shown}{rest}), and the sampler cannot begin from \
+         there. Start somewhere the model constrains every parameter, or drop \
+         the ones the data says nothing about",
+        bad.len(),
+        grad.len(),
+    ))
+}
+
 #[wasm_bindgen]
 impl StanModel {
     /// Parse `stan_src`, bind `data_json`, trace the model on the autodiff
@@ -148,6 +183,19 @@ impl StanModel {
 
     /// Evaluate log_prob and gradient at `params`. Returns a flat array of
     /// length `n_params + 1`: the log-prob is at index 0, gradients follow.
+    /// Refuse a starting point the sampler would reject, while the names of
+    /// the parameters that make it one are still to hand.
+    fn check_start(&mut self, init: &[f64]) -> Result<(), JsError> {
+        let names = self.model.unconstrained_param_names();
+        let compiled = self
+            .compiled
+            .as_mut()
+            .ok_or_else(|| compiled_checked_out("sample"))?;
+        let mut grad = vec![0.0_f64; init.len()];
+        let lp = compiled.log_prob_grad(init, &mut grad);
+        init_gradient_check(&names, lp, &grad).map_err(|e| JsError::new(&e))
+    }
+
     #[wasm_bindgen(js_name = logProbGrad)]
     pub fn log_prob_grad(&mut self, params: &[f64]) -> Result<Vec<f64>, JsError> {
         let compiled = self
@@ -184,6 +232,7 @@ impl StanModel {
             )));
         }
         no_warmup_check(num_warmup)?;
+        self.check_start(init)?;
         // Widen before adding: `u32 + u32` wraps, and a wrapped total
         // silently becomes a different (possibly enormous) run length.
         let total = num_warmup as u64 + num_draws as u64;
@@ -538,6 +587,7 @@ impl StanModel {
             )));
         }
         no_warmup_check(num_warmup)?;
+        self.check_start(init)?;
         // Widen before adding: `u32 + u32` wraps, and a wrapped total
         // silently becomes a different (possibly enormous) run length.
         let total = num_warmup as u64 + num_draws as u64;

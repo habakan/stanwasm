@@ -416,6 +416,22 @@ impl Model {
         out
     }
 
+    /// One name per *unconstrained* slot, which is what a gradient is indexed
+    /// by. A constrained declaration has fewer of these than it has entries —
+    /// a `simplex[K]` is `K - 1` — so `param_names` cannot be used for it.
+    pub fn unconstrained_param_names(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for d in &self.prog.parameters {
+            let k = param_dims(&d.typ, &self.data_env);
+            if k == 1 {
+                out.push(d.name.clone());
+            } else {
+                out.extend((1..=k).map(|i| format!("{}[{i}]", d.name)));
+            }
+        }
+        out
+    }
+
     /// Names of the top-level `generated quantities` declarations, in
     /// declaration order and flattened the same way as `param_names`.
     pub fn gen_quantity_names(&self) -> Vec<String> {
