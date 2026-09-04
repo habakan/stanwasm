@@ -17,7 +17,7 @@
 // CSV row each draw writes.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
@@ -92,7 +92,12 @@ let worst = 0;
 let wins = 0;
 for (const name of names.sort()) {
   const model = join(bench, name);
-  if (!existsSync(model)) run("make", [model], cmdstan);
+  // Rebuild whenever the model is newer, not only when the binary is missing:
+  // editing a bench model and comparing the previous one against it reads as
+  // a disagreement in this runtime, which is the one thing this must not do.
+  if (!existsSync(model) || statSync(`${model}.stan`).mtimeMs > statSync(model).mtimeMs) {
+    run("make", [model], cmdstan);
+  }
   let rel = 0;
   const offsets: number[] = [];
   for (const tag of ["", "2"]) {
