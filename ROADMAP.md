@@ -29,8 +29,9 @@ worked through below, ordered by effort.
 | Vector shape | `simplex`, `ordered`, `positive_ordered`, `unit_vector`, `row_vector` | |
 | Matrix constraints | `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix`, `corr_matrix` | |
 | Blocks | `data`, `transformed data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, `functions` | |
-| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed and sliced assignment, ternary `?:`, a bare `{ ... }` block | |
+| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed, gathered and sliced assignment, ternary `?:`, a bare `{ ... }` block | |
 | Operators | arithmetic, comparison, short-circuiting `&&`/`\|\|`, `^`, matrix product (`X * beta`, `A * B`), transpose `x'`, element-wise `.*` `./` `.^` | |
+| Indexing | a position, a range (`x[1:5]`, `x[ : ]`), an array of positions (`phi[node1]`), and any mix across dimensions (`W[1:rows(W), k]`) — reading and assigning | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng` | `lkj_corr_cholesky_rng` |
 | Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose`, `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`, `to_vector`, `dot_self`, `pi`, `negative_infinity`, `sub_col`, `append_row`, `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`, a `[a, b]` literal | `norm`, `eigenvectors_sym`, `student_t_lccdf` |
 
@@ -79,14 +80,14 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**128 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+**132 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
 47 that come with a reference posterior, 41 are usable. What stops the rest:
 
 | | count |
 |---|---:|
-| five shape mismatches, a bound that depends on another parameter, an array of vectors as a multivariate variate, a ragged container | 8 |
 | an array literal — `{1, 2, 3}`, and indexing by one | 5 |
 | `student_t_lccdf` (3) and `eigenvectors_sym` | 4 |
+| two ragged containers, a bound that depends on another parameter, an array of vectors as a multivariate variate | 4 |
 | `data` as a function-argument qualifier | 1 |
 | did not finish in two minutes — 60,000 MNIST digits against 78,500 weights | 1 |
 

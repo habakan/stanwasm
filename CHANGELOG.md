@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-posteriordb coverage goes from 93 to 128 of 147, and from 39 to 41 of the 47
+posteriordb coverage goes from 93 to 132 of 147, and from 39 to 41 of the 47
 posteriors that come with a reference posterior.
 
 ### Added
@@ -24,6 +24,10 @@ posteriors that come with a reference posterior.
   `adj[2, 2:K]` a row slice, and an omitted bound (`x[ : ]`, `x[2 : ]`) is the
   container's own end. A slice is an assignment target too, taking either a
   container of matching length or a scalar to fill the span.
+- **Indexing by an array of positions.** `phi[node1]`, `alpha[ii] .* theta[jj]`
+  — the result is as long as the index, and reads or writes wherever it points.
+  Indices inside one bracket compose, where a second bracket indexes what the
+  first produced; the two differ only once an index is an array.
 - **A bound on a container declaration.** `matrix<lower=0>[M, T] p` transforms
   every entry the way a bound on a vector does.
 - **A matrix literal.** `[a, b, c]` is a row vector of scalars, or a matrix of
