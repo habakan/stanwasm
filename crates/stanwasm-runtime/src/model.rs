@@ -29,18 +29,52 @@ fn flatten_val(tape: &Tape, v: &Val, out: &mut Vec<f64>) -> Result<(), EvalError
 }
 
 /// Push flattened names for one variable: scalar → `name`; vector(N) →
-/// `name[1]`..`name[N]`; matrix → `name[i,j]`.
+/// `name[1]`..`name[N]`; matrix → `name[i,j]`. An array contributes its own
+/// index in front of its element's, so `array[2] simplex[3]` is `p[1,1]`
+/// through `p[2,3]` — the shape `param_dims` cannot describe, since it counts
+/// a simplex's *unconstrained* entries and there is one fewer of those.
 fn push_names_for(out: &mut Vec<String>, name: &str, typ: &StanType, env: &Env) {
-    match typ {
-        StanType::Matrix(r_e, c_e, _) => {
-            let rows = eval_int(r_e, env);
-            let cols = eval_int(c_e, env);
-            for i in 1..=rows {
-                for j in 1..=cols {
-                    out.push(format!("{name}[{i},{j}]"));
-                }
+    push_named(out, name, &mut Vec::new(), typ, env);
+}
+
+fn emit_name(out: &mut Vec<String>, name: &str, idx: &[usize]) {
+    if idx.is_empty() {
+        out.push(name.to_string());
+        return;
+    }
+    let mut s = String::from(name);
+    s.push('[');
+    for (n, i) in idx.iter().enumerate() {
+        if n > 0 {
+            s.push(',');
+        }
+        s.push_str(&i.to_string());
+    }
+    s.push(']');
+    out.push(s);
+}
+
+fn push_named(out: &mut Vec<String>, name: &str, idx: &mut Vec<usize>, typ: &StanType, env: &Env) {
+    let grid = |out: &mut Vec<String>, idx: &mut Vec<usize>, rows: usize, cols: usize| {
+        for i in 1..=rows {
+            for j in 1..=cols {
+                idx.push(i);
+                idx.push(j);
+                emit_name(out, name, idx);
+                idx.pop();
+                idx.pop();
             }
         }
+    };
+    match typ {
+        StanType::Array(size_e, elem) => {
+            for i in 1..=eval_int(size_e, env) {
+                idx.push(i);
+                push_named(out, name, idx, elem, env);
+                idx.pop();
+            }
+        }
+        StanType::Matrix(r_e, c_e, _) => grid(out, idx, eval_int(r_e, env), eval_int(c_e, env)),
         // These constrain to a K×K matrix, while `param_dims` counts the smaller
         // unconstrained vector — naming from that would leave the labels short and
         // misaligned against `constrained_draw`.
@@ -49,26 +83,25 @@ fn push_names_for(out: &mut Vec<String>, name: &str, typ: &StanType, env: &Env) 
         | StanType::CovMatrix(k_e)
         | StanType::CorrMatrix(k_e) => {
             let k = eval_int(k_e, env);
-            for i in 1..=k {
-                for j in 1..=k {
-                    out.push(format!("{name}[{i},{j}]"));
-                }
-            }
+            grid(out, idx, k, k);
         }
         // Likewise: K-1 unconstrained, K constrained.
         StanType::Simplex(k_e) => {
-            let k = eval_int(k_e, env);
-            for i in 1..=k {
-                out.push(format!("{name}[{i}]"));
+            for i in 1..=eval_int(k_e, env) {
+                idx.push(i);
+                emit_name(out, name, idx);
+                idx.pop();
             }
         }
         other => {
             let k = param_dims(other, env);
             if k <= 1 {
-                out.push(name.to_string());
+                emit_name(out, name, idx);
             } else {
                 for i in 1..=k {
-                    out.push(format!("{name}[{i}]"));
+                    idx.push(i);
+                    emit_name(out, name, idx);
+                    idx.pop();
                 }
             }
         }
