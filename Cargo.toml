@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 # Floor set by nuts-rs 0.18 (edition 2024 + let-chains). Verified with
 # `cargo +1.88 test --workspace`.
@@ -22,12 +22,12 @@ repository = "https://github.com/habakan/stanwasm"
 [workspace.dependencies]
 # Each internal dep carries `path` (what local builds resolve) and `version` (what
 # `cargo publish` rewrites to). Bumping means these six lines plus workspace.package.
-stanwasm-ast = { path = "crates/stanwasm-ast", version = "0.1.0" }
-stanwasm-parser = { path = "crates/stanwasm-parser", version = "0.1.0" }
-stanwasm-autodiff = { path = "crates/stanwasm-autodiff", version = "0.1.0" }
-stanwasm-runtime = { path = "crates/stanwasm-runtime", version = "0.1.0" }
-stanwasm-codegen = { path = "crates/stanwasm-codegen", version = "0.1.0" }
-stanwasm = { path = "crates/stanwasm", version = "0.1.0" }
+stanwasm-ast = { path = "crates/stanwasm-ast", version = "0.3.0" }
+stanwasm-parser = { path = "crates/stanwasm-parser", version = "0.3.0" }
+stanwasm-autodiff = { path = "crates/stanwasm-autodiff", version = "0.3.0" }
+stanwasm-runtime = { path = "crates/stanwasm-runtime", version = "0.3.0" }
+stanwasm-codegen = { path = "crates/stanwasm-codegen", version = "0.3.0" }
+stanwasm = { path = "crates/stanwasm", version = "0.3.0" }
 
 nuts-rs = { version = "0.18.1", default-features = false }
 wasm-bindgen = "0.2"

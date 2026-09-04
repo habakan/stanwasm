@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-04 (npm only)
+
+Published to npm as `stanwasm@0.3.0`. The crates stay off crates.io for the
+same reason as 0.1.2 and 0.2.0: the Safari fix still lives in a `[patch]`,
+which Cargo does not carry into a published crate. Re-checked here — nuts-rs is
+still 0.18.3 and pulp still 0.22.3, and the `relaxed-simd` feature gate that
+would let `default-features = false` drop the opcodes exists only on the git
+rev the patch points at. The manifests carry 0.3.0 so the tag matches them.
+
+The release where the language subset stopped being the interesting constraint:
 posteriordb coverage goes from 93 to 137 of 147, and from 39 to 43 of the 47
 posteriors that come with a reference posterior.
 
@@ -568,5 +578,6 @@ Comparable to the `nuts-rs` direct-call benchmark. See `docs/en/BENCHMARKS.md`.
   `sample()` behavior and correctly restores `logProbGrad`/`sample`
   afterward
 
+[0.3.0]: https://github.com/habakan/stanwasm/releases/tag/v0.3.0
 [0.2.0]: https://github.com/habakan/stanwasm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/habakan/stanwasm/releases/tag/v0.1.0
