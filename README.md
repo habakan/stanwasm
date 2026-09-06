@@ -153,7 +153,7 @@ transpose, indexing by a position, a range or an array of them, trigonometry and
 the elementwise operators. Anything outside it is a clean load-time or
 evaluation error, never a model that silently samples something else.
 
-**137 of the 147 posteriors in stan-dev's `posteriordb` load, evaluate a
+**141 of the 147 posteriors in stan-dev's `posteriordb` load, evaluate a
 gradient and compile** — models people wrote, with their data, none of them
 chosen by this project. `make posteriordb` reports what stops the rest.
 

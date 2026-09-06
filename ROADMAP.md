@@ -92,13 +92,15 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**137 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
-47 that come with a reference posterior, 43 are usable. What stops the rest:
+**141 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
+47 that come with a reference posterior, 45 are usable, and 42 of those 45 have
+posterior means within 0.2 sd of the reference — a check on the mean only; R-hat,
+ESS and divergences are not compared yet. What stops the rest:
 
 | | count |
 |---|---:|
 | an ODE integrator — `integrate_ode_rk45`, `integrate_ode_bdf` | 4 |
-| two ragged containers, a bound that depends on another parameter, an array of vectors as a multivariate variate | 4 |
+| the 60,000-digit MNIST model, which does not fit a 32-bit address space | 1 |
 | `eigenvectors_sym` | 1 |
 | did not finish in two minutes — 60,000 MNIST digits against 78,500 weights | 1 |
 
