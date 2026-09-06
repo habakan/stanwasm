@@ -244,6 +244,23 @@ model {
     (d * (d - 1)) / 2 + d + 1,
   );
 
+  // `eta` as a parameter rather than data, which is the case where LKJ's
+  // normalising constant is not constant. Dropping it used to leave the density
+  // wrong by an amount that moves with the point, and no other model here takes
+  // that path.
+  add(
+    "lkj_eta",
+    `data { int<lower=0> D; array[2] vector[D] y; }
+parameters { corr_matrix[D] R; real<lower=1> eta; }
+model {
+  eta ~ exponential(0.5);
+  R ~ lkj_corr(eta);
+  for (m in 1:2) y[m] ~ multi_normal(rep_vector(0, D), R);
+}`,
+    { D: d, y: [rows[0], rows[1]] },
+    (d * (d - 1)) / 2 + 1,
+  );
+
   // The GLM form and the two densities added with it: CmdStan checks the
   // formulas, not only that they run.
   add(

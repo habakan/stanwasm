@@ -20,8 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   They existed to close a gap in the calibration checks: simulation-based
   calibration needs a prior it can draw from, and `cov_matrix` had none. With
   `inv_wishart` it does, and over 400 replications the rank histograms are flat
-  (χ² of 10.3, 11.3 and 16.6 against a threshold of 16.9). `corr_matrix` is now
-  the only constrained type still unchecked that way, and it wants `lkj_corr`.
+  (χ² of 10.3, 11.3 and 16.6 against a threshold of 16.9).
+- **`lkj_corr`**, which closed the last gap in those checks: `corr_matrix` now
+  has a prior anyone can draw from, and its rank histograms are flat at K = 2
+  and K = 3. Reaching K = 3 is what exposed the two bugs below.
 - **`tan`, `asin`, `acos` and `atan` on the AOT path.** All four were callable
   from Stan source and refused by the emitter, so a model using one sampled but
   would not compile — the one asymmetry between the two paths a reader would
@@ -108,6 +110,25 @@ working through that corpus.
 
 ### Fixed
 
+- **`corr_matrix` used the Cholesky factor's Jacobian, and built its factor in
+  the wrong order.** Two bugs in one place, both invisible at K = 2 and both
+  wrong from K = 3 up. A correlation matrix and its Cholesky factor are
+  different parameterisations with different volume elements: the matrix carries
+  an extra `½·(K−k−1)·log(1 − z²)` per free value, which is an empty sum at
+  K = 2. And Stan fills the factor row by row but the matrix column by column,
+  so the free values landed in different entries. The determinant is a sum over
+  every position either way, which is why a density that only reads `log|R|`
+  agreed and hid it. A test in this repository asserted the two Jacobians were
+  equal; it now pins both against CmdStan 2.39.0 at K = 3 and K = 4, and a
+  second test records that they do coincide at K = 2.
+- **LKJ dropped its normalising constant.** Exact while `η` is data, silently
+  wrong the moment `η` is a parameter, since the dropped term is a function of
+  it. Both `lkj_corr` and `lkj_corr_cholesky` now carry
+  `(K−1)·lgamma(η + (K−1)/2) − Σ [½k·log π + lgamma(η + (K−1−k)/2)]`, recovered
+  from a reference implementation at K = 2 and K = 3 rather than guessed, and
+  pinned at both. `bench_models.ts` gained a model with `η` a parameter, so
+  `make compare-cmdstan` walks that path from now on — it is what found all of
+  the above.
 - A multivariate density took a length-K vector where it wanted a K×K matrix,
   because both have K entries at the top level, and returned NaN rather than
   saying so. The check now looks at the rows.

@@ -501,8 +501,11 @@ pub fn dirichlet_lpdf(t: &mut Tape, theta: &[Val], alpha: &[Val]) -> Val {
     lp
 }
 
-/// `lkj_corr_cholesky_lpdf(L | η)`: log p = Σₖ [(K−1−k) + (2η−2)]·log Lₖₖ, exponents
-/// summed on a shared base (a `(2η−2)` factor over the sum is 0 at K=2). Unnormalized.
+/// `lkj_corr_cholesky_lpdf(L | η)`: `Σₖ [(K−1−k) + (2η−2)]·log Lₖₖ + log c_K(η)`,
+/// exponents summed on a shared base (a `(2η−2)` factor over the sum is 0 at K=2).
+///
+/// Carries the same constant as the matrix form, for the same reason: it is a
+/// function of `η`, so leaving it out is only safe while `η` is data.
 pub fn lkj_corr_cholesky_lpdf(t: &mut Tape, l_rows: &[Val], eta: &Val) -> Val {
     let kk = l_rows.len();
     let two_eta = v_mul(t, &Val::Num(2.0), eta);
@@ -519,7 +522,41 @@ pub fn lkj_corr_cholesky_lpdf(t: &mut Tape, l_rows: &[Val], eta: &Val) -> Val {
             }
         }
     }
-    lp
+    let c = lkj_log_constant(t, eta, kk);
+    v_add(t, &lp, &c)
+}
+
+/// LKJ's normalising constant over K×K correlation matrices:
+/// `(K−1)·lgamma(η + (K−1)/2) − Σ_{k=1..K−1} [ ½k·log π + lgamma(η + (K−1−k)/2) ]`.
+///
+/// Kept rather than dropped, because it depends on `η`. Dropping it is exact
+/// while `η` is data and silently wrong the moment it is a parameter — the
+/// posterior for `η` then comes out of the wrong density with no sign that
+/// anything happened. Checked against a reference implementation at K=2 and
+/// K=3, where solving for the constant from its log density agrees exactly.
+fn lkj_log_constant(t: &mut Tape, eta: &Val, k: usize) -> Val {
+    let km1 = (k - 1) as f64;
+    let shifted = v_add(t, eta, &Val::Num(km1 / 2.0));
+    let lg = v_lgamma(t, &shifted);
+    let mut acc = v_mul(t, &Val::Num(km1), &lg);
+    for j in 1..k {
+        let e = v_add(t, eta, &Val::Num((km1 - j as f64) / 2.0));
+        let lg = v_lgamma(t, &e);
+        let term = v_add(t, &Val::Num(0.5 * j as f64 * std::f64::consts::PI.ln()), &lg);
+        acc = v_sub(t, &acc, &term);
+    }
+    acc
+}
+
+/// `lkj_corr_lpdf(R | η)`: `(η−1)·log|R| + log c_K(η)`, the same density as
+/// `lkj_corr_cholesky` seen on the matrix rather than on its factor.
+pub fn lkj_corr_lpdf(t: &mut Tape, r_rows: &[Val], eta: &Val) -> Val {
+    let l = cholesky_decompose(t, r_rows);
+    let log_det = log_det_from_chol(t, &l);
+    let eta_minus_1 = v_sub(t, eta, &Val::Num(1.0));
+    let kernel = v_mul(t, &eta_minus_1, &log_det);
+    let c = lkj_log_constant(t, eta, r_rows.len());
+    v_add(t, &kernel, &c)
 }
 
 /// Distributions whose first argument is a whole vector / matrix. Sampling a
@@ -534,6 +571,7 @@ fn is_multivariate(name: &str) -> bool {
             | "wishart"
             | "inv_wishart"
             | "lkj_corr_cholesky"
+            | "lkj_corr"
             | "dirichlet"
             | "multinomial"
     )
@@ -545,7 +583,8 @@ fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "std_normal" => 0,
         "exponential" | "half_normal" | "bernoulli" | "bernoulli_logit" | "poisson"
-        | "poisson_log" | "dirichlet" | "lkj_corr_cholesky" | "multinomial" | "categorical"
+        | "poisson_log" | "dirichlet" | "lkj_corr_cholesky" | "lkj_corr" | "multinomial"
+        | "categorical"
         | "categorical_logit" => 1,
         "normal"
         | "cauchy"
@@ -736,6 +775,15 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
             Val::Vec(l_rows) => lkj_corr_cholesky_lpdf(t, l_rows, &args[0]),
             _ => return Err(wrong_type(name, "a cholesky_factor_corr variate", x)),
         },
+        "lkj_corr" => match x {
+            Val::Vec(rows)
+                if !rows.is_empty()
+                    && rows.iter().all(|r| r.elems().is_some_and(|e| e.len() == rows.len())) =>
+            {
+                lkj_corr_lpdf(t, rows, &args[0])
+            }
+            _ => return Err(wrong_type(name, "a K x K correlation matrix variate", x)),
+        },
         "dirichlet" => match (x, &args[0]) {
             (Val::Vec(theta), Val::Vec(alpha)) => {
                 if theta.len() != alpha.len() {
@@ -810,9 +858,12 @@ fn broadcast_elem(v: &Val, i: usize) -> Val {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use stanwasm_autodiff::lgamma;
 
-    /// K=2 has one free parameter ρ, so `log p(L|η) = (2η-2)·log(L[1][1])` exactly.
-    /// Regression test for the structural bug where this always evaluated to 0.
+    /// K=2 has one free parameter ρ, so the kernel is `(2η-2)·log(L[1][1])`
+    /// exactly, and the constant at K=2 is `lgamma(η+½) − lgamma(η) − ½log π`.
+    /// Regression test for the structural bug where the kernel always
+    /// evaluated to 0, and for the constant that used to be missing.
     #[test]
     fn lkj_corr_cholesky_k2_matches_analytic_formula() {
         let mut t = Tape::new();
@@ -824,7 +875,10 @@ mod tests {
                     Val::Vec(vec![Val::Num(rho), Val::Num(l11)]),
                 ];
                 let lp = lkj_corr_cholesky_lpdf(&mut t, &l_rows, &Val::Num(eta));
-                let expected = (2.0 * eta - 2.0) * l11.ln();
+                let expected = (2.0 * eta - 2.0) * l11.ln()
+                    + lgamma(eta + 0.5)
+                    - lgamma(eta)
+                    - 0.5 * std::f64::consts::PI.ln();
                 let got = lp.to_f64(&t).unwrap();
                 assert!(
                     (got - expected).abs() < 1e-9,

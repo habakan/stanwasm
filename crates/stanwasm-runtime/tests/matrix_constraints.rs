@@ -125,13 +125,42 @@ fn parameter_names_line_up_with_the_constrained_draw() {
     }
 }
 
+/// A correlation matrix and its Cholesky factor are different parameterisations
+/// with different volume elements, so their Jacobians differ from K = 3 up —
+/// this file used to assert they were equal, which held only at K = 2 where the
+/// extra term is an empty sum. Values are CmdStan 2.39.0's, at the same points.
 #[test]
-fn corr_matrix_shares_the_cholesky_factor_corr_jacobian() {
-    // x = L Lᵀ contributes nothing further: Stan's `read_corr_matrix` adds only what
-    // `read_corr_L` already did, which is not true of cov_matrix's L Lᵀ.
+fn corr_matrix_and_its_factor_have_different_jacobians() {
     let raw = [0.4, -0.2, 0.7];
     let (corr, _) = jacobian_only("corr_matrix[3] R;", &raw);
     let (chol, _) = jacobian_only("cholesky_factor_corr[3] L;", &raw);
+    assert!(
+        (corr - -0.748_005_130_400_530).abs() < 1e-12,
+        "corr_matrix[3] = {corr}"
+    );
+    assert!(
+        (chol - -0.670_051_645_012_698).abs() < 1e-12,
+        "cholesky_factor_corr[3] = {chol}"
+    );
+    assert!(
+        (corr - chol).abs() > 1e-3,
+        "the two are supposed to differ, and both came out {corr}"
+    );
+
+    let (corr4, _) = jacobian_only("corr_matrix[4] R;", &[0.2, -0.3, 0.5, 0.1, -0.4, 0.6]);
+    assert!(
+        (corr4 - -1.326_399_491_081_509).abs() < 1e-12,
+        "corr_matrix[4] = {corr4}"
+    );
+}
+
+/// At K = 2 they do coincide, which is the reason the difference above stayed
+/// hidden: every check here used to stop at two.
+#[test]
+fn at_k_two_the_two_correlation_jacobians_agree() {
+    let raw = [0.35];
+    let (corr, _) = jacobian_only("corr_matrix[2] R;", &raw);
+    let (chol, _) = jacobian_only("cholesky_factor_corr[2] L;", &raw);
     assert!((corr - chol).abs() < 1e-12, "corr={corr}, chol={chol}");
 }
 

@@ -149,3 +149,163 @@ fn a_variate_of_the_wrong_shape_is_refused() {
         .to_string();
     assert!(e.contains("wishart"), "{e}");
 }
+
+// ---- lkj_corr -------------------------------------------------------------
+
+/// `lkj_corr(R | η)` and `lkj_corr_cholesky(chol(R) | η)` describe the same
+/// distribution seen on the matrix and on its factor, so they differ by the
+/// change of variables `R = L Lᵀ`. Whatever the shared constant is, the two
+/// have to move together — which is what this pins.
+#[test]
+fn lkj_on_the_matrix_and_on_its_factor_agree_up_to_the_change_of_variables() {
+    for rho in [-0.6_f64, -0.1, 0.25, 0.8] {
+        for eta in [1.0_f64, 2.0, 3.5] {
+            let l21 = rho;
+            let l22 = (1.0 - rho * rho).sqrt();
+            let src = format!(
+                "data {{ matrix[2,2] R; matrix[2,2] L; }}
+                 parameters {{ real z; }}
+                 model {{ target += lkj_corr_lpdf(R | {eta})
+                                  - lkj_corr_cholesky_lpdf(L | {eta}) + 0 * z; }}"
+            );
+            let m = |a: f64, b: f64, c: f64, d: f64| {
+                Val::Vec(vec![
+                    Val::Row(vec![Val::Num(a), Val::Num(b)]),
+                    Val::Row(vec![Val::Num(c), Val::Num(d)]),
+                ])
+            };
+            let mut env = Env::new();
+            env.set("R", m(1.0, rho, rho, 1.0));
+            env.set("L", m(1.0, 0.0, l21, l22));
+            let (got, _) = Model::parse_and_load(&src, env)
+                .unwrap()
+                .log_prob_grad(&[0.0])
+                .unwrap();
+            // lkj_corr uses log|R| = 2 log L22; the Cholesky form weights the
+            // diagonal by (K-1-k) + 2η-2, which at K=2 is (2η-2) log L22 for k=1.
+            let want = (eta - 1.0) * 2.0 * l22.ln() - (2.0 * eta - 2.0) * l22.ln();
+            assert!(
+                (got - want).abs() < 1e-12,
+                "rho={rho} eta={eta}: {got} != {want}"
+            );
+        }
+    }
+}
+
+/// At η = 1 the density is flat over correlation matrices, so every R gives the
+/// same value — the check that the exponent sits on `log|R|` rather than on
+/// something that happens to agree at one point. The shared value is the
+/// normalising constant, not zero.
+#[test]
+fn lkj_corr_is_flat_at_eta_one() {
+    let at = |rho: f64| {
+        let src = "data { matrix[2,2] R; } parameters { real z; }
+                   model { target += lkj_corr_lpdf(R | 1.0) + 0 * z; }";
+        let mut env = Env::new();
+        env.set(
+            "R",
+            Val::Vec(vec![
+                Val::Row(vec![Val::Num(1.0), Val::Num(rho)]),
+                Val::Row(vec![Val::Num(rho), Val::Num(1.0)]),
+            ]),
+        );
+        Model::parse_and_load(src, env)
+            .unwrap()
+            .log_prob_grad(&[0.0])
+            .unwrap()
+            .0
+    };
+    let first = at(-0.9);
+    for rho in [-0.3_f64, 0.0, 0.5, 0.95] {
+        assert!(
+            (at(rho) - first).abs() < 1e-12,
+            "at rho={rho} it is {}, at -0.9 it was {first}",
+            at(rho)
+        );
+    }
+}
+
+#[test]
+fn lkj_corr_refuses_a_variate_that_is_not_a_matrix() {
+    let src = "data { vector[2] v; } parameters { real z; }
+               model { target += lkj_corr_lpdf(v | 2.0) + 0 * z; }";
+    let mut env = Env::new();
+    env.set_vector("v", &[1.0, 0.5]);
+    let e = Model::parse_and_load(src, env)
+        .unwrap()
+        .log_prob_grad(&[0.0])
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("lkj_corr"), "{e}");
+}
+
+/// Values from CmdStan 2.39.0's `log_prob` method, at `R` and `L` fixed as
+/// data and `eta` a parameter — the case where the normalising constant is not
+/// a constant, and where dropping it used to make the density wrong by an
+/// amount that moved with the point.
+#[test]
+fn lkj_matches_a_reference_implementation_with_eta_a_parameter() {
+    let m = |rows: Vec<Vec<f64>>| {
+        Val::Vec(
+            rows.into_iter()
+                .map(|r| Val::Row(r.into_iter().map(Val::Num).collect()))
+                .collect(),
+        )
+    };
+    let run = |src: &str, name: &str, mat: Val, u: f64| {
+        let mut env = Env::new();
+        env.set(name, mat);
+        Model::parse_and_load(src, env)
+            .unwrap()
+            .log_prob_grad(&[u])
+            .unwrap()
+            .0
+    };
+
+    let r2 = m(vec![vec![1.0, 0.4], vec![0.4, 1.0]]);
+    let src2 = "data { matrix[2,2] R; } parameters { real<lower=1> eta; }
+                model { R ~ lkj_corr(eta); }";
+    for (u, want) in [
+        (-0.5, -1.017745071486),
+        (0.0, -0.462035459597),
+        (0.5, 0.080290215176),
+        (1.0, 0.576805805269),
+    ] {
+        let got = run(src2, "R", r2.clone(), u);
+        assert!((got - want).abs() < 1e-10, "K=2 at u={u}: {got} != {want}");
+    }
+
+    let r3 = m(vec![
+        vec![1.0, 0.3, -0.2],
+        vec![0.3, 1.0, 0.15],
+        vec![-0.2, 0.15, 1.0],
+    ]);
+    let src3 = "data { matrix[3,3] R; } parameters { real<lower=1> eta; }
+                model { R ~ lkj_corr(eta); }";
+    for (u, want) in [
+        (-0.5, -1.542691498779),
+        (0.0, -0.802415507479),
+        (0.7, 0.302541164563),
+    ] {
+        let got = run(src3, "R", r3.clone(), u);
+        assert!((got - want).abs() < 1e-10, "K=3 at u={u}: {got} != {want}");
+    }
+
+    // The Cholesky form carries the same constant, checked at the factor of the
+    // same K=3 matrix.
+    let l3 = m(vec![
+        vec![1.0, 0.0, 0.0],
+        vec![0.3, 0.953_939_201_416_945_6, 0.0],
+        vec![-0.2, 0.220_139_816_015_670_9, 0.954_745_233_631_397_3],
+    ]);
+    let srcl = "data { matrix[3,3] L; } parameters { real<lower=1> eta; }
+                model { L ~ lkj_corr_cholesky(eta); }";
+    for (u, want) in [
+        (-0.5, -1.589846838514),
+        (0.0, -0.849570847214),
+        (0.7, 0.255385824828),
+    ] {
+        let got = run(srcl, "L", l3.clone(), u);
+        assert!((got - want).abs() < 1e-9, "chol K=3 at u={u}: {got} != {want}");
+    }
+}

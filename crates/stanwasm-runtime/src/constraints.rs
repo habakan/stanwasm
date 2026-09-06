@@ -60,6 +60,72 @@ fn corr_l_from_raw(t: &mut Tape, raw: &[Val], kk: usize) -> (Vec<Val>, Val) {
     (mat, log_jac)
 }
 
+/// `read_corr_L`'s factor: the same stick-breaking as `corr_l_from_raw`, but
+/// reading the free values down the columns rather than along the rows.
+///
+/// Stan builds the Cholesky *factor* row by row and the correlation *matrix*
+/// column by column, so the two constrained types disagree about which free
+/// value lands where. Both give the same `log|R|` — it is the sum over every
+/// position — which is why a density that only reads the determinant cannot
+/// tell them apart, and why this went unnoticed.
+fn corr_l_column_major(t: &mut Tape, raw: &[Val], kk: usize) -> Vec<Val> {
+    // Free value for entry (i, j), j < i, counting down column j.
+    let at = |i: usize, j: usize| -> usize {
+        (0..j).map(|c| kk - 1 - c).sum::<usize>() + (i - j - 1)
+    };
+    let mut mat: Vec<Val> = Vec::with_capacity(kk);
+    for i in 0..kk {
+        let mut row: Vec<Val> = vec![Val::Num(0.0); kk];
+        if i == 0 {
+            row[0] = Val::Num(1.0);
+        } else {
+            let mut rem = Val::Num(1.0);
+            #[allow(clippy::needless_range_loop)]
+            for j in 0..i {
+                let z = v_tanh(t, &raw[at(i, j)]);
+                let z2 = v_mul(t, &z, &z);
+                let one_minus_z2 = v_sub(t, &Val::Num(1.0), &z2);
+                let sqrt_rem = v_sqrt(t, &rem);
+                row[j] = v_mul(t, &z, &sqrt_rem);
+                rem = v_mul(t, &rem, &one_minus_z2);
+            }
+            row[i] = v_sqrt(t, &rem);
+        }
+        mat.push(Val::Row(row));
+    }
+    mat
+}
+
+/// The Jacobian of unconstrained → correlation matrix, which is the tanh term
+/// per canonical partial correlation plus `½·(K−k−1)·log(1 − z²)` over the
+/// same run. The weights are zero at K = 2, which is why the factor's Jacobian
+/// passes for it and diverges from K = 3 up. Checked against a reference
+/// implementation at K = 2, 3 and 4 over twelve points.
+fn corr_matrix_log_jac(t: &mut Tape, raw: &[Val], kk: usize) -> Val {
+    let mut z = Vec::with_capacity(raw.len());
+    let mut acc = Val::Num(0.0);
+    for r in raw {
+        let zi = v_tanh(t, r);
+        let z2 = v_mul(t, &zi, &zi);
+        let one_minus = v_sub(t, &Val::Num(1.0), &z2);
+        let l = v_log(t, &one_minus);
+        acc = v_add(t, &acc, &l);
+        z.push(l);
+    }
+    let mut pos = 0usize;
+    for k in 1..kk.saturating_sub(1) {
+        for _ in (k + 1)..=kk {
+            if let Some(l) = z.get(pos) {
+                let w = 0.5 * (kk - k - 1) as f64;
+                let term = v_mul(t, &Val::Num(w), l);
+                acc = v_add(t, &acc, &term);
+            }
+            pos += 1;
+        }
+    }
+    acc
+}
+
 fn tri_from_raw(t: &mut Tape, raw: &[Val], kk: usize) -> (Vec<Val>, Val, Vec<Val>) {
     let mut rows: Vec<Val> = Vec::with_capacity(kk);
     let mut log_jac = Val::Num(0.0);
@@ -254,14 +320,16 @@ pub fn constrain(
             let (mat, log_jac) = corr_l_from_raw(t, raw, kk);
             (Val::Vec(mat), log_jac)
         }
-        // corr_matrix[K]: the same L, then x = L Lᵀ. Unlike cov_matrix, that product
-        // contributes no further Jacobian — Stan's `read_corr_matrix` adds only what
-        // `read_corr_L` already accounted for.
+        // corr_matrix[K]: the same L, then x = L Lᵀ — but *not* the same Jacobian.
+        // A correlation matrix and its factor are different parameterisations
+        // with different volume elements, and the two agree only at K = 2,
+        // where the extra term below is an empty sum. Getting this wrong is
+        // invisible until K reaches 3.
         StanType::CorrMatrix(k_e) => {
             let kk = eval_plain_int(k_e, env);
-            let (l_rows, log_jac) = corr_l_from_raw(t, raw, kk);
+            let l_rows = corr_l_column_major(t, raw, kk);
             let x = matrix::mat_mat_mul_transpose_rhs(t, &l_rows, kk);
-            (Val::Vec(x), log_jac)
+            (Val::Vec(x), corr_matrix_log_jac(t, raw, kk))
         }
         // array[N] T — constrain each element and sum the Jacobians. Without this,
         // `array[N] real<lower=0> s;` passed through untransformed and unjacobianed.
@@ -486,7 +554,7 @@ pub fn unconstrain(
             if x.len() != kk * kk {
                 return Err(wrong_len(kk * kk));
             }
-            free_corr_l(x, kk, out);
+            free_corr_matrix(x, kk, out);
         }
         StanType::CorrMatrix(k_e) => {
             let kk = eval_plain_int(k_e, env);
@@ -565,6 +633,22 @@ fn free_corr_l(l: &[f64], kk: usize, out: &mut Vec<f64>) {
             rem *= 1.0 - z * z;
         }
     }
+}
+
+/// Inverse of `corr_l_column_major`: the same walk, writing each free value at
+/// the position its column gives it.
+fn free_corr_matrix(l: &[f64], kk: usize, out: &mut Vec<f64>) {
+    let mut free = vec![0.0_f64; kk * (kk - 1) / 2];
+    for i in 1..kk {
+        let mut rem = 1.0_f64;
+        for j in 0..i {
+            let z = l[i * kk + j] / rem.sqrt();
+            let at = (0..j).map(|c| kk - 1 - c).sum::<usize>() + (i - j - 1);
+            free[at] = z.atanh();
+            rem *= 1.0 - z * z;
+        }
+    }
+    out.extend_from_slice(&free);
 }
 
 /// Inverse of `tri_from_raw`: each row's off-diagonals, then its log diagonal.
