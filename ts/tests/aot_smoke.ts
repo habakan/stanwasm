@@ -68,7 +68,8 @@ const aotBytes = model.compileToWasm();
 // Instantiate the AOT module sharing stan's memory.
 const aot = await WebAssembly.instantiate(aotBytes, {
   stan: { memory: sharedMemory() as WebAssembly.Memory },
-  Math: { exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos, pow: Math.pow, lgamma, digamma, phi },
+  Math: { exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos, pow: Math.pow,
+          tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan, lgamma, digamma, phi },
 });
 setAotExports(aot.instance.exports);
 

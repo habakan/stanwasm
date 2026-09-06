@@ -29,7 +29,7 @@ const phi = (x: number): number => {
   return x >= 0 ? cdf : 1 - cdf;
 };
 const mathImports = { exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos,
-                      pow: Math.pow, lgamma, digamma, phi };
+                      pow: Math.pow, tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan, lgamma, digamma, phi };
 
 const SRC = `data { int<lower=0> N; vector[N] x; vector[N] y; }
 parameters { real alpha; real beta; real<lower=0> sigma; }

@@ -37,7 +37,8 @@ const phi = (x: number): number => {
   const cdf = 1 - (1 / Math.sqrt(2 * Math.PI)) * Math.exp(-0.5 * x * x) * poly;
   return x >= 0 ? cdf : 1 - cdf;
 };
-const mathImports = { exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos, pow: Math.pow, lgamma, digamma, phi };
+const mathImports = { exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos, pow: Math.pow,
+                      tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan, lgamma, digamma, phi };
 
 interface Case {
   name: string;

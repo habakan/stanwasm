@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`tan`, `asin`, `acos` and `atan` on the AOT path.** All four were callable
+  from Stan source and refused by the emitter, so a model using one sampled but
+  would not compile — the one asymmetry between the two paths a reader would
+  actually hit. Each derivative is written from the node's own value or its
+  argument, so none of them pulls in a second import. Checked against the AST
+  oracle to 1e-12 at two points, because `asin` and `acos` bend hardest away
+  from zero. The emitter still refuses `student_t_lccdf`, which needs an
+  incomplete beta and its derivative; `erf`, `erfc` and a bare `digamma` stay
+  in the refusal list only to fail loudly if they ever become reachable, since
+  nothing in the runtime emits them as a forward node today.
 - **`to_matrix`, `col` and `row`.** A 2-D container becomes a matrix by
   retagging its rows, which is all a matrix adds here; `col` gives a vector and
   `row` a row vector, which is what decides how each multiplies. Between these

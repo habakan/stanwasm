@@ -41,7 +41,7 @@ const phi = (x: number): number => {
 };
 const mathImports = {
   exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos,
-  pow: Math.pow, lgamma, digamma, phi,
+  pow: Math.pow, tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan, lgamma, digamma, phi,
 };
 
 const args = process.argv.slice(2);
