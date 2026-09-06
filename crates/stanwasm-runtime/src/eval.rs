@@ -540,6 +540,190 @@ fn eval_user_call(
     eval_expr(t, &def.ret_expr, &local)
 }
 
+/// `integrate_ode_rk45(f, y0, t0, ts, theta, x_r, x_i[, rel_tol, abs_tol, max_steps])`.
+///
+/// Cash-Karp embedded RK45 with step-halving control. The step count comes out
+/// of the error estimate, so it depends on the parameters and the recorded
+/// graph is different at every point — which is why this is refused on the path
+/// that replays a trace, and reachable only from `sampleFresh`.
+///
+/// The comparison that chooses a step reads tape *values*, not the parameters
+/// as symbols, so no derivative flows through it. That is the usual reading:
+/// the solution's sensitivity is what the tape carries, and the step schedule
+/// is a property of the numerical method rather than of the model.
+fn eval_ode_rk45(t: &mut Tape, args: &[Expr], env: &Env) -> Result<Val> {
+    if !(7..=10).contains(&args.len()) {
+        return Err(EvalError::WrongArity {
+            name: "integrate_ode_rk45".into(),
+            expected: 7,
+            got: args.len(),
+        });
+    }
+    let Expr::Var(fname) = &args[0] else {
+        return Err(EvalError::BadParameterDeclaration {
+            name: "integrate_ode_rk45".into(),
+            detail: "the first argument names the system function".into(),
+        });
+    };
+    let def = env
+        .func(fname)
+        .ok_or_else(|| EvalError::UnknownFunction(fname.clone()))?;
+
+    let mut y: Vec<Val> = as_elems(&eval_expr(t, &args[1], env)?);
+    let mut t_now = eval_expr(t, &args[2], env)?.to_f64(t)?;
+    let ts: Vec<f64> = as_elems(&eval_expr(t, &args[3], env)?)
+        .iter()
+        .map(|v| v.to_f64(t))
+        .collect::<Result<_>>()?;
+    let theta = eval_expr(t, &args[4], env)?;
+    let x_r = eval_expr(t, &args[5], env)?;
+    let x_i = eval_expr(t, &args[6], env)?;
+    let num = |t: &mut Tape, i: usize, d: f64| -> f64 {
+        args.get(i)
+            .and_then(|e| eval_expr(t, e, env).ok())
+            .and_then(|v| v.to_f64(t).ok())
+            .unwrap_or(d)
+    };
+    let rel_tol = num(t, 7, 1e-6);
+    let abs_tol = num(t, 8, 1e-6);
+    let max_steps = num(t, 9, 1e6) as u64;
+
+    let rhs = |t: &mut Tape, at: f64, y: &[Val]| -> Result<Vec<Val>> {
+        let argv = vec![
+            Val::Num(at),
+            Val::Vec(y.to_vec()),
+            theta.clone(),
+            x_r.clone(),
+            x_i.clone(),
+        ];
+        Ok(as_elems(&eval_user_call(t, fname, &def, argv, env)?))
+    };
+
+    let mut out: Vec<Val> = Vec::with_capacity(ts.len());
+    let mut h = ts.first().map_or(1.0, |t1| (t1 - t_now).abs().max(1e-6) * 0.1);
+    let mut taken = 0u64;
+    for &t_end in &ts {
+        while t_now < t_end {
+            h = h.min(t_end - t_now);
+            let (next, err) = cash_karp_step(t, &rhs, t_now, &y, h)?;
+            // The tolerance is on the value, so the error estimate is read off
+            // the tape rather than kept on it.
+            let scale = y
+                .iter()
+                .map(|v| abs_tol + rel_tol * v.to_f64(t).unwrap_or(0.0).abs())
+                .collect::<Vec<_>>();
+            let worst = err
+                .iter()
+                .zip(&scale)
+                .map(|(e, s)| e.abs() / s.max(f64::MIN_POSITIVE))
+                .fold(0.0_f64, f64::max);
+            taken += 1;
+            if taken > max_steps {
+                return Err(EvalError::BadParameterDeclaration {
+                    name: "integrate_ode_rk45".into(),
+                    detail: format!("took more than max_steps ({max_steps}) steps"),
+                });
+            }
+            if worst <= 1.0 {
+                y = next;
+                t_now += h;
+                h *= (0.9 * worst.max(1e-10).powf(-0.2)).min(5.0);
+            } else {
+                h *= (0.9 * worst.powf(-0.25)).max(0.1);
+            }
+            if h.is_nan() || h <= 0.0 {
+                return Err(EvalError::BadParameterDeclaration {
+                    name: "integrate_ode_rk45".into(),
+                    detail: "the step size collapsed; the system may be stiff".into(),
+                });
+            }
+        }
+        out.push(Val::Vec(y.clone()));
+    }
+    Ok(Val::Vec(out))
+}
+
+/// One Cash-Karp step: the fifth-order state, and the difference against the
+/// embedded fourth-order one as the error estimate.
+#[allow(clippy::type_complexity)]
+fn cash_karp_step(
+    t: &mut Tape,
+    rhs: &dyn Fn(&mut Tape, f64, &[Val]) -> Result<Vec<Val>>,
+    t0: f64,
+    y: &[Val],
+    h: f64,
+) -> Result<(Vec<Val>, Vec<f64>)> {
+    const A: [f64; 6] = [0.0, 0.2, 0.3, 0.6, 1.0, 0.875];
+    const B: [[f64; 5]; 6] = [
+        [0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.2, 0.0, 0.0, 0.0, 0.0],
+        [3.0 / 40.0, 9.0 / 40.0, 0.0, 0.0, 0.0],
+        [0.3, -0.9, 1.2, 0.0, 0.0],
+        [-11.0 / 54.0, 2.5, -70.0 / 27.0, 35.0 / 27.0, 0.0],
+        [
+            1631.0 / 55296.0,
+            175.0 / 512.0,
+            575.0 / 13824.0,
+            44275.0 / 110592.0,
+            253.0 / 4096.0,
+        ],
+    ];
+    const C5: [f64; 6] = [
+        37.0 / 378.0,
+        0.0,
+        250.0 / 621.0,
+        125.0 / 594.0,
+        0.0,
+        512.0 / 1771.0,
+    ];
+    const C4: [f64; 6] = [
+        2825.0 / 27648.0,
+        0.0,
+        18575.0 / 48384.0,
+        13525.0 / 55296.0,
+        277.0 / 14336.0,
+        0.25,
+    ];
+
+    let n = y.len();
+    let mut k: Vec<Vec<Val>> = Vec::with_capacity(6);
+    for s in 0..6 {
+        let mut stage = y.to_vec();
+        for (j, kj) in k.iter().enumerate() {
+            let w = h * B[s][j];
+            if w == 0.0 {
+                continue;
+            }
+            for (si, kji) in stage.iter_mut().zip(kj) {
+                let d = v_mul(t, &Val::Num(w), kji);
+                *si = v_add(t, si, &d);
+            }
+        }
+        let ks = rhs(t, t0 + A[s] * h, &stage)?;
+        if ks.len() != n {
+            return Err(EvalError::ShapeMismatch {
+                op: "integrate_ode_rk45".into(),
+                lhs: Shape::Vector(n).to_string(),
+                rhs: Shape::Vector(ks.len()).to_string(),
+            });
+        }
+        k.push(ks);
+    }
+
+    let mut next = y.to_vec();
+    let mut err = vec![0.0_f64; n];
+    for i in 0..n {
+        for (s, ks) in k.iter().enumerate() {
+            if C5[s] != 0.0 {
+                let d = v_mul(t, &Val::Num(h * C5[s]), &ks[i]);
+                next[i] = v_add(t, &next[i], &d);
+            }
+            err[i] += h * (C5[s] - C4[s]) * ks[i].to_f64(t).unwrap_or(0.0);
+        }
+    }
+    Ok((next, err))
+}
+
 /// `ode_rk4_fixed(f, y0, t0, ts, theta, x_r, x_i, n_steps)`.
 ///
 /// Classical RK4 at a step count the caller fixes, deliberately not named after
@@ -761,6 +945,15 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
     // system function and would otherwise be reported as an undefined variable.
     if name == "ode_rk4_fixed" {
         return eval_ode_rk4_fixed(t, args, env);
+    }
+    if name == "integrate_ode_rk45" || name == "ode_rk45" {
+        // The step sequence is chosen from the parameters, so a trace that will
+        // be replayed would freeze it at whatever the tracing point picked.
+        // A fresh trace per gradient has no such problem.
+        if env.strict_no_param_branch() {
+            return Err(EvalError::UnsupportedOdeIntegrator(name.to_string()));
+        }
+        return eval_ode_rk45(t, args, env);
     }
     if name.starts_with("integrate_ode") || name.starts_with("ode_") {
         return Err(EvalError::UnsupportedOdeIntegrator(name.to_string()));

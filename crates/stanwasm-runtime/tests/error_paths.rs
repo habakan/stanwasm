@@ -288,21 +288,37 @@ fn out_of_range_slice_is_an_error() {
 /// the system function, and would otherwise read as an undefined variable.
 #[test]
 fn an_ode_integrator_says_what_it_is() {
-    let src = "functions { array[] real f(real t, array[] real y, array[] real th,
-                                          data array[] real x_r, data array[] int x_i) {
+    let body = |name: &str| {
+        format!(
+            "functions {{ array[] real f(real t, array[] real y, array[] real th,
+                                         data array[] real x_r, data array[] int x_i) {{
                  return y;
-               } }
-               parameters { real a; }
-               model { target += a * integrate_ode_rk45(f, {1.0}, 0, {1.0}, {a}, {1.0}, {1})[1, 1]; }";
-    let msg = match Model::parse_and_load(src, data_from_json("{}").unwrap())
+               }} }}
+               parameters {{ real a; }}
+               model {{ target += a * {name}(f, {{1.0}}, 0, {{1.0}}, {{a}}, {{1.0}}, {{1}})[1, 1]; }}"
+        )
+    };
+    // The implicit one is still not implemented, on any path.
+    let msg = match Model::parse_and_load(&body("integrate_ode_bdf"), data_from_json("{}").unwrap())
         .unwrap()
         .log_prob_grad(&[1.0])
     {
         Err(e) => e.to_string(),
         Ok(v) => panic!("expected an error, got {v:?}"),
     };
-    assert!(msg.contains("integrate_ode_rk45"), "{msg}");
+    assert!(msg.contains("integrate_ode_bdf"), "{msg}");
     assert!(msg.contains("adaptive"), "{msg}");
+
+    // The explicit one runs on a fresh trace, and dy/dt = y is e at t = 1.
+    let (v, _) = Model::parse_and_load(&body("integrate_ode_rk45"), data_from_json("{}").unwrap())
+        .unwrap()
+        .log_prob_grad(&[1.0])
+        .unwrap();
+    assert!(
+        (v - std::f64::consts::E).abs() < 1e-5,
+        "got {v}, want {}",
+        std::f64::consts::E
+    );
 }
 
 /// The data block is deserialised straight into `Val`, so the rejections that

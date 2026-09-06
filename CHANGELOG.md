@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`sampleFresh(init, warmup, draws, seed)`, and `integrate_ode_rk45` on it.**
+  A model whose computation changes with the parameters cannot be recorded once
+  and replayed — a branch on a parameter, a loop it sizes, an adaptive solver
+  choosing its own steps. Those are still refused on the replay and AOT paths,
+  where freezing the graph at the tracing point would be wrong everywhere else,
+  but re-recording per gradient has no such problem. Measured at **5 to 8x**
+  replay across three models and N from 50 to 2000, which is affordable; the
+  figure this project had been carrying (300-500x) predated the tracing
+  quadratic fixed earlier in this release. Loading no longer fails for these
+  models: they arrive without a recorded tape, and `sample`, `startStepSampling`
+  and `compileToWasm` say which method does work.
+
+  `integrate_ode_rk45` is Cash-Karp with step-halving control, honouring the
+  `rel_tol` / `abs_tol` / `max_steps` a model passes. Two independent solvers
+  agree on `lotka_volterra` to ten significant figures — this one at a tight
+  tolerance and `ode_rk4_fixed` at 256 steps both give a log density of
+  -790.040300 and the same gradient. `integrate_ode_bdf` is still not
+  implemented.
 - **`ode_rk4_fixed(f, y0, t0, ts, theta, x_r, x_i, n_steps)`.** Classical RK4 at
   a step count the caller fixes, deliberately not named after an adaptive
   integrator. An adaptive solver chooses its steps from the parameters, so a

@@ -627,6 +627,20 @@ impl Model {
 
     /// log_prob and gradient at the given unconstrained parameters. Traces fresh
     /// every call, so a parameter-dependent `if`/`while` evaluates correctly here.
+    /// `log_prob_grad` writing into a caller's buffer. The fresh-trace sampling
+    /// path calls this once per leapfrog step, where a `Vec` per call would be
+    /// the allocation the tape is already paying for.
+    pub fn log_prob_grad_into(&self, params: &[f64], grads: &mut [f64]) -> Result<f64, EvalError> {
+        let mut tape = Tape::new();
+        let leaves: Vec<u32> = params.iter().map(|p| tape.new_var(*p)).collect();
+        let root = self.trace_forward(&mut tape, &leaves, false)?;
+        tape.backward(root);
+        for (g, i) in grads.iter_mut().zip(&leaves) {
+            *g = tape.grad_at(*i);
+        }
+        Ok(tape.value(root))
+    }
+
     pub fn log_prob_grad(&self, params: &[f64]) -> Result<(f64, Vec<f64>), EvalError> {
         let mut tape = Tape::new();
         let leaves: Vec<u32> = params.iter().map(|p| tape.new_var(*p)).collect();

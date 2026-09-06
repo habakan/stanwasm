@@ -84,6 +84,57 @@ impl CpuLogpFunc for LogpAdapter {
     }
 }
 
+/// nuts-rs adapter that records a fresh tape for every gradient, instead of
+/// replaying one. About six times the cost of replay, which buys back the
+/// things a recorded graph cannot follow: a branch on a parameter, a loop whose
+/// length one decides, an adaptive solver choosing its own steps.
+struct FreshLogp {
+    model: Rc<Model>,
+}
+
+impl HasDims for FreshLogp {
+    fn dim_sizes(&self) -> HashMap<String, u64> {
+        let n = self.model.n_params() as u64;
+        [
+            ("unconstrained_parameter".to_string(), n),
+            ("dim".to_string(), n),
+        ]
+        .into_iter()
+        .collect()
+    }
+}
+
+impl CpuLogpFunc for FreshLogp {
+    type LogpError = SamplerError;
+    type FlowParameters = ();
+    type ExpandedVector = Vec<f64>;
+
+    fn dim(&self) -> usize {
+        self.model.n_params()
+    }
+
+    fn logp(&mut self, position: &[f64], gradient: &mut [f64]) -> Result<f64, SamplerError> {
+        // A model that only some points can evaluate is exactly the case this
+        // path exists for, so an error here is a rejected proposal, not a fault.
+        let lp = self
+            .model
+            .log_prob_grad_into(position, gradient)
+            .map_err(|_| SamplerError::NonFinite)?;
+        if lp.is_finite() {
+            Ok(lp)
+        } else {
+            Err(SamplerError::NonFinite)
+        }
+    }
+
+    fn expand_vector<R>(&mut self, _rng: &mut R, array: &[f64]) -> Result<Vec<f64>, CpuMathError>
+    where
+        R: rand::Rng + ?Sized,
+    {
+        Ok(array.to_vec())
+    }
+}
+
 /// Concrete type nuts-rs returns from `DiagNutsSettings::new_chain`. It owns
 /// its RNG, so it survives across wasm-bindgen calls and can be stepped.
 type StepChain = <DiagNutsSettings as Settings>::Chain<CpuMath<LogpAdapter>>;
@@ -100,7 +151,7 @@ struct StepSampler {
 /// Sampling consumes the `Compiled` and rebuilds it from the AST after.
 #[wasm_bindgen]
 pub struct StanModel {
-    model: Model,
+    model: Rc<Model>,
     compiled: Option<Compiled>,
     step: Option<StepSampler>,
     /// Initial scratch contents for the last `compileToWasm` output: zeroed
@@ -164,9 +215,16 @@ impl StanModel {
     pub fn new(stan_src: &str, data_json: &str) -> Result<StanModel, JsError> {
         let env = data_from_json(data_json).map_err(jserr)?;
         let model = Model::parse_and_load(stan_src, env).map_err(jserr)?;
-        let compiled = Some(trace(&model).map_err(jserr)?);
+        // A model whose computation changes with the parameters cannot be
+        // recorded once, but it can still be sampled by re-recording. Loading
+        // keeps going without a `Compiled`, and the paths that need one say so.
+        let compiled = match trace(&model) {
+            Ok(c) => Some(c),
+            Err(e) if needs_fresh_trace(&e) => None,
+            Err(e) => return Err(jserr(e)),
+        };
         Ok(StanModel {
-            model,
+            model: Rc::new(model),
             compiled,
             step: None,
             aot_scratch_init: None,
@@ -235,6 +293,24 @@ impl StanModel {
 
     #[wasm_bindgen(js_name = logProbGrad)]
     pub fn log_prob_grad(&mut self, params: &[f64]) -> Result<Vec<f64>, JsError> {
+        if self.compiled.is_none() && self.step.is_none() {
+            // No recorded tape because the model does not have one shape. Trace
+            // it again here, which is what `sampleFresh` does per gradient.
+            let n = self.model.n_params();
+            if params.len() != n {
+                return Err(JsError::new(&format!(
+                    "params length {} != n_params {n}",
+                    params.len()
+                )));
+            }
+            let mut out = vec![0.0_f64; n + 1];
+            let lp = self
+                .model
+                .log_prob_grad_into(params, &mut out[1..])
+                .map_err(jserr)?;
+            out[0] = lp;
+            return Ok(out);
+        }
         let compiled = self
             .compiled
             .as_mut()
@@ -269,6 +345,11 @@ impl StanModel {
             )));
         }
         no_warmup_check(num_warmup)?;
+        // Before the start check, which reads the recorded tape this model may
+        // not have.
+        if self.compiled.is_none() && self.step.is_none() {
+            return Err(no_recorded_tape("sample"));
+        }
         self.check_start(init)?;
         // Widen before adding: `u32 + u32` wraps, and a wrapped total
         // silently becomes a different (possibly enormous) run length.
@@ -305,6 +386,49 @@ impl StanModel {
         // Restore by re-tracing. Cheap relative to the sampling itself.
         self.compiled = Some(trace(&self.model).map_err(jserr)?);
         result
+    }
+
+    /// `sample()`, but recording a fresh tape for every gradient rather than
+    /// replaying one. About six times slower, and the only path that can run a
+    /// model whose computation changes with the parameters — a branch on one, a
+    /// loop it sizes, an adaptive ODE solver picking its own steps. Those are
+    /// refused on the replay path rather than frozen at the tracing point.
+    #[wasm_bindgen(js_name = sampleFresh)]
+    pub fn sample_fresh(
+        &mut self,
+        init: &[f64],
+        num_warmup: u32,
+        num_draws: u32,
+        seed: u64,
+    ) -> Result<Vec<f64>, JsError> {
+        let n = self.model.n_params();
+        if init.len() != n {
+            return Err(JsError::new(&format!(
+                "init length {} != n_params {n}",
+                init.len()
+            )));
+        }
+        no_warmup_check(num_warmup)?;
+        let total = num_warmup as u64 + num_draws as u64;
+
+        let math = CpuMath::new(FreshLogp {
+            model: Rc::clone(&self.model),
+        });
+        let settings = DiagNutsSettings {
+            num_tune: num_warmup as u64,
+            num_draws: num_draws as u64,
+            ..Default::default()
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let iter = sample_sequentially(math, settings, init, total, 0, &mut rng)
+            .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
+
+        let mut out = vec![0.0_f64; n * total as usize];
+        for (i, draw) in iter.enumerate() {
+            let (pos, _progress) = draw.map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
+            out[i * n..(i + 1) * n].copy_from_slice(pos.as_ref());
+        }
+        Ok(out)
     }
 
     /// Constrained `parameters` + `transformed parameters` for one
@@ -396,7 +520,13 @@ impl StanModel {
         let compiled = self
             .compiled
             .take()
-            .ok_or_else(|| compiled_checked_out("startStepSampling"))?;
+            .ok_or_else(|| {
+                if self.step.is_none() {
+                    no_recorded_tape("startStepSampling")
+                } else {
+                    compiled_checked_out("startStepSampling")
+                }
+            })?;
         let math = CpuMath::new(LogpAdapter { compiled });
         let settings = DiagNutsSettings {
             num_tune: num_warmup as u64,
@@ -479,13 +609,31 @@ impl StanModel {
             }
         };
         let dummy = vec![0.1_f64; self.model.n_params()];
-        let compiled = stanwasm_codegen::compile_with(&self.model, &dummy, mode).map_err(jserr)?;
+        let compiled = stanwasm_codegen::compile_with(&self.model, &dummy, mode).map_err(|e| {
+            // Emitting a module for a graph that moves with the parameters would
+            // freeze it at `dummy`, so say which path does work instead.
+            if matches!(&e, stanwasm_codegen::CodegenError::Eval(inner) if needs_fresh_trace(inner)) {
+                no_recorded_tape("compileToWasm")
+            } else {
+                jserr(e)
+            }
+        })?;
         let mut scratch = vec![0.0_f64; compiled.scratch_len];
         let at = compiled.scratch_len - compiled.const_table.len();
         scratch[at..].copy_from_slice(&compiled.const_table);
         self.aot_scratch_init = Some(scratch);
         Ok(compiled.wasm)
     }
+}
+
+/// Whether a load-time trace failed because the model's computation depends on
+/// the parameters, rather than because the model is wrong. Only these fall back
+/// to the fresh-trace path; everything else is still a load error.
+fn needs_fresh_trace(e: &EvalError) -> bool {
+    matches!(
+        e,
+        EvalError::UnsupportedOdeIntegrator(_) | EvalError::ParamDependentBranch
+    )
 }
 
 fn trace(model: &Model) -> Result<Compiled, EvalError> {
@@ -504,6 +652,18 @@ fn compiled_checked_out(method: &str) -> JsError {
         "{method} is unavailable while a step-sampling session is running — \
          it holds the compiled model. Call finishStepSampling() first (or \
          exhaust stepDraw(), which calls it for you)."
+    ))
+}
+
+/// The model has no recorded tape because its computation changes with the
+/// parameters. Says which method does work rather than only what does not.
+fn no_recorded_tape(method: &str) -> JsError {
+    JsError::new(&format!(
+        "{method} needs a recorded tape, and this model does not have one — its \
+         computation depends on the parameters (an adaptive ODE solver, or a \
+         branch on a parameter), so a graph recorded once would be wrong \
+         everywhere else. logProbGrad() and sampleFresh() work on this model: \
+         they re-record per gradient, at about six times the cost of replay."
     ))
 }
 

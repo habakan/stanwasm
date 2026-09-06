@@ -102,14 +102,77 @@ fn a_bad_step_count_and_a_missing_system_are_named() {
     assert!(e.contains("nope"), "{e}");
 }
 
-/// The adaptive integrators still refuse, and say why.
+/// The integrator that is still not implemented refuses everywhere, including
+/// on the fresh trace that `integrate_ode_rk45` now runs on.
 #[test]
-fn the_adaptive_integrators_still_refuse() {
-    let src = decay(4).replace("ode_rk4_fixed(f,", "integrate_ode_rk45(f,");
+fn the_implicit_integrator_still_refuses() {
+    let src = decay(4).replace("ode_rk4_fixed(f,", "integrate_ode_bdf(f,");
     let e = Model::parse_and_load(&src, Env::new())
         .unwrap()
         .log_prob_grad(&[0.7])
         .unwrap_err()
         .to_string();
-    assert!(e.contains("integrate_ode_rk45"), "{e}");
+    assert!(e.contains("integrate_ode_bdf"), "{e}");
+}
+
+// ---- the adaptive integrator, which only a fresh trace can run --------------
+
+fn adaptive(tol: &str) -> String {
+    format!(
+        "functions {{
+           array[] real f(real t, array[] real y, array[] real theta,
+                          array[] real x_r, array[] int x_i) {{
+             return {{ -theta[1] * y[1] }};
+           }}
+         }}
+         parameters {{ real k; }}
+         model {{
+           array[1] real y0 = {{ 1.0 }};
+           array[2] real ts = {{ 0.5, 1.0 }};
+           array[2, 1] real y = integrate_ode_rk45(f, y0, 0.0, ts, {{ k }},
+                                                   rep_array(0.0, 0), rep_array(0, 0){tol});
+           target += y[2, 1];
+         }}"
+    )
+}
+
+#[test]
+fn the_adaptive_integrator_matches_its_closed_form() {
+    let k = 0.7_f64;
+    let (v, g) = lp_grad(&adaptive(", 1e-10, 1e-10, 100000"), k);
+    let want = (-k).exp();
+    assert!((v - want).abs() < 1e-9, "got {v}, want {want}");
+    assert!((g + want).abs() < 1e-8, "gradient {g}, want {}", -want);
+}
+
+/// A looser tolerance should cost accuracy — otherwise the control is not
+/// reading the error estimate at all.
+#[test]
+fn the_tolerance_actually_controls_the_step() {
+    let k = 0.7_f64;
+    let want = (-k).exp();
+    let err = |tol: &str| (lp_grad(&adaptive(tol), k).0 - want).abs();
+    let loose = err(", 1e-3, 1e-3, 100000");
+    let tight = err(", 1e-11, 1e-11, 100000");
+    assert!(tight < loose, "tightening did nothing: {loose} then {tight}");
+}
+
+/// The step count is chosen from the values, so the recorded graph differs by
+/// parameter. That is exactly why the replay path refuses it.
+#[test]
+fn the_adaptive_graph_moves_with_the_parameter_and_replay_refuses() {
+    use stanwasm_autodiff::Tape;
+    let src = adaptive(", 1e-8, 1e-8, 100000");
+    let m = Model::parse_and_load(&src, Env::new()).unwrap();
+    let ops = |k: f64, strict: bool| {
+        let mut tape = Tape::new();
+        let leaves = vec![tape.new_var(k)];
+        m.trace_forward(&mut tape, &leaves, strict).map(|_| tape.len())
+    };
+    let a = ops(0.2, false).unwrap();
+    let b = ops(9.0, false).unwrap();
+    assert_ne!(a, b, "the adaptive solver took the same number of steps");
+
+    let refused = ops(0.2, true).unwrap_err().to_string();
+    assert!(refused.contains("integrate_ode_rk45"), "{refused}");
 }

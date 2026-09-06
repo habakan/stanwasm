@@ -120,6 +120,48 @@ for (let i = 0; i < constrained.length; i++) {
     process.exit(1);
   }
 }
+// A model whose computation depends on the parameters: it has no recorded tape,
+// so it loads, refuses `sample`, and samples through `sampleFresh` instead.
+const odeCode = `
+functions {
+  array[] real f(real t, array[] real y, array[] real theta,
+                 array[] real x_r, array[] int x_i) {
+    return { -theta[1] * y[1] };
+  }
+}
+parameters { real<lower=0> k; }
+model {
+  array[1] real y0 = { 1.0 };
+  array[1] real ts = { 1.0 };
+  array[1, 1] real y = integrate_ode_rk45(f, y0, 0.0, ts, { k },
+                                          rep_array(0.0, 0), rep_array(0, 0));
+  k ~ lognormal(0, 1);
+  target += 100 * y[1, 1];
+}`;
+const odeModel = new StanModel(odeCode, "{}");
+try {
+  odeModel.sample(new Float64Array([0.0]), 10, 10, 1n);
+  console.error("FAIL: sample() should refuse a model with no recorded tape");
+  process.exit(1);
+} catch (e) {
+  const msg = String((e as Error).message ?? e);
+  if (!msg.includes("sampleFresh")) {
+    console.error(`FAIL: the refusal should name sampleFresh, got: ${msg}`);
+    process.exit(1);
+  }
+}
+const odeDraws = odeModel.sampleFresh(new Float64Array([0.0]), 200, 200, 7n);
+const odeN = odeModel.n_params;
+let kMean = 0;
+for (let i = 200; i < 400; i++) kMean += Math.exp(odeDraws[i * odeN]);
+kMean /= 200;
+// target += 100 * exp(-k) pushes k down against a lognormal(0,1) prior.
+if (!(kMean > 0 && kMean < 1)) {
+  console.error(`FAIL: sampleFresh gave a mean k of ${kMean}`);
+  process.exit(1);
+}
+console.log(`sampleFresh runs a model with no recorded tape (mean k = ${kMean.toFixed(3)})`);
+
 console.log(`unconstrainDraw round-trips ${gqModel.constrainedParamNames().join(", ")}`);
 
 const gq = gqModel.generatedQuantities(gqPostWarmup, 20, 123n);
