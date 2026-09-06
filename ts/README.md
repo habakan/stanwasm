@@ -82,7 +82,7 @@ responsive.
 | `.constrainDraw(draw)` | Unconstrained draw back to the model's own scale. |
 | `.constrainedParamNames()`, `.unconstrainDraw(values)` | The inverse: a draw fitted elsewhere, in the model's own scale, back to the unconstrained vector the other methods take. |
 | `.genQuantityNames()`, `.generatedQuantities(draws, nDraws, seed)` | `generated quantities` block. |
-| `.compileToWasm()`, `.sampleViaAot(...)` | Ahead-of-time compile this model to its own wasm module and sample through it — 1.6x to 12x faster per gradient than tape replay across the repository's fifteen benchmark models. The emitted module uses fixed-width SIMD (Safari 16.4+). Needs `setAotExports` wiring; see the repository. |
+| `.compileToWasm()`, `.sampleViaAot(...)` | Ahead-of-time compile this model to its own wasm module and sample through it — 1.5x to 12x faster per gradient than tape replay across the repository's sixteen benchmark models. The emitted module uses fixed-width SIMD (Safari 16.4+). Needs `setAotExports` wiring; see the repository. |
 
 Types ship with the package; the entry point is plain `.js` with a `.d.ts`
 alongside, so plain-JavaScript and bundler consumers both work with no

@@ -12,7 +12,7 @@ The Node bench compares **two sampling paths** end-to-end:
 - `sample` — tape replay inside the same wasm bundle. Walks the recorded autodiff tape per leapfrog step.
 - `sampleViaAot` — calls into a per-model AOT-compiled wasm bound via `setAotExports`. The AOT module shares stanwasm's linear memory (zero-copy), and V8 JITs its fully-unrolled forward+backward pass.
 
-## Apple Silicon, 2026-05-10
+## Apple Silicon, 2026-05-10 (older, whole-run timings)
 
 ### Node.js V8 + wasm32 (the path users see)
 
@@ -33,6 +33,42 @@ The Node bench compares **two sampling paths** end-to-end:
 | eight_schools_ncp    |   ~6.4 |      0.84 |           0.91 |      13.5 |
 
 `AOT (wasmi)` is meaningful only as an internal sanity check — `wasmi` is an interpreter, not a JIT, and is ~10× slower than V8 on the AOT path.
+
+## Per-gradient cost, both paths — 2026-09-06
+
+`make bench-gradients` (N=5000, Node 22, min of 30 interleaved rounds). This is
+the number the README quotes, and `grads` is the check that the two paths agree
+on the gradient itself rather than only on how long they take.
+
+| model | params | replay µs | AOT µs | speedup | grads |
+|---|---:|---:|---:|---:|---|
+| linreg | 3 | 163.81 | 20.79 | 7.88x | agree |
+| logistic | 2 | 212.58 | 131.69 | 1.61x | agree |
+| poisson | 2 | 374.44 | 124.96 | 3.00x | agree |
+| neg_binomial | 3 | 355.33 | 162.93 | 2.18x | agree |
+| student_t | 4 | 293.23 | 108.09 | 2.71x | agree |
+| gather | 9 | 210.30 | 48.64 | 4.32x | agree |
+| two_level | 12 | 169.51 | 39.56 | 4.28x | agree |
+| matrix_k4 | 5 | 169.22 | 17.23 | 9.82x | agree |
+| matrix_k16 | 17 | 231.58 | 38.82 | 5.97x | agree |
+| mvn_cholesky | 11 | 63.54 | 9.66 | 6.58x | agree |
+| eight_schools | 10 | 0.97 | 0.08 | 12.21x | agree |
+| binomial | 3 | 492.33 | 334.04 | 1.47x | agree |
+| count_mix | 7 | 192.99 | 89.35 | 2.16x | agree |
+| cov_builders | 11 | 58.54 | 17.05 | 3.43x | agree |
+| glm | 6 | 425.14 | 170.13 | 2.50x | agree |
+| funnel | 10 | 0.61 | 0.08 | 7.27x | agree |
+
+**1.5x to 12x across the sixteen.** The narrowest margins are the ones that
+spend their time in a host transcendental rather than in dispatch: `binomial`
+at 1.47x and `logistic` at 1.61x are one `log1p_exp` per observation, and
+unrolling the loop does not make the call cheaper. The widest are the ones
+where dispatch was the cost — `eight_schools` and `matrix_k4` do little
+arithmetic per node.
+
+The `sample ms` numbers below are older (2026-05-10) and cover three cases
+rather than sixteen; they are kept because they measure a whole sampling run
+rather than one gradient.
 
 ## Reproducing
 
