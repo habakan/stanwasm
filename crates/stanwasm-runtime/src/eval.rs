@@ -540,6 +540,125 @@ fn eval_user_call(
     eval_expr(t, &def.ret_expr, &local)
 }
 
+/// `ode_rk4_fixed(f, y0, t0, ts, theta, x_r, x_i, n_steps)`.
+///
+/// Classical RK4 at a step count the caller fixes, deliberately not named after
+/// an adaptive integrator. An adaptive solver chooses its steps from the
+/// parameters, so the recorded graph would freeze at whatever the tracing point
+/// picked and the density would be wrong away from it without saying so. A
+/// fixed count is a different model rather than an approximation of that one:
+/// its answer is right to the accuracy `n_steps` buys, and that is the caller's
+/// to state.
+fn eval_ode_rk4_fixed(t: &mut Tape, args: &[Expr], env: &Env) -> Result<Val> {
+    let arity = |n: usize| EvalError::WrongArity {
+        name: "ode_rk4_fixed".into(),
+        expected: 8,
+        got: n,
+    };
+    if args.len() != 8 {
+        return Err(arity(args.len()));
+    }
+    let Expr::Var(fname) = &args[0] else {
+        return Err(EvalError::BadParameterDeclaration {
+            name: "ode_rk4_fixed".into(),
+            detail: "the first argument names the system function, as in \
+                     `ode_rk4_fixed(dz_dt, ...)`"
+                .into(),
+        });
+    };
+    let def = env
+        .func(fname)
+        .ok_or_else(|| EvalError::UnknownFunction(fname.clone()))?;
+
+    let mut y: Vec<Val> = as_elems(&eval_expr(t, &args[1], env)?);
+    let mut t_prev = eval_expr(t, &args[2], env)?;
+    let ts = as_elems(&eval_expr(t, &args[3], env)?);
+    let theta = eval_expr(t, &args[4], env)?;
+    let x_r = eval_expr(t, &args[5], env)?;
+    let x_i = eval_expr(t, &args[6], env)?;
+    let n_steps = eval_expr(t, &args[7], env)?.to_i32(t)?;
+    if n_steps < 1 {
+        return Err(EvalError::BadParameterDeclaration {
+            name: "ode_rk4_fixed".into(),
+            detail: format!("n_steps must be at least 1, got {n_steps}"),
+        });
+    }
+
+    let rhs = |t: &mut Tape, at: &Val, y: &[Val]| -> Result<Vec<Val>> {
+        let argv = vec![
+            at.clone(),
+            Val::Vec(y.to_vec()),
+            theta.clone(),
+            x_r.clone(),
+            x_i.clone(),
+        ];
+        Ok(as_elems(&eval_user_call(t, fname, &def, argv, env)?))
+    };
+
+    let mut out: Vec<Val> = Vec::with_capacity(ts.len());
+    for t_next in &ts {
+        let span = v_sub(t, t_next, &t_prev);
+        let h = v_div(t, &span, &Val::Num(n_steps as f64));
+        let half_h = v_mul(t, &Val::Num(0.5), &h);
+        let mut t_cur = t_prev.clone();
+        for _ in 0..n_steps {
+            let t_mid = v_add(t, &t_cur, &half_h);
+            let t_end = v_add(t, &t_cur, &h);
+            let k1 = rhs(t, &t_cur, &y)?;
+            let y2 = step(t, &y, &k1, &half_h);
+            let k2 = rhs(t, &t_mid, &y2)?;
+            let y3 = step(t, &y, &k2, &half_h);
+            let k3 = rhs(t, &t_mid, &y3)?;
+            let y4 = step(t, &y, &k3, &h);
+            let k4 = rhs(t, &t_end, &y4)?;
+            y = rk4_combine(t, &y, &[&k1, &k2, &k3, &k4], &h)?;
+            t_cur = t_end;
+        }
+        out.push(Val::Vec(y.clone()));
+        t_prev = t_next.clone();
+    }
+    Ok(Val::Vec(out))
+}
+
+/// `y + h * k`, element-wise.
+fn step(t: &mut Tape, y: &[Val], k: &[Val], h: &Val) -> Vec<Val> {
+    y.iter()
+        .zip(k)
+        .map(|(yi, ki)| {
+            let d = v_mul(t, h, ki);
+            v_add(t, yi, &d)
+        })
+        .collect()
+}
+
+/// `y + h/6 * (k1 + 2 k2 + 2 k3 + k4)`, element-wise.
+fn rk4_combine(t: &mut Tape, y: &[Val], k: &[&Vec<Val>; 4], h: &Val) -> Result<Vec<Val>> {
+    if k.iter().any(|ki| ki.len() != y.len()) {
+        return Err(EvalError::ShapeMismatch {
+            op: "ode_rk4_fixed".into(),
+            lhs: Shape::Vector(y.len()).to_string(),
+            rhs: Shape::Vector(k[0].len()).to_string(),
+        });
+    }
+    let sixth = v_div(t, h, &Val::Num(6.0));
+    Ok((0..y.len())
+        .map(|i| {
+            let two_k2 = v_mul(t, &Val::Num(2.0), &k[1][i]);
+            let two_k3 = v_mul(t, &Val::Num(2.0), &k[2][i]);
+            let a = v_add(t, &k[0][i], &two_k2);
+            let b = v_add(t, &two_k3, &k[3][i]);
+            let sum = v_add(t, &a, &b);
+            let d = v_mul(t, &sixth, &sum);
+            v_add(t, &y[i], &d)
+        })
+        .collect())
+}
+
+/// A container's elements, or a scalar as a single one.
+fn as_elems(v: &Val) -> Vec<Val> {
+    v.elems().map(<[Val]>::to_vec).unwrap_or_else(|| vec![v.clone()])
+}
+
 /// Writes `val` into `y[i]` / `M[i, j]`, which the parser nests as
 /// `Index(Index(M, i), j)`. Walks down to the root binding, collecting the indices,
 /// then rebuilds the containers on the way back out — `Val` is a tree of owned
@@ -638,8 +757,11 @@ fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<(
 }
 
 fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> {
-    // Checked before the arguments, one of which is the name of the system
-    // function and would otherwise be reported as an undefined variable.
+    // Both are checked before the arguments, one of which is the name of the
+    // system function and would otherwise be reported as an undefined variable.
+    if name == "ode_rk4_fixed" {
+        return eval_ode_rk4_fixed(t, args, env);
+    }
     if name.starts_with("integrate_ode") || name.starts_with("ode_") {
         return Err(EvalError::UnsupportedOdeIntegrator(name.to_string()));
     }

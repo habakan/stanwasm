@@ -161,8 +161,14 @@ The test of that breadth was writing a Maxwell-constrained magnetic-field GP —
 a `functions` block building a 3N×3N covariance from a curl-free kernel, fed to
 `multi_normal`. It runs as ordinary Stan, without rewriting.
 
-Recursion, `void` functions, the ODE integrators and the `_lp`/`_rng` suffix
-rules are the notable omissions, each a message rather than a wrong answer.
+Recursion, `void` functions, the adaptive ODE integrators and the `_lp`/`_rng`
+suffix rules are the notable omissions, each a message rather than a wrong
+answer. `ode_rk4_fixed(f, y0, t0, ts, theta, x_r, x_i, n_steps)` is there in
+place of `integrate_ode_rk45` — classical RK4 at a step count you fix, which is
+a different model rather than an approximation of an adaptive one. An adaptive
+solver picks its steps from the parameters, so a recorded graph would freeze at
+whatever the tracing point chose; a fixed count keeps the graph the same for
+every parameter value, and the accuracy is yours to state.
 
 [`ROADMAP.md`](ROADMAP.md) has the full table of what is supported and what is
 not, the behavioural caveats a table cannot carry, and the remaining gaps

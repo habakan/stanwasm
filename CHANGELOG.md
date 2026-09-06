@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ode_rk4_fixed(f, y0, t0, ts, theta, x_r, x_i, n_steps)`.** Classical RK4 at
+  a step count the caller fixes, deliberately not named after an adaptive
+  integrator. An adaptive solver chooses its steps from the parameters, so a
+  graph recorded once would freeze at whatever the tracing point picked and be
+  wrong away from it without saying so; a fixed count keeps the graph identical
+  for every parameter value, which is checked by comparing the recorded ops at
+  two very different points. On `lotka_volterra` the log density converges to
+  seven figures by eight steps per interval, and the gradient runs through the
+  solver — checked against the closed form of a linear decay, and against the
+  fourth-order convergence RK4 is supposed to have. The adaptive integrators
+  still refuse.
+
 ## [0.4.0] — 2026-09-06 (npm only)
 
 Published to npm as `stanwasm@0.4.0`. The crates stay off crates.io for the
