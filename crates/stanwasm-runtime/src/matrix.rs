@@ -174,5 +174,12 @@ pub fn cholesky_decompose(t: &mut Tape, sigma_rows: &[Val]) -> Vec<Val> {
             }
         }
     }
-    l.into_iter().map(Val::Row).collect()
+    // Stan's `cholesky_decompose` returns a full K×K matrix, zero above the
+    // diagonal; the triangle alone is ragged and cannot reach `*`.
+    l.into_iter()
+        .map(|mut row| {
+            row.resize(n, Val::Num(0.0));
+            Val::Row(row)
+        })
+        .collect()
 }

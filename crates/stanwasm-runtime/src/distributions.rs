@@ -98,6 +98,22 @@ pub fn logistic_lpdf(t: &mut Tape, x: &Val, mu: &Val, s: &Val) -> Val {
     v_sub(t, &prefix, &two_tail)
 }
 
+/// Weibull: `log(a) - log(s) + (a - 1) log(x/s) - (x/s)^a`. The power is taken
+/// through `exp(a log(x/s))`, since the shape is usually a parameter.
+pub fn weibull_lpdf(t: &mut Tape, x: &Val, alpha: &Val, sigma: &Val) -> Val {
+    let z = v_div(t, x, sigma);
+    let log_z = v_log(t, &z);
+    let a_minus_1 = v_sub(t, alpha, &Val::Num(1.0));
+    let shaped = v_mul(t, &a_minus_1, &log_z);
+    let scaled = v_mul(t, alpha, &log_z);
+    let z_pow_a = v_exp(t, &scaled);
+    let log_a = v_log(t, alpha);
+    let log_s = v_log(t, sigma);
+    let prefix = v_sub(t, &log_a, &log_s);
+    let with_shape = v_add(t, &prefix, &shaped);
+    v_sub(t, &with_shape, &z_pow_a)
+}
+
 /// Laplace: `-log(2 s) - |x - mu| / s`.
 pub fn double_exponential_lpdf(t: &mut Tape, x: &Val, mu: &Val, s: &Val) -> Val {
     let diff = v_sub(t, x, mu);
@@ -305,13 +321,6 @@ pub fn multi_normal_cholesky_lpdf(t: &mut Tape, y: &[Val], mu: &[Val], l_rows: &
     v_sub(t, &prefix_minus_diag, &half_ds)
 }
 
-/// `multi_normal_lpdf(y | μ, Σ)` with the full K×K covariance: Cholesky-decomposes
-/// Σ and reuses `multi_normal_cholesky_lpdf`'s math.
-pub fn multi_normal_lpdf(t: &mut Tape, y: &[Val], mu: &[Val], sigma_rows: &[Val]) -> Val {
-    let l_rows = cholesky_decompose(t, sigma_rows);
-    multi_normal_cholesky_lpdf(t, y, mu, &l_rows)
-}
-
 /// `multinomial_lpmf(y | θ)`, y an integer count array, θ a simplex of length K:
 /// log p = lgamma(N+1) − Σ lgamma(yᵢ+1) + Σ yᵢ log θᵢ, N = Σ yᵢ.
 pub fn multinomial_lpmf(t: &mut Tape, y: &[Val], theta: &[Val]) -> Val {
@@ -449,6 +458,7 @@ fn arity(name: &str) -> Option<usize> {
         | "uniform"
         | "multi_normal_cholesky"
         | "logistic"
+        | "weibull"
         | "double_exponential"
         | "multi_normal" => 2,
         "student_t" | "bernoulli_logit_glm" => 3,
@@ -490,6 +500,7 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
         "student_t" => student_t_lpdf(t, x, &args[0], &args[1], &args[2]),
         "lognormal" => lognormal_lpdf(t, x, &args[0], &args[1]),
         "logistic" => logistic_lpdf(t, x, &args[0], &args[1]),
+        "weibull" => weibull_lpdf(t, x, &args[0], &args[1]),
         "double_exponential" => double_exponential_lpdf(t, x, &args[0], &args[1]),
         "gamma" => gamma_lpdf(t, x, &args[0], &args[1]),
         "beta" => beta_lpdf(t, x, &args[0], &args[1]),
@@ -533,60 +544,44 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
             }
             _ => return Err(wrong_type(name, "a data matrix x", &args[0])),
         },
-        // These used to fall back to `Val::Num(0.0)` on an unrecognized shape,
-        // contributing nothing and returning a silently wrong posterior.
-        "multi_normal_cholesky" => match (x, &args[0], &args[1]) {
-            (Val::Vec(y), Val::Vec(mu), Val::Vec(l_rows)) => {
-                // `array[N] vector[K] y; y ~ multi_normal_cholesky(mu, L);` is legal
-                // Stan but arrives as one N-row container, not N observations.
-                if y.first().and_then(Val::elems).is_some() {
-                    return Err(EvalError::MultivariateNotVectorized {
-                        name: name.to_string(),
-                        got: x.shape().to_string(),
-                    });
-                }
-                if y.len() != mu.len() || l_rows.len() != y.len() {
+        // `array[N] vector[K] y` is N observations sharing one covariance, which
+        // Stan sums the density over; an unrecognised shape used to contribute 0.
+        "multi_normal_cholesky" | "multi_normal" => match (x, &args[0], &args[1]) {
+            (Val::Vec(y), Val::Vec(mu), Val::Vec(rows)) => {
+                let owned;
+                let l_rows: &[Val] = if name == "multi_normal" {
+                    owned = cholesky_decompose(t, rows);
+                    &owned
+                } else {
+                    rows
+                };
+                let obs: Vec<&[Val]> = match y.first().and_then(Val::elems) {
+                    Some(_) => y
+                        .iter()
+                        .map(|r| r.elems().unwrap_or(std::slice::from_ref(r)))
+                        .collect(),
+                    None => vec![y.as_slice()],
+                };
+                let k = mu.len();
+                if l_rows.len() != k || obs.iter().any(|o| o.len() != k) {
                     return Err(wrong_type(
                         name,
-                        &format!("mu and L sized to match the variate (length {})", y.len()),
+                        &format!("a variate and a covariance sized to mu (length {k})"),
                         &args[0],
                     ));
                 }
-                multi_normal_cholesky_lpdf(t, y, mu, l_rows)
+                let mut acc = Val::Num(0.0);
+                for o in obs {
+                    let lp = multi_normal_cholesky_lpdf(t, o, mu, l_rows);
+                    acc = v_add(t, &acc, &lp);
+                }
+                acc
             }
             _ => {
                 return Err(wrong_type(
                     name,
-                    "a vector variate, a vector mu and a Cholesky factor L",
-                    x,
-                ))
-            }
-        },
-        "multi_normal" => match (x, &args[0], &args[1]) {
-            (Val::Vec(y), Val::Vec(mu), Val::Vec(sigma_rows)) => {
-                // Same `array[N] vector[K] y` footgun as `multi_normal_cholesky`.
-                if y.first().and_then(Val::elems).is_some() {
-                    return Err(EvalError::MultivariateNotVectorized {
-                        name: name.to_string(),
-                        got: x.shape().to_string(),
-                    });
-                }
-                if y.len() != mu.len() || sigma_rows.len() != y.len() {
-                    return Err(wrong_type(
-                        name,
-                        &format!(
-                            "mu and Sigma sized to match the variate (length {})",
-                            y.len()
-                        ),
-                        &args[0],
-                    ));
-                }
-                multi_normal_lpdf(t, y, mu, sigma_rows)
-            }
-            _ => {
-                return Err(wrong_type(
-                    name,
-                    "a vector variate, a vector mu and a covariance matrix Sigma",
+                    "a vector variate, a vector mu and a covariance (Sigma, or its \
+                     Cholesky factor L)",
                     x,
                 ))
             }
@@ -745,8 +740,8 @@ mod tests {
         );
     }
 
-    /// `multi_normal_lpdf` decomposes Σ internally; check it matches
-    /// `multi_normal_cholesky_lpdf` on `Σ = [[4,2],[2,3]]`, `L = [[2,0],[1,√2]]`.
+    /// `multi_normal` decomposes Σ on the way in; check that path against a
+    /// hand-written `L` on `Σ = [[4,2],[2,3]]`, `L = [[2,0],[1,√2]]`.
     #[test]
     fn multi_normal_matches_manual_cholesky_factor() {
         let y = [Val::Num(1.0), Val::Num(2.0)];
@@ -757,7 +752,8 @@ mod tests {
             Val::Vec(vec![Val::Num(4.0), Val::Num(2.0)]),
             Val::Vec(vec![Val::Num(2.0), Val::Num(3.0)]),
         ];
-        let got = multi_normal_lpdf(&mut t, &y, &mu, &sigma_rows)
+        let l = cholesky_decompose(&mut t, &sigma_rows);
+        let got = multi_normal_cholesky_lpdf(&mut t, &y, &mu, &l)
             .to_f64(&t)
             .unwrap();
 

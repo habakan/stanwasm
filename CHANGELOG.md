@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`multi_normal` and `multi_normal_cholesky` over an array of vectors.**
+  `array[N] vector[K] y ~ multi_normal(mu, Sigma)` is N observations sharing one
+  covariance, which used to be refused; Σ is factored once for all of them.
+- **`weibull`, `log_inv_logit` and `log1m_inv_logit`.** The logit pair is folded
+  so the exponential is always of a non-positive number — the composition
+  `log(inv_logit(x))` is `-inf` below -745, where the value is just `x`.
+
 - **`randomInit(seed)`.** The sampler refuses a starting point whose gradient
   has a zero component, and the obvious one — 0.1 everywhere — is exactly where
   a parameter the data says nothing about has no slope. Six posteriordb
@@ -26,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`cholesky_decompose` returned a ragged triangle.** Stan's returns a full
+  K×K matrix with zeros above the diagonal; the triangle alone could not reach
+  `*`, which is what a Gaussian process does with it on the next line. The
+  internal callers only ever read the lower half, so nothing else had noticed.
 - **A bound may name an earlier parameter.** `real<lower=0, upper=(1 - alpha1)>
   beta1` was resolved against the data alone, so `alpha1` came back undefined.
   The transform is triangular, and the log determinant already carried

@@ -6,7 +6,8 @@ use crate::error::EvalError;
 use crate::matrix;
 use crate::ops::{
     v_abs, v_acos, v_add, v_asin, v_atan, v_cos, v_div, v_exp, v_inv_logit, v_lgamma, v_log,
-    v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_student_t_lccdf, v_sub, v_sum, v_tan,
+    v_log_inv_logit, v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_student_t_lccdf, v_sub,
+    v_sum, v_tan,
     v_tanh,
 };
 use crate::value::{Shape, Val};
@@ -710,6 +711,11 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
         ("abs", [a]) | ("fabs", [a]) => v_abs(t, a),
         ("lgamma", [a]) => v_lgamma(t, a),
         ("inv_logit", [a]) | ("logistic", [a]) => v_inv_logit(t, a),
+        ("log_inv_logit", [a]) => v_log_inv_logit(t, a),
+        ("log1m_inv_logit", [a]) => {
+            let neg = v_neg(t, a);
+            v_log_inv_logit(t, &neg)
+        }
         ("logit", [a]) => v_logit(t, a),
         ("tanh", [a]) => v_tanh(t, a),
         ("sin", [a]) => v_sin(t, a),

@@ -582,3 +582,98 @@ fn a_root_of_an_underflowed_value_does_not_poison_the_gradient() {
         .unwrap();
     assert!(g[0] < 0.0 && g[0].is_finite(), "{g:?}");
 }
+
+/// `array[N] vector[K] y ~ multi_normal(mu, Sigma)` is N observations sharing
+/// one covariance. The vectorized form has to equal the explicit loop, which is
+/// what a reader would write instead.
+#[test]
+fn an_array_of_vectors_is_summed_over_its_rows() {
+    let data = r#"{"N":3,"K":2,"y":[[1,2],[3,4],[5,6]],"mu":[0.5,-0.5]}"#;
+    let decls = "data { int N; int K; array[N] vector[K] y; vector[K] mu; } \
+                 parameters { cov_matrix[K] S; }";
+    let raw = [0.3, -0.2, 0.4];
+
+    for dist in ["multi_normal", "multi_normal_cholesky"] {
+        let arg = if dist == "multi_normal" { "S" } else { "cholesky_decompose(S)" };
+        let one = format!("{decls} model {{ y ~ {dist}(mu, {arg}); }}");
+        let loop_form =
+            format!("{decls} model {{ for (n in 1:N) y[n] ~ {dist}(mu, {arg}); }}");
+
+        let env = || stanwasm_runtime::data_from_json(data).unwrap();
+        let (a, ga) = Model::parse_and_load(&one, env())
+            .unwrap()
+            .log_prob_grad(&raw)
+            .unwrap();
+        let (b, gb) = Model::parse_and_load(&loop_form, env())
+            .unwrap()
+            .log_prob_grad(&raw)
+            .unwrap();
+        assert!((a - b).abs() < 1e-12, "{dist}: {a} != {b}");
+        for (x, y) in ga.iter().zip(&gb) {
+            assert!((x - y).abs() < 1e-12, "{dist}: gradient {x} != {y}");
+        }
+    }
+}
+
+/// `weibull` and `log_inv_logit` against their closed forms. `log_inv_logit`
+/// is checked in the tail its folded form exists for, where the composition
+/// `log(inv_logit(x))` returns -inf.
+#[test]
+fn weibull_and_log_inv_logit_match_their_closed_forms() {
+    let (v, g) = Model::parse_and_load(
+        "parameters { real<lower=0> a; } model { 2.5 ~ weibull(a, 1.5); }",
+        Env::new(),
+    )
+    .unwrap()
+    .log_prob_grad(&[0.7])
+    .unwrap();
+
+    let alpha = 0.7_f64.exp();
+    let z: f64 = 2.5 / 1.5;
+    // log|J| = raw, from the lower bound on a.
+    let want = alpha.ln() - 1.5_f64.ln() + (alpha - 1.0) * z.ln() - z.powf(alpha) + 0.7;
+    assert!((v - want).abs() < 1e-12, "{v} != {want}");
+
+    let h = 1e-6;
+    let at = |r: f64| {
+        Model::parse_and_load(
+            "parameters { real<lower=0> a; } model { 2.5 ~ weibull(a, 1.5); }",
+            Env::new(),
+        )
+        .unwrap()
+        .log_prob_grad(&[r])
+        .unwrap()
+        .0
+    };
+    let fd = (at(0.7 + h) - at(0.7 - h)) / (2.0 * h);
+    assert!((g[0] - fd).abs() < 1e-5, "{} != {fd}", g[0]);
+
+    for x in [-800.0, -3.0, 0.0, 2.0] {
+        let (v, g) = Model::parse_and_load(
+            "parameters { real a; } model { target += log_inv_logit(a); }",
+            Env::new(),
+        )
+        .unwrap()
+        .log_prob_grad(&[x])
+        .unwrap();
+        let want = -(1.0 + (-x).exp()).ln();
+        let want = if x < -700.0 { x } else { want };
+        assert!((v - want).abs() < 1e-9, "at {x}: {v} != {want}");
+        // d/dx log inv_logit(x) = 1 - inv_logit(x)
+        let slope = 1.0 - 1.0 / (1.0 + (-x).exp());
+        assert!((g[0] - slope).abs() < 1e-9, "at {x}: {} != {slope}", g[0]);
+
+        // log1m_inv_logit(x) is log_inv_logit(-x), and the pair sums to zero
+        // less the softplus, which is what a bernoulli_logit likelihood needs.
+        let (w, _) = Model::parse_and_load(
+            "parameters { real a; } model { target += log1m_inv_logit(a); }",
+            Env::new(),
+        )
+        .unwrap()
+        .log_prob_grad(&[x])
+        .unwrap();
+        let want_1m = -(1.0 + x.exp()).ln();
+        let want_1m = if x > 700.0 { -x } else { want_1m };
+        assert!((w - want_1m).abs() < 1e-9, "at {x}: {w} != {want_1m}");
+    }
+}

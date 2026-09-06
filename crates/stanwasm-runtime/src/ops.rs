@@ -265,6 +265,19 @@ pub fn v_inv_logit(t: &mut Tape, a: &Val) -> Val {
     v_div(t, &Val::Num(1.0), &s)
 }
 
+pub fn v_log_inv_logit(t: &mut Tape, a: &Val) -> Val {
+    // (a - |a|)/2 - log(1 + exp(-|a|)). Folded so the exponential is always of
+    // a non-positive number, where `log(inv_logit(a))` overflows below -745.
+    let abs = v_abs(t, a);
+    let diff = v_sub(t, a, &abs);
+    let half = v_mul(t, &Val::Num(0.5), &diff);
+    let neg = v_neg(t, &abs);
+    let e = v_exp(t, &neg);
+    let one_plus = v_add(t, &Val::Num(1.0), &e);
+    let l = v_log(t, &one_plus);
+    v_sub(t, &half, &l)
+}
+
 pub fn v_logit(t: &mut Tape, a: &Val) -> Val {
     // log(a / (1 - a))
     let one_minus = v_sub(t, &Val::Num(1.0), a);

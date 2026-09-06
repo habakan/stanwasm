@@ -83,13 +83,6 @@ pub enum EvalError {
         expected: String,
         got: String,
     },
-    #[error(
-        "{name} takes a single vector as its variate, but got {got}. An array \
-         of vectors (`array[N] vector[K] y; y ~ {name}(mu, L);`) is not \
-         vectorized here — write the loop form: \
-         `for (n in 1:N) y[n] ~ {name}(mu, L);`"
-    )]
-    MultivariateNotVectorized { name: String, got: String },
     #[error("integer division by zero")]
     IntDivisionByZero,
     #[error(

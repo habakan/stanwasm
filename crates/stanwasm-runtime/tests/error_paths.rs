@@ -154,23 +154,6 @@ fn int_parameters_are_rejected_with_their_own_message() {
 }
 
 #[test]
-fn array_of_vectors_variate_points_at_the_loop_form() {
-    // Legal Stan, but not vectorized here. The message must name the loop form;
-    // a size mismatch between N rows and a K-long mu sends the reader the wrong way.
-    let e = err(
-        "data { int N; int K; array[N] vector[K] y; vector[K] mu; } \
-         parameters { cholesky_factor_corr[K] L; } \
-         model { y ~ multi_normal_cholesky(mu, L); }",
-        r#"{"N":3,"K":2,"y":[[1,2],[3,4],[5,6]],"mu":[0,0]}"#,
-        &[0.3],
-    );
-    assert!(
-        e.contains("not vectorized here") && e.contains("for (n in 1:N)"),
-        "{e}"
-    );
-}
-
-#[test]
 fn matrix_parameter_keeps_its_row_structure() {
     // A `matrix[R, C]` parameter used to arrive as one flat vector, so `M[i,j]`
     // silently read the wrong element.
