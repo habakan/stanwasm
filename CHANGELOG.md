@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`to_matrix`, `col` and `row`.** A 2-D container becomes a matrix by
+  retagging its rows, which is all a matrix adds here; `col` gives a vector and
+  `row` a row vector, which is what decides how each multiplies. Between these
+  and `integrate_ode_rk45`, `sir` loads and evaluates where it used to stop at
+  the first of them.
 - **`sampleFresh(init, warmup, draws, seed)`, and `integrate_ode_rk45` on it.**
   A model whose computation changes with the parameters cannot be recorded once
   and replayed — a branch on a parameter, a loop it sizes, an adaptive solver
@@ -26,7 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   agree on `lotka_volterra` to ten significant figures — this one at a tight
   tolerance and `ode_rk4_fixed` at 256 steps both give a log density of
   -790.040300 and the same gradient. `integrate_ode_bdf` is still not
-  implemented.
+  implemented — it wants a Newton iteration and a Jacobian per step — and its
+  message now says so, along with the fact that a system which is not really
+  stiff may not need it: `one_comp_mm_elim_abs`, the one posteriordb model that
+  asks for the implicit solver, comes out identical to ten figures under
+  `integrate_ode_rk45` at tolerances from 1e-5 to 1e-10.
 - **`ode_rk4_fixed(f, y0, t0, ts, theta, x_r, x_i, n_steps)`.** Classical RK4 at
   a step count the caller fixes, deliberately not named after an adaptive
   integrator. An adaptive solver chooses its steps from the parameters, so a

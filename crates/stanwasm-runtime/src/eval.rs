@@ -1247,6 +1247,44 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             flat(v, &mut out);
             Val::Vec(out)
         }
+        // `to_matrix` on a 2-D container is a retagging: the rows are already
+        // there, and what a matrix adds is that they lie across.
+        ("to_matrix", [v]) => match v.elems() {
+            Some(rows) if rows.iter().all(|r| r.elems().is_some()) => Val::Vec(
+                rows.iter()
+                    .map(|r| Val::Row(r.elems().unwrap().to_vec()))
+                    .collect(),
+            ),
+            // A vector is one column, which is Stan's reading too.
+            Some(xs) => Val::Vec(xs.iter().map(|x| Val::Row(vec![x.clone()])).collect()),
+            None => return Err(EvalError::NotAScalar),
+        },
+        // `col(m, j)` and `row(m, i)`, both 1-based. A column comes out as a
+        // vector and a row as a row vector, which is what they multiply as.
+        ("col", [m, j_e]) | ("row", [m, j_e]) => {
+            let rows = m.elems().ok_or(EvalError::NotAScalar)?;
+            let j = j_e.to_i32(t)?;
+            let pick = |xs: &[Val], k: i32| -> Result<Val> {
+                usize::try_from(k - 1)
+                    .ok()
+                    .and_then(|i| xs.get(i))
+                    .cloned()
+                    .ok_or(EvalError::IndexOutOfBounds {
+                        index: k,
+                        len: xs.len(),
+                    })
+            };
+            if name == "row" {
+                let r = pick(rows, j)?;
+                Val::Row(r.elems().map(<[Val]>::to_vec).unwrap_or(vec![r]))
+            } else {
+                let mut out = Vec::with_capacity(rows.len());
+                for r in rows {
+                    out.push(pick(r.elems().ok_or(EvalError::NotAScalar)?, j)?);
+                }
+                Val::Vec(out)
+            }
+        }
         // `{a, b, c}`: an array, which is a container of whatever it holds.
         ("{}", args) => Val::Vec(args.to_vec()),
         // `[a, b, c]`: scalars make a row vector, containers make its rows.

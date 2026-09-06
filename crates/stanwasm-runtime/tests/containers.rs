@@ -168,3 +168,39 @@ fn an_array_literal_is_a_container() {
     let idx = format!("{HEAD} target += a * sum(u[{{3, 1}}]); }}");
     assert!((lp(&idx, data()) - 4.0).abs() < 1e-12);
 }
+
+/// `to_matrix` retags a 2-D container's rows so they lie across, and `col` /
+/// `row` pull one out. A column is a vector and a row is a row vector, which is
+/// what decides how each multiplies.
+#[test]
+fn to_matrix_col_and_row() {
+    let src = "data { matrix[2,3] M; array[2,3] real A; }
+               parameters { real p; }
+               model {
+                 target += p * col(M, 2)[1];
+                 target += p * row(M, 2)[3];
+                 target += p * col(to_matrix(A), 3)[2];
+                 target += p * sum(to_matrix(A)[1]);
+               }";
+    let data = r#"{"M":[[1,2,3],[4,5,6]],"A":[[10,20,30],[40,50,60]]}"#;
+    let env = stanwasm_runtime::data_from_json(data).unwrap();
+    let (v, _) = Model::parse_and_load(src, env)
+        .unwrap()
+        .log_prob_grad(&[1.0])
+        .unwrap();
+    // col(M,2)[1] = 2; row(M,2)[3] = 6; col(to_matrix(A),3)[2] = 60; sum row 1 = 60
+    assert_eq!(v, 2.0 + 6.0 + 60.0 + 60.0);
+}
+
+#[test]
+fn col_and_row_report_an_index_past_the_end() {
+    let src = "data { matrix[2,3] M; } parameters { real p; }
+               model { target += p * col(M, 9)[1]; }";
+    let env = stanwasm_runtime::data_from_json(r#"{"M":[[1,2,3],[4,5,6]]}"#).unwrap();
+    let e = Model::parse_and_load(src, env)
+        .unwrap()
+        .log_prob_grad(&[1.0])
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("index 9"), "{e}");
+}

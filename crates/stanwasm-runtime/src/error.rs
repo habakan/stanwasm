@@ -12,12 +12,14 @@ pub enum EvalError {
     #[error("unknown function: {0}")]
     UnknownFunction(String),
     #[error(
-        "`{0}` is not implemented. An adaptive solver takes a number of steps \
-         that depends on the parameters, and this runtime records the log \
-         density once and replays the same computation graph for every draw, \
-         so the step sequence would freeze at whatever the first evaluation \
-         chose. Solving the system on a fixed grid outside the model, and \
-         passing the result in as data, is the form that works here"
+        "`{0}` is not implemented. `integrate_ode_rk45` is, on the fresh-trace \
+         path — `sampleFresh()` and `logProbGrad()` re-record the graph per \
+         gradient, which is what an adaptive solver needs since it picks its \
+         steps from the parameters. The implicit solvers additionally want a \
+         Newton iteration and a Jacobian per step, which is not written here; \
+         if the system is not actually stiff, `integrate_ode_rk45` may solve \
+         it. `ode_rk4_fixed(f, y0, t0, ts, theta, x_r, x_i, n_steps)` is the \
+         other option, and runs on every path because its graph is fixed."
     )]
     UnsupportedOdeIntegrator(String),
     #[error("unknown distribution: {0}")]
