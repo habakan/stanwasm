@@ -2,13 +2,19 @@
 
 [![npm](https://img.shields.io/npm/v/stanwasm?logo=npm&color=cb3837)](https://www.npmjs.com/package/stanwasm)
 [![crates.io](https://img.shields.io/crates/v/stanwasm?logo=rust&color=e43717)](https://crates.io/crates/stanwasm)
-[![bundle](https://img.shields.io/badge/wasm-514%20KB%20%7C%20192%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](https://github.com/habakan/stanwasm/blob/main/docs/en/BENCHMARKS.md)
+[![bundle](https://img.shields.io/badge/wasm-664%20KB%20%7C%20253%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](https://github.com/habakan/stanwasm/blob/main/docs/en/BENCHMARKS.md)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/habakan/stanwasm/blob/main/LICENSE)
 
 Stan probabilistic models compiled and sampled **entirely in the browser**.
-Pure Rust compiled to WebAssembly, a single ~514 KB bundle (~192 KB gzipped),
+Pure Rust compiled to WebAssembly, a single ~664 KB bundle (~253 KB gzipped),
 with [nuts-rs](https://github.com/pymc-devs/nuts-rs) embedded as the sampler.
-No server, no cmdstan, no round trip.
+No server, no round trip.
+
+**This is an independent implementation of the Stan language, not a port of
+Stan.** No stanc3, no Stan Math — the parser, the autodiff and the compiler are
+written here. Log densities and gradients are checked against CmdStan, but the
+sampler is different code, so a run here will not reproduce a Stan run draw for
+draw.
 
 > **Status: alpha.** Pre-1.0, the API may change, and Stan language coverage is
 > a documented subset. Not a replacement for

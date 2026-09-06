@@ -8,7 +8,8 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what has already shipped.
 This project is **not** an attempt to replace cmdstan or Stan Playground, and
 Stan-power-user adoption isn't the target — the language subset makes that a
 losing comparison. The realistic use case is narrower: an npm-embeddable,
-server-free Stan engine for things like interactive teaching content,
+server-free engine for a subset of the Stan language, for things like
+interactive teaching content,
 explorable blog-post demos, and privacy-constrained client-side analytics
 (data never leaves the browser). Feature priority below should track that —
 depth of embeddability and honesty about the subset matter more than chasing

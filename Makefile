@@ -106,6 +106,10 @@ PDB ?= ../posteriordb
 posteriordb: wasm ## How much of posteriordb loads, and what stops the rest
 	cd ts && $(NODE) tests/posteriordb_sweep.ts $(PDB)
 
+.PHONY: compare-reference
+compare-reference: wasm ## Sample posteriordb's reference posteriors and compare the means
+	cd ts && $(NODE) tests/compare_reference.ts $(PDB)
+
 .PHONY: compare-cmdstan
 compare-cmdstan: bench-gradients ## Check log density and gradients against CmdStan, and time both
 	cd ts && CMDSTAN=$(CMDSTAN) $(NODE) tests/compare_cmdstan.ts $(BENCH_DIR)

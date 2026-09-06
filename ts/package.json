@@ -1,7 +1,7 @@
 {
   "name": "stanwasm",
   "version": "0.4.0",
-  "description": "Stan inference engine for WebAssembly (Rust port).",
+  "description": "Run models written in a subset of the Stan language entirely in the browser. An independent implementation, not a port of Stan.",
   "type": "module",
   "main": "./index.js",
   "module": "./index.js",
