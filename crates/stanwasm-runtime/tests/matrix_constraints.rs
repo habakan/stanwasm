@@ -183,7 +183,10 @@ fn a_matrix_parameter_can_carry_an_element_bound() {
 #[test]
 fn a_bound_naming_an_earlier_parameter_has_that_parameter_in_its_jacobian() {
     let raw = [0.3_f64, -0.8_f64];
-    let (lp, _) = jacobian_only("real<lower=0, upper=1> a; real<lower=0, upper=(1 - a)> b;", &raw);
+    let (lp, _) = jacobian_only(
+        "real<lower=0, upper=1> a; real<lower=0, upper=(1 - a)> b;",
+        &raw,
+    );
 
     let inv_logit = |x: f64| 1.0 / (1.0 + (-x).exp());
     let (pa, pb) = (inv_logit(raw[0]), inv_logit(raw[1]));
@@ -191,5 +194,8 @@ fn a_bound_naming_an_earlier_parameter_has_that_parameter_in_its_jacobian() {
     let want = pa.ln() + (1.0 - pa).ln() + (1.0 - pa).ln() + pb.ln() + (1.0 - pb).ln();
     assert!((lp - want).abs() < 1e-12, "{lp} != {want}");
 
-    finite_diff_matches("real<lower=0, upper=1> a; real<lower=0, upper=(1 - a)> b;", &raw);
+    finite_diff_matches(
+        "real<lower=0, upper=1> a; real<lower=0, upper=(1 - a)> b;",
+        &raw,
+    );
 }

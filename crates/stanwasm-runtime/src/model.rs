@@ -557,7 +557,10 @@ impl Model {
             }
             let before = out.len();
             unconstrain(&decl.name, &decl.typ, &constrained[at..end], &env, &mut out)?;
-            env.set(&decl.name, shape_flat(&decl.typ, &constrained[at..end], &env));
+            env.set(
+                &decl.name,
+                shape_flat(&decl.typ, &constrained[at..end], &env),
+            );
             // A value off its own support gives an infinity here rather than
             // downstream, where it would read as the model's fault.
             if let Some(bad) = out[before..].iter().position(|v| !v.is_finite()) {
@@ -574,7 +577,10 @@ impl Model {
         if at != constrained.len() {
             return Err(EvalError::BadParameterDeclaration {
                 name: "parameters".into(),
-                detail: format!("expected {at} constrained values, got {}", constrained.len()),
+                detail: format!(
+                    "expected {at} constrained values, got {}",
+                    constrained.len()
+                ),
             });
         }
         Ok(out)

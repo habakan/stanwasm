@@ -7,8 +7,7 @@ use crate::matrix;
 use crate::ops::{
     v_abs, v_acos, v_add, v_asin, v_atan, v_cos, v_div, v_exp, v_inv_logit, v_lgamma, v_log,
     v_log_inv_logit, v_logit, v_mul, v_neg, v_phi, v_pow, v_sin, v_sqrt, v_student_t_lccdf, v_sub,
-    v_sum, v_tan,
-    v_tanh,
+    v_sum, v_tan, v_tanh,
 };
 use crate::value::{Shape, Val};
 use stanwasm_ast::{Expr, FuncDef, SliceIdx, StanType, Stmt};
@@ -425,7 +424,10 @@ fn mul_or_matmul(t: &mut Tape, lhs: &Val, rhs: &Val) -> Result<Val> {
             let (Val::Vec(a), Val::Vec(b)) = (lhs, rhs) else {
                 return Err(EvalError::NotAScalar);
             };
-            room_for(t, ra.saturating_mul(cb).saturating_mul(2).saturating_mul(ca))?;
+            room_for(
+                t,
+                ra.saturating_mul(cb).saturating_mul(2).saturating_mul(ca),
+            )?;
             Ok(Val::Vec(matrix::mat_mat_mul(t, a, b, cb)))
         }
         _ => Ok(v_mul(t, lhs, rhs)),
@@ -937,7 +939,10 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             if args.iter().all(|a| a.elems().is_none()) {
                 Val::Row(args.to_vec())
             } else {
-                Val::Vec(same_width("[]", &args.iter().map(as_rows_flat).collect::<Vec<_>>())?)
+                Val::Vec(same_width(
+                    "[]",
+                    &args.iter().map(as_rows_flat).collect::<Vec<_>>(),
+                )?)
             }
         }
         // `sub_col(m, i, j, n)` — `n` entries of column `j`, starting at row `i`.

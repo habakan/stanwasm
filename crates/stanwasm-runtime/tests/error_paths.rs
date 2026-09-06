@@ -349,7 +349,10 @@ fn a_graph_past_the_node_limit_is_reported() {
     let row: Vec<Val> = (0..n).map(|_| Val::Num(1.0)).collect();
     let mut env = Env::new();
     env.set("N", Val::Num(n as f64));
-    env.set("x", Val::Vec((0..n).map(|_| Val::Row(row.clone())).collect()));
+    env.set(
+        "x",
+        Val::Vec((0..n).map(|_| Val::Row(row.clone())).collect()),
+    );
     let model = Model::parse_and_load(src, env).expect("loads");
     let err = model
         .log_prob_grad(&vec![0.1; n])

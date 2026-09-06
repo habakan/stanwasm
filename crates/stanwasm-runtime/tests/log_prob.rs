@@ -594,10 +594,13 @@ fn an_array_of_vectors_is_summed_over_its_rows() {
     let raw = [0.3, -0.2, 0.4];
 
     for dist in ["multi_normal", "multi_normal_cholesky"] {
-        let arg = if dist == "multi_normal" { "S" } else { "cholesky_decompose(S)" };
+        let arg = if dist == "multi_normal" {
+            "S"
+        } else {
+            "cholesky_decompose(S)"
+        };
         let one = format!("{decls} model {{ y ~ {dist}(mu, {arg}); }}");
-        let loop_form =
-            format!("{decls} model {{ for (n in 1:N) y[n] ~ {dist}(mu, {arg}); }}");
+        let loop_form = format!("{decls} model {{ for (n in 1:N) y[n] ~ {dist}(mu, {arg}); }}");
 
         let env = || stanwasm_runtime::data_from_json(data).unwrap();
         let (a, ga) = Model::parse_and_load(&one, env())

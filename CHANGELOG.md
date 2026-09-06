@@ -7,29 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-06 (npm only)
+
+Published to npm as `stanwasm@0.4.0`. The crates stay off crates.io for the
+same reason as every release since 0.1.2: the Safari fix still lives in a
+`[patch]`, which Cargo does not carry into a published crate. Re-checked here —
+nuts-rs on crates.io is still 0.18.3, published 2026-06-15, and pulp still
+0.22.3.
+
+posteriordb coverage goes from 137 to **141 of 147** posteriors, and from 43 to
+45 of the 47 that ship a reference posterior. Everything below came out of
+working through that corpus.
+
 ### Added
 
-- **`multi_normal` and `multi_normal_cholesky` over an array of vectors.**
-  `array[N] vector[K] y ~ multi_normal(mu, Sigma)` is N observations sharing one
-  covariance, which used to be refused; Σ is factored once for all of them.
-- **`weibull`, `log_inv_logit` and `log1m_inv_logit`.** The logit pair is folded
-  so the exponential is always of a non-positive number — the composition
-  `log(inv_logit(x))` is `-inf` below -745, where the value is just `x`.
-
-- **`randomInit(seed)`.** The sampler refuses a starting point whose gradient
-  has a zero component, and the obvious one — 0.1 everywhere — is exactly where
-  a parameter the data says nothing about has no slope. Six posteriordb
-  posteriors could be compiled but not sampled for that reason. This draws
-  uniformly on `[-2, 2]`, the way CmdStan initialises, and redraws until the
-  point is one the sampler takes. `sample` still uses whatever it is handed.
-- **`categorical_rng` and `categorical_logit_rng`.** A category, not one draw
-  per weight — which is what picking a posterior draw to predict from needs.
 - **`unconstrainDraw(values)` and `constrainedParamNames()`.** The inverse of
   `constrainDraw`, which had no counterpart: a posterior fitted elsewhere
   arrives on the model's own scale, and every other method takes the
   unconstrained vector. Covers every constraint the runtime constrains,
   including `simplex`, the `cholesky_factor_*` pair and `cov_matrix`, which is
   read back through a Cholesky factorisation.
+- **`randomInit(seed)`.** The sampler refuses a starting point whose gradient
+  has a zero component, and the obvious one — 0.1 everywhere — is exactly where
+  a parameter the data says nothing about has no slope. Six posteriordb
+  posteriors could be compiled but not sampled for that reason. This draws
+  uniformly on `[-2, 2]` and redraws until the point is one the sampler takes.
+  `sample` still uses whatever it is handed.
+- **`multi_normal` and `multi_normal_cholesky` over an array of vectors.**
+  `array[N] vector[K] y ~ multi_normal(mu, Sigma)` is N observations sharing one
+  covariance, which used to be refused; Σ is factored once for all of them.
+- **`weibull`, `log_inv_logit` and `log1m_inv_logit`.** The logit pair is folded
+  so the exponential is always of a non-positive number — the composition
+  `log(inv_logit(x))` is `-inf` below -745, where the value is just `x`.
+- **`categorical_rng` and `categorical_logit_rng`.** A category, not one draw
+  per weight — which is what picking a posterior draw to predict from needs.
 
 ### Fixed
 
@@ -48,7 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tree, scopes read through to the data rather than copying it, and the
   recorded computation graph has a ceiling checked between statements and
   predicted from the shapes before a matrix product is recorded.
-
 - **An array of a constrained type is sized by what it holds, not by what it
   costs to sample.** `array[N] simplex[K]` in `generated quantities` was
   counted as `N * (K - 1)` and refused the `N * K` values it produced; the same
@@ -628,6 +638,7 @@ Comparable to the `nuts-rs` direct-call benchmark. See `docs/en/BENCHMARKS.md`.
   `sample()` behavior and correctly restores `logProbGrad`/`sample`
   afterward
 
+[0.4.0]: https://github.com/habakan/stanwasm/releases/tag/v0.4.0
 [0.3.0]: https://github.com/habakan/stanwasm/releases/tag/v0.3.0
 [0.2.0]: https://github.com/habakan/stanwasm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/habakan/stanwasm/releases/tag/v0.1.0
