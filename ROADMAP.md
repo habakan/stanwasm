@@ -25,7 +25,7 @@ worked through below, ordered by effort.
 |---|---|---|
 | Continuous | `normal`, `std_normal`, `exponential`, `half_normal`*, `cauchy`, `student_t`, `logistic`, `double_exponential`, `lognormal`, `gamma`, `beta`, `inv_gamma`, `uniform`, `normal_id_glm` | |
 | Discrete | `bernoulli`, `bernoulli_logit`, `bernoulli_logit_glm`, `binomial`, `binomial_logit`, `poisson`, `poisson_log`, `neg_binomial_2`, `categorical`, `categorical_logit` | |
-| Multivariate | `multi_normal_cholesky`, `multi_normal` (full covariance), `lkj_corr_cholesky`, `dirichlet`, `multinomial` | |
+| Multivariate | `multi_normal_cholesky`, `multi_normal` (full covariance), `wishart`, `inv_wishart`, `lkj_corr_cholesky`, `dirichlet`, `multinomial` | `lkj_corr` |
 | Scalar constraints | `lower`, `upper`, `lower_upper` — element-wise on vectors, row vectors and matrices | |
 | Vector shape | `simplex`, `ordered`, `positive_ordered`, `unit_vector`, `row_vector` | |
 | Matrix constraints | `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix`, `corr_matrix` | |

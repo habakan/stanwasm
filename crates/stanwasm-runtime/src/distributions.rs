@@ -321,6 +321,105 @@ pub fn multi_normal_cholesky_lpdf(t: &mut Tape, y: &[Val], mu: &[Val], l_rows: &
     v_sub(t, &prefix_minus_diag, &half_ds)
 }
 
+/// `log Γ_K(a)`, the multivariate gamma: `K(K-1)/4 · log π + Σ_j log Γ(a + (1-j)/2)`.
+fn log_multigamma(t: &mut Tape, a: &Val, k: usize) -> Val {
+    let mut acc = Val::Num((k * (k - 1)) as f64 / 4.0 * std::f64::consts::PI.ln());
+    for j in 1..=k {
+        let shifted = v_add(t, a, &Val::Num((1.0 - j as f64) / 2.0));
+        let lg = v_lgamma(t, &shifted);
+        acc = v_add(t, &acc, &lg);
+    }
+    acc
+}
+
+/// `log |M|` for a positive-definite `M` given its Cholesky factor: twice the
+/// sum of the factor's log diagonal.
+fn log_det_from_chol(t: &mut Tape, l_rows: &[Val]) -> Val {
+    let mut acc = Val::Num(0.0);
+    for (i, row) in l_rows.iter().enumerate() {
+        if let Some(cells) = row.elems() {
+            if let Some(d) = cells.get(i) {
+                let ld = v_log(t, d);
+                acc = v_add(t, &acc, &ld);
+            }
+        }
+    }
+    v_mul(t, &Val::Num(2.0), &acc)
+}
+
+/// `tr(A⁻¹ B)` where `la` is the Cholesky factor of A and `lb` that of B.
+/// Writing B as `Lb Lbᵀ` turns the trace into `‖La⁻¹ Lb‖²`, so it is a
+/// triangular solve per column rather than an inverse.
+fn trace_solve(t: &mut Tape, la_rows: &[Val], lb_rows: &[Val], k: usize) -> Val {
+    let mut acc = Val::Num(0.0);
+    for j in 0..k {
+        let col: Vec<Val> = (0..k)
+            .map(|i| {
+                lb_rows[i]
+                    .elems()
+                    .and_then(|r| r.get(j))
+                    .cloned()
+                    .unwrap_or(Val::Num(0.0))
+            })
+            .collect();
+        let x = mat_mdiv_ltri_low(t, la_rows, &col);
+        let s = vec_dot_self(t, &x);
+        acc = v_add(t, &acc, &s);
+    }
+    acc
+}
+
+/// `wishart_lpdf(W | nu, S)`, both K×K covariance matrices:
+/// `(nu−K−1)/2·log|W| − tr(S⁻¹W)/2 − nu·K/2·log2 − nu/2·log|S| − log Γ_K(nu/2)`.
+pub fn wishart_lpdf(t: &mut Tape, w_rows: &[Val], nu: &Val, s_rows: &[Val]) -> Val {
+    let k = w_rows.len();
+    let lw = cholesky_decompose(t, w_rows);
+    let ls = cholesky_decompose(t, s_rows);
+    let log_det_w = log_det_from_chol(t, &lw);
+    let log_det_s = log_det_from_chol(t, &ls);
+    let tr = trace_solve(t, &ls, &lw, k);
+
+    let half_nu = v_mul(t, &Val::Num(0.5), nu);
+    let a = v_sub(t, nu, &Val::Num((k + 1) as f64));
+    let a = v_mul(t, &Val::Num(0.5), &a);
+    let term_w = v_mul(t, &a, &log_det_w);
+    let term_tr = v_mul(t, &Val::Num(-0.5), &tr);
+    let term_2 = v_mul(t, &half_nu, &Val::Num(-(k as f64) * std::f64::consts::LN_2));
+    let term_s = v_mul(t, &half_nu, &log_det_s);
+    let lg = log_multigamma(t, &half_nu, k);
+
+    let acc = v_add(t, &term_w, &term_tr);
+    let acc = v_add(t, &acc, &term_2);
+    let acc = v_sub(t, &acc, &term_s);
+    v_sub(t, &acc, &lg)
+}
+
+/// `inv_wishart_lpdf(W | nu, S)`:
+/// `nu/2·log|S| − (nu+K+1)/2·log|W| − tr(S W⁻¹)/2 − nu·K/2·log2 − log Γ_K(nu/2)`.
+pub fn inv_wishart_lpdf(t: &mut Tape, w_rows: &[Val], nu: &Val, s_rows: &[Val]) -> Val {
+    let k = w_rows.len();
+    let lw = cholesky_decompose(t, w_rows);
+    let ls = cholesky_decompose(t, s_rows);
+    let log_det_w = log_det_from_chol(t, &lw);
+    let log_det_s = log_det_from_chol(t, &ls);
+    // tr(S W⁻¹) is the same shape with the roles of the two factors swapped.
+    let tr = trace_solve(t, &lw, &ls, k);
+
+    let half_nu = v_mul(t, &Val::Num(0.5), nu);
+    let b = v_add(t, nu, &Val::Num((k + 1) as f64));
+    let b = v_mul(t, &Val::Num(-0.5), &b);
+    let term_w = v_mul(t, &b, &log_det_w);
+    let term_s = v_mul(t, &half_nu, &log_det_s);
+    let term_tr = v_mul(t, &Val::Num(-0.5), &tr);
+    let term_2 = v_mul(t, &half_nu, &Val::Num(-(k as f64) * std::f64::consts::LN_2));
+    let lg = log_multigamma(t, &half_nu, k);
+
+    let acc = v_add(t, &term_s, &term_w);
+    let acc = v_add(t, &acc, &term_tr);
+    let acc = v_add(t, &acc, &term_2);
+    v_sub(t, &acc, &lg)
+}
+
 /// `multinomial_lpmf(y | θ)`, y an integer count array, θ a simplex of length K:
 /// log p = lgamma(N+1) − Σ lgamma(yᵢ+1) + Σ yᵢ log θᵢ, N = Σ yᵢ.
 pub fn multinomial_lpmf(t: &mut Tape, y: &[Val], theta: &[Val]) -> Val {
@@ -432,6 +531,8 @@ fn is_multivariate(name: &str) -> bool {
             | "normal_id_glm"
             | "multi_normal_cholesky"
             | "multi_normal"
+            | "wishart"
+            | "inv_wishart"
             | "lkj_corr_cholesky"
             | "dirichlet"
             | "multinomial"
@@ -460,7 +561,9 @@ fn arity(name: &str) -> Option<usize> {
         | "logistic"
         | "weibull"
         | "double_exponential"
-        | "multi_normal" => 2,
+        | "multi_normal"
+        | "wishart"
+        | "inv_wishart" => 2,
         "student_t" | "bernoulli_logit_glm" => 3,
         "normal_id_glm" => 4,
         _ => return None,
@@ -546,6 +649,30 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
         },
         // `array[N] vector[K] y` is N observations sharing one covariance, which
         // Stan sums the density over; an unrecognised shape used to contribute 0.
+        // Both take a K×K covariance as the variate, so the structure is the
+        // observation rather than K of them.
+        "wishart" | "inv_wishart" => match (x, &args[0], &args[1]) {
+            (Val::Vec(w), nu, Val::Vec(sc))
+                // Square and the same size, checked on the rows too — a length-K
+                // vector and a K x K matrix both have K entries at the top.
+                if !w.is_empty()
+                    && w.len() == sc.len()
+                    && w.iter().chain(sc).all(|r| r.elems().is_some_and(|e| e.len() == w.len())) =>
+            {
+                if name == "wishart" {
+                    wishart_lpdf(t, w, nu, sc)
+                } else {
+                    inv_wishart_lpdf(t, w, nu, sc)
+                }
+            }
+            _ => {
+                return Err(wrong_type(
+                    name,
+                    "a K x K covariance variate, degrees of freedom, and a K x K scale",
+                    x,
+                ))
+            }
+        },
         "multi_normal_cholesky" | "multi_normal" => match (x, &args[0], &args[1]) {
             (Val::Vec(y), Val::Vec(mu), Val::Vec(rows)) => {
                 let owned;

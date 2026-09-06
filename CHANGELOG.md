@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`wishart` and `inv_wishart`.** Neither takes an inverse: `tr(A⁻¹B)` is
+  written as `‖chol(A)⁻¹ chol(B)‖²`, which is a triangular solve per column, and
+  the determinants come off the Cholesky diagonals. Checked against the forms
+  where the answer is known rather than against themselves — a 1×1 Wishart is a
+  gamma and a 1×1 inverse Wishart an inverse gamma, both to ten figures; the
+  2×2 density written out longhand; and the two against each other through
+  `W → W⁻¹`, which catches a constant that is wrong in both.
+
+  They existed to close a gap in the calibration checks: simulation-based
+  calibration needs a prior it can draw from, and `cov_matrix` had none. With
+  `inv_wishart` it does, and over 400 replications the rank histograms are flat
+  (χ² of 10.3, 11.3 and 16.6 against a threshold of 16.9). `corr_matrix` is now
+  the only constrained type still unchecked that way, and it wants `lkj_corr`.
 - **`tan`, `asin`, `acos` and `atan` on the AOT path.** All four were callable
   from Stan source and refused by the emitter, so a model using one sampled but
   would not compile — the one asymmetry between the two paths a reader would
@@ -94,6 +107,10 @@ working through that corpus.
   per weight — which is what picking a posterior draw to predict from needs.
 
 ### Fixed
+
+- A multivariate density took a length-K vector where it wanted a K×K matrix,
+  because both have K entries at the top level, and returned NaN rather than
+  saying so. The check now looks at the rows.
 
 - **`cholesky_decompose` returned a ragged triangle.** Stan's returns a full
   K×K matrix with zeros above the diagonal; the triangle alone could not reach
