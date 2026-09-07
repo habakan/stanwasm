@@ -600,7 +600,9 @@ fn eval_ode_rk45(t: &mut Tape, args: &[Expr], env: &Env) -> Result<Val> {
     };
 
     let mut out: Vec<Val> = Vec::with_capacity(ts.len());
-    let mut h = ts.first().map_or(1.0, |t1| (t1 - t_now).abs().max(1e-6) * 0.1);
+    let mut h = ts
+        .first()
+        .map_or(1.0, |t1| (t1 - t_now).abs().max(1e-6) * 0.1);
     let mut taken = 0u64;
     for &t_end in &ts {
         while t_now < t_end {
@@ -840,7 +842,9 @@ fn rk4_combine(t: &mut Tape, y: &[Val], k: &[&Vec<Val>; 4], h: &Val) -> Result<V
 
 /// A container's elements, or a scalar as a single one.
 fn as_elems(v: &Val) -> Vec<Val> {
-    v.elems().map(<[Val]>::to_vec).unwrap_or_else(|| vec![v.clone()])
+    v.elems()
+        .map(<[Val]>::to_vec)
+        .unwrap_or_else(|| vec![v.clone()])
 }
 
 /// Writes `val` into `y[i]` / `M[i, j]`, which the parser nests as

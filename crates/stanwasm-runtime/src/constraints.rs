@@ -70,9 +70,8 @@ fn corr_l_from_raw(t: &mut Tape, raw: &[Val], kk: usize) -> (Vec<Val>, Val) {
 /// tell them apart, and why this went unnoticed.
 fn corr_l_column_major(t: &mut Tape, raw: &[Val], kk: usize) -> Vec<Val> {
     // Free value for entry (i, j), j < i, counting down column j.
-    let at = |i: usize, j: usize| -> usize {
-        (0..j).map(|c| kk - 1 - c).sum::<usize>() + (i - j - 1)
-    };
+    let at =
+        |i: usize, j: usize| -> usize { (0..j).map(|c| kk - 1 - c).sum::<usize>() + (i - j - 1) };
     let mut mat: Vec<Val> = Vec::with_capacity(kk);
     for i in 0..kk {
         let mut row: Vec<Val> = vec![Val::Num(0.0); kk];

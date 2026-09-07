@@ -44,16 +44,20 @@ fn lgamma(x: f64) -> f64 {
     let inv2 = inv * inv;
     acc + (a - 0.5) * a.ln() - a
         + 0.5 * (2.0 * std::f64::consts::PI).ln()
-        + inv
-            * (1.0 / 12.0
-                - inv2 * (1.0 / 360.0 - inv2 * (1.0 / 1260.0 - inv2 / 1680.0)))
+        + inv * (1.0 / 12.0 - inv2 * (1.0 / 360.0 - inv2 * (1.0 / 1260.0 - inv2 / 1680.0)))
 }
 
 /// A 1×1 Wishart(nu, s) is Gamma(shape = nu/2, rate = 1/(2s)).
 #[test]
 fn a_one_by_one_wishart_is_a_gamma() {
     for (w, nu, s) in [(2.0, 3.0, 1.0), (0.4, 5.0, 2.5), (7.1, 4.0, 0.3)] {
-        let got = lp("wishart", &[[w, 0.0], [0.0, 0.0]], nu, &[[s, 0.0], [0.0, 0.0]], 1);
+        let got = lp(
+            "wishart",
+            &[[w, 0.0], [0.0, 0.0]],
+            nu,
+            &[[s, 0.0], [0.0, 0.0]],
+            1,
+        );
         let (shape, rate) = (nu / 2.0, 1.0 / (2.0 * s));
         let want = shape * rate.ln() + (shape - 1.0) * w.ln() - rate * w - lgamma(shape);
         assert!(
@@ -67,7 +71,13 @@ fn a_one_by_one_wishart_is_a_gamma() {
 #[test]
 fn a_one_by_one_inv_wishart_is_an_inverse_gamma() {
     for (w, nu, s) in [(2.0, 3.0, 1.0), (0.4, 5.0, 2.5), (7.1, 4.0, 0.3)] {
-        let got = lp("inv_wishart", &[[w, 0.0], [0.0, 0.0]], nu, &[[s, 0.0], [0.0, 0.0]], 1);
+        let got = lp(
+            "inv_wishart",
+            &[[w, 0.0], [0.0, 0.0]],
+            nu,
+            &[[s, 0.0], [0.0, 0.0]],
+            1,
+        );
         let (shape, scale) = (nu / 2.0, s / 2.0);
         let want = shape * scale.ln() - (shape + 1.0) * w.ln() - scale / w - lgamma(shape);
         assert!(
@@ -93,10 +103,10 @@ fn a_two_by_two_wishart_matches_the_written_out_density() {
     let tr = (0..2)
         .map(|i| (0..2).map(|j| inv_s[i][j] * w[j][i]).sum::<f64>())
         .sum::<f64>();
-    let log_multigamma = 0.5 * std::f64::consts::PI.ln()
-        + lgamma(nu / 2.0)
-        + lgamma(nu / 2.0 - 0.5);
-    let want = (nu - 3.0) / 2.0 * det(&w).ln() - 0.5 * tr
+    let log_multigamma =
+        0.5 * std::f64::consts::PI.ln() + lgamma(nu / 2.0) + lgamma(nu / 2.0 - 0.5);
+    let want = (nu - 3.0) / 2.0 * det(&w).ln()
+        - 0.5 * tr
         - nu * std::f64::consts::LN_2
         - nu / 2.0 * ds.ln()
         - log_multigamma;
@@ -306,6 +316,9 @@ fn lkj_matches_a_reference_implementation_with_eta_a_parameter() {
         (0.7, 0.255385824828),
     ] {
         let got = run(srcl, "L", l3.clone(), u);
-        assert!((got - want).abs() < 1e-9, "chol K=3 at u={u}: {got} != {want}");
+        assert!(
+            (got - want).abs() < 1e-9,
+            "chol K=3 at u={u}: {got} != {want}"
+        );
     }
 }

@@ -81,7 +81,11 @@ fn the_graph_does_not_depend_on_the_parameter() {
         m.trace_forward(&mut tape, &leaves, true).unwrap();
         tape.ops().to_vec()
     };
-    assert_eq!(trace(0.2), trace(5.0), "the recorded ops differ by parameter");
+    assert_eq!(
+        trace(0.2),
+        trace(5.0),
+        "the recorded ops differ by parameter"
+    );
 }
 
 #[test]
@@ -154,7 +158,10 @@ fn the_tolerance_actually_controls_the_step() {
     let err = |tol: &str| (lp_grad(&adaptive(tol), k).0 - want).abs();
     let loose = err(", 1e-3, 1e-3, 100000");
     let tight = err(", 1e-11, 1e-11, 100000");
-    assert!(tight < loose, "tightening did nothing: {loose} then {tight}");
+    assert!(
+        tight < loose,
+        "tightening did nothing: {loose} then {tight}"
+    );
 }
 
 /// The step count is chosen from the values, so the recorded graph differs by
@@ -167,7 +174,8 @@ fn the_adaptive_graph_moves_with_the_parameter_and_replay_refuses() {
     let ops = |k: f64, strict: bool| {
         let mut tape = Tape::new();
         let leaves = vec![tape.new_var(k)];
-        m.trace_forward(&mut tape, &leaves, strict).map(|_| tape.len())
+        m.trace_forward(&mut tape, &leaves, strict)
+            .map(|_| tape.len())
     };
     let a = ops(0.2, false).unwrap();
     let b = ops(9.0, false).unwrap();

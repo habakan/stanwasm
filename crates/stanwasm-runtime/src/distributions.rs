@@ -542,7 +542,11 @@ fn lkj_log_constant(t: &mut Tape, eta: &Val, k: usize) -> Val {
     for j in 1..k {
         let e = v_add(t, eta, &Val::Num((km1 - j as f64) / 2.0));
         let lg = v_lgamma(t, &e);
-        let term = v_add(t, &Val::Num(0.5 * j as f64 * std::f64::consts::PI.ln()), &lg);
+        let term = v_add(
+            t,
+            &Val::Num(0.5 * j as f64 * std::f64::consts::PI.ln()),
+            &lg,
+        );
         acc = v_sub(t, &acc, &term);
     }
     acc
@@ -584,8 +588,7 @@ fn arity(name: &str) -> Option<usize> {
         "std_normal" => 0,
         "exponential" | "half_normal" | "bernoulli" | "bernoulli_logit" | "poisson"
         | "poisson_log" | "dirichlet" | "lkj_corr_cholesky" | "lkj_corr" | "multinomial"
-        | "categorical"
-        | "categorical_logit" => 1,
+        | "categorical" | "categorical_logit" => 1,
         "normal"
         | "cauchy"
         | "lognormal"
@@ -778,7 +781,9 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
         "lkj_corr" => match x {
             Val::Vec(rows)
                 if !rows.is_empty()
-                    && rows.iter().all(|r| r.elems().is_some_and(|e| e.len() == rows.len())) =>
+                    && rows
+                        .iter()
+                        .all(|r| r.elems().is_some_and(|e| e.len() == rows.len())) =>
             {
                 lkj_corr_lpdf(t, rows, &args[0])
             }
@@ -875,8 +880,7 @@ mod tests {
                     Val::Vec(vec![Val::Num(rho), Val::Num(l11)]),
                 ];
                 let lp = lkj_corr_cholesky_lpdf(&mut t, &l_rows, &Val::Num(eta));
-                let expected = (2.0 * eta - 2.0) * l11.ln()
-                    + lgamma(eta + 0.5)
+                let expected = (2.0 * eta - 2.0) * l11.ln() + lgamma(eta + 0.5)
                     - lgamma(eta)
                     - 0.5 * std::f64::consts::PI.ln();
                 let got = lp.to_f64(&t).unwrap();
