@@ -61,6 +61,24 @@ fn pow_is_right_associative() {
 }
 
 #[test]
+fn a_known_zero_base_has_no_pow_exponent_gradient() {
+    for expr in ["sum(pow(x, s))", "sum(x ^ s)"] {
+        let src = format!(
+            "data {{ int N; vector[N] x; }} parameters {{ real<lower=0> s; }} \
+             model {{ s ~ lognormal(0, 1); target += {expr}; }}"
+        );
+        let (_, zero_grad) = lp(&src, r#"{"N":4,"x":[0,1,2,3]}"#, &[0.3]).unwrap();
+        let (_, tiny_grad) = lp(&src, r#"{"N":4,"x":[1e-300,1,2,3]}"#, &[0.3]).unwrap();
+        assert!(
+            zero_grad[0].is_finite(),
+            "{expr}: gradient = {}",
+            zero_grad[0]
+        );
+        assert!((zero_grad[0] - tiny_grad[0]).abs() < 1e-12, "{expr}");
+    }
+}
+
+#[test]
 fn int_division_truncates() {
     // Stan is statically typed: `N / 2` with `int N = 3` is 1, not 1.5.
     let (v, _) = lp(
@@ -184,6 +202,39 @@ fn data_bounds_are_checked() {
         r#"{"N":-5}"#,
     );
     assert!(e.contains("lower=0"), "{e}");
+}
+
+#[test]
+fn matrix_data_bounds_are_checked_element_wise() {
+    let src = "data { matrix<lower=0>[2, 2] M; } \
+               parameters { real a; } model { a ~ normal(0, 1); }";
+    let e = load_err(src, r#"{"M":[[1,2],[3,-4]]}"#);
+    assert!(e.contains("`M`[2][2]") && e.contains("lower=0"), "{e}");
+    load(src, r#"{"M":[[1,2],[3,4]]}"#).unwrap();
+}
+
+#[test]
+fn fmin_and_fmax_return_extrema_and_follow_the_fabs_kink() {
+    let extrema = "parameters { real a; } \
+                   model { target += fmin(a, 3) + fmax(a, 3); }";
+    let (v, g) = lp(extrema, "{}", &[2.0]).unwrap();
+    assert_eq!(v, 5.0);
+    assert_eq!(g, vec![1.0]);
+
+    let (_, max_grad) = lp(
+        "parameters { real a; } model { target += fmax(a, 0); }",
+        "{}",
+        &[0.0],
+    )
+    .unwrap();
+    let (_, min_grad) = lp(
+        "parameters { real a; } model { target += fmin(a, 0); }",
+        "{}",
+        &[0.0],
+    )
+    .unwrap();
+    assert_eq!(max_grad, vec![1.0]);
+    assert_eq!(min_grad, vec![0.0]);
 }
 
 #[test]

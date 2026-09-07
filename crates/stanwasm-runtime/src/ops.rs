@@ -212,6 +212,7 @@ pub fn v_pow(t: &mut Tape, base: &Val, exp: &Val) -> Val {
         // Element-wise, so each element reaches the single node above rather than the
         // `exp(n log x)` below, whose `log(0)` differentiates back as NaN.
         _ if base.elems().is_some() || exp.elems().is_some() => broadcast(t, base, exp, v_pow),
+        (Val::Num(0.0), _) => Val::Num(0.0),
         // A variable exponent, which only this form expresses.
         _ => {
             let lb = v_log(t, base);

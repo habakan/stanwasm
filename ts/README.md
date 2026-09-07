@@ -80,8 +80,8 @@ responsive.
 | `.sample(init, warmup, draws, seed)` | NUTS. `seed` is a `BigInt`. |
 | `.sampleFresh(init, warmup, draws, seed)` | NUTS re-recording the autodiff tape per gradient, ~6x the cost. The only path for a model whose computation depends on the parameters — `integrate_ode_rk45`, or a branch on a parameter. `sample()` refuses those and says so. |
 | `.startStepSampling(init, warmup, draws, seed)`, `.stepDraw()`, `.finishStepSampling()` | One draw at a time, for live visualisation. |
-| `.constrainDraw(draw)` | Unconstrained draw back to the model's own scale. |
-| `.constrainedParamNames()`, `.unconstrainDraw(values)` | The inverse: a draw fitted elsewhere, in the model's own scale, back to the unconstrained vector the other methods take. |
+| `.constrainDraw(draw)` | Unconstrained draw back to the model's own scale. The result also includes transformed parameters. |
+| `.constrainedParamNames()`, `.unconstrainDraw(values)` | A constrained `parameters`-block draw back to the unconstrained vector the other methods take. Pass only the first `constrainedParamNames().length` values from `constrainDraw()`. |
 | `.genQuantityNames()`, `.generatedQuantities(draws, nDraws, seed)` | `generated quantities` block. |
 | `.compileToWasm()`, `.sampleViaAot(...)` | Ahead-of-time compile this model to its own wasm module and sample through it — 1.5x to 12x faster per gradient than tape replay across the repository's sixteen benchmark models. The emitted module uses fixed-width SIMD (Safari 16.4+). Needs `setAotExports` wiring; see the repository. |
 

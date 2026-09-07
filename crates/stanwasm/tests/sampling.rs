@@ -364,6 +364,21 @@ fn a_starting_point_the_sampler_refuses_names_the_parameters() {
     assert!(nan.contains("log density is NaN"), "{nan}");
 }
 
+#[test]
+fn a_non_finite_gradient_is_not_reported_as_flat() {
+    let names: Vec<String> = ["bad", "good"].iter().map(|s| s.to_string()).collect();
+    let nan = init_gradient_check(&names, -3.0, &[f64::NAN, 1.0]).unwrap_err();
+    assert!(nan.contains("NaN") && nan.contains("bad"), "{nan}");
+    assert!(!nan.contains("does not move"), "{nan}");
+
+    let infinite = init_gradient_check(&names, -3.0, &[f64::INFINITY, 1.0]).unwrap_err();
+    assert!(
+        infinite.contains("infinite") && infinite.contains("bad"),
+        "{infinite}"
+    );
+    assert!(!infinite.contains("does not move"), "{infinite}");
+}
+
 /// `b` enters only through `a`, so its gradient is zero wherever `a` is — and
 /// zero is where the obvious starting point puts it. `randomInit` is what finds
 /// a point the sampler accepts. (The refusal itself is a `JsError`, which

@@ -639,6 +639,18 @@ impl Parser {
                         self.expect_tok(&Token::Semi)?;
                         Ok(Stmt::IncrAssign(lhs, rhs))
                     }
+                    Token::SubEq | Token::MulEq | Token::DivEq => {
+                        let op = match self.consume() {
+                            Token::SubEq => "-",
+                            Token::MulEq => "*",
+                            Token::DivEq => "/",
+                            _ => unreachable!(),
+                        };
+                        let rhs = self.parse_expr(0)?;
+                        self.expect_tok(&Token::Semi)?;
+                        let value = Expr::BinOp(op.into(), Box::new(lhs.clone()), Box::new(rhs));
+                        Ok(Stmt::Assign(lhs, value))
+                    }
                     _ => Err(ParseError::UnsupportedStatement),
                 }
             }

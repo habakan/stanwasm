@@ -30,18 +30,21 @@ worked through below, ordered by effort.
 | Vector shape | `simplex`, `ordered`, `positive_ordered`, `unit_vector`, `row_vector` | |
 | Matrix constraints | `cholesky_factor_corr`, `cholesky_factor_cov`, `cov_matrix`, `corr_matrix` | |
 | Blocks | `data`, `transformed data`, `parameters`, `transformed parameters`, `model`, `generated quantities`, `functions` | |
-| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, indexed, gathered and sliced assignment, ternary `?:`, a bare `{ ... }` block | |
+| Statements | `for`/`while`, `if`/`else`, `break`/`continue`, `y ~ dist(...)`, `target += expr`, `+=`/`-=`/`*=`/`/=`, indexed, gathered and sliced assignment, ternary `?:`, a bare `{ ... }` block | |
 | Operators | arithmetic, comparison, short-circuiting `&&`/`\|\|`, `^`, matrix product (`X * beta`, `A * B`), transpose `x'`, element-wise `.*` `./` `.^` | |
 | Indexing | a position, a range (`x[1:5]`, `x[ : ]`), an array of positions (`phi[node1]`), and any mix across dimensions (`W[1:rows(W), k]`) — reading and assigning | |
 | Literals | an array `{1, 2, 3}`, a row vector or matrix `[a, b]` | |
 | `_rng` | scalar draws for every distribution above, vectorized over container arguments, plus `uniform_rng`, `dirichlet_rng`, `multi_normal_cholesky_rng`, `categorical_rng`, `categorical_logit_rng` | `lkj_corr_cholesky_rng` |
-| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose`, `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`, `to_vector`, `dot_self`, `pi`, `negative_infinity`, `student_t_lccdf`, `sub_col`, `append_row`, `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`, a `[a, b]` literal | `norm`, `eigenvectors_sym` |
+| Math functions | `log`, `exp`, `sqrt`, `abs`, `pow`, `square`, `lgamma`, `logit`, `inv_logit`, `tanh`, `Phi`, `sum`, `mean`, `segment`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `fmin`, `fmax`, `dot_product`, `size`, `num_elements`, `rows`, `cols`, `rep_vector`, `rep_matrix`, `log_sum_exp`, `log_mix`, `log10`, `sd`, `diag_pre_multiply`, `gp_exp_quad_cov`, `diag_matrix`, `cholesky_decompose`, `min`, `max`, `cumulative_sum`, `softmax`, `rep_row_vector`, `tail`, `to_vector`, `dot_self`, `pi`, `negative_infinity`, `student_t_lccdf`, `sub_col`, `append_row`, `append_col`, `quad_form_diag`, `dims`, `multiply_lower_tri_self_transpose`, a `[a, b]` literal | `norm`, `eigenvectors_sym` |
 
 \* `half_normal` is not a Stan distribution — stanc rejects it. Write
 `real<lower=0> tau; tau ~ normal(0, s);` for a model that also runs under Stan.
 
-Seven caveats the table can't carry:
+Eight caveats the table can't carry:
 
+- **A known zero raised to a variable positive exponent is constant zero.** A
+  literal or data value of zero contributes no exponent gradient. A parameter
+  expression that evaluates to zero still follows the general logarithmic path.
 - **A starting point has to be one the sampler accepts.** It refuses a gradient
   with a zero component, which is where a parameter the data says nothing about
   sits at any obvious starting point. The error names those parameters, and

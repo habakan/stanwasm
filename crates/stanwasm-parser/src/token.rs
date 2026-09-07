@@ -13,6 +13,9 @@ pub enum Token {
     EqEq,   // ==
     Ne,     // !=
     AddEq,  // +=
+    SubEq,  // -=
+    MulEq,  // *=
+    DivEq,  // /=
     AndAnd, // &&
     OrOr,   // ||
     Arrow,  // ->

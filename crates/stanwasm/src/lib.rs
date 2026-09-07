@@ -191,10 +191,39 @@ pub fn init_gradient_check(names: &[String], lp: f64, grad: &[f64]) -> Result<()
              finite one to begin from"
         ));
     }
+    let named = |predicate: fn(f64) -> bool| {
+        grad.iter()
+            .enumerate()
+            .filter(|(_, g)| predicate(**g))
+            .map(|(i, _)| names.get(i).map_or("?", String::as_str))
+            .collect::<Vec<_>>()
+    };
+    let nan = named(f64::is_nan);
+    if !nan.is_empty() {
+        return Err(format!(
+            "gradient is NaN for {} of the {} parameters at the starting point \
+             ({}); this points to numerical arithmetic rather than a \
+             structurally flat model",
+            nan.len(),
+            grad.len(),
+            nan.join(", "),
+        ));
+    }
+    let infinite = named(f64::is_infinite);
+    if !infinite.is_empty() {
+        return Err(format!(
+            "gradient is infinite for {} of the {} parameters at the starting \
+             point ({}); this points to numerical arithmetic rather than a \
+             structurally flat model",
+            infinite.len(),
+            grad.len(),
+            infinite.join(", "),
+        ));
+    }
     let bad: Vec<&str> = grad
         .iter()
         .enumerate()
-        .filter(|(_, g)| !g.is_finite() || **g == 0.0)
+        .filter(|(_, g)| **g == 0.0)
         .map(|(i, _)| names.get(i).map_or("?", String::as_str))
         .collect();
     if bad.is_empty() {
@@ -438,7 +467,8 @@ impl StanModel {
     }
 
     /// Constrained `parameters` + `transformed parameters` for one
-    /// unconstrained draw, flattened in `paramNames()` order.
+    /// unconstrained draw, flattened in `paramNames()` order. Only the first
+    /// `constrainedParamNames().length` values can be passed to `unconstrainDraw()`.
     #[wasm_bindgen(js_name = constrainDraw)]
     pub fn constrain_draw(&self, unconstrained: &[f64]) -> Result<Vec<f64>, JsError> {
         let n = self.model.n_params();
