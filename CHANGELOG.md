@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The remaining compound assignments and scalar extrema.** `-=`, `*=` and
+  `/=` now join `+=`; `fmin` and `fmax` use the same kink convention as `fabs`.
+- **Finite exponent gradients for known zero bases.** `pow(0, s)` now contributes
+  zero rather than differentiating the logarithmic fallback to NaN.
 - **`wishart` and `inv_wishart`.** Neither takes an inverse: `tr(A⁻¹B)` is
   written as `‖chol(A)⁻¹ chol(B)‖²`, which is a triangular solve per column, and
   the determinants come off the Cholesky diagonals. Checked against the forms
@@ -75,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Starting-point errors distinguish arithmetic from flat parameters.** NaN
+  and infinite gradients are named before the structural zero-gradient check.
 - **The npm package is published from CI with provenance.** `release.yml` now
   uploads the tarball itself, authenticating with npm's trusted publishing
   rather than a stored token, so every release from here on carries an

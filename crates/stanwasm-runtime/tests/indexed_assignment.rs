@@ -54,6 +54,15 @@ fn compound_assignment_reads_then_writes_the_same_cell() {
 }
 
 #[test]
+fn all_compound_assignments_update_the_left_hand_side() {
+    let v = value_of(
+        "real z = 8; z += 2; z -= 3; z *= 4; z /= 7; target += z;",
+        Env::new(),
+    );
+    assert_eq!(v, 4.0);
+}
+
+#[test]
 fn a_parameter_written_into_a_cell_keeps_its_gradient() {
     // The tape has to see the value through the container, not a detached copy.
     let src = "parameters { real a; }\n\

@@ -1016,6 +1016,17 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
         ("exp", [a]) => v_exp(t, a),
         ("sqrt", [a]) => v_sqrt(t, a),
         ("abs", [a]) | ("fabs", [a]) => v_abs(t, a),
+        ("fmin", [a, b]) | ("fmax", [a, b]) => {
+            let sum = v_add(t, a, b);
+            let diff = v_sub(t, a, b);
+            let span = v_abs(t, &diff);
+            let total = if name == "fmax" {
+                v_add(t, &sum, &span)
+            } else {
+                v_sub(t, &sum, &span)
+            };
+            v_div(t, &total, &Val::Num(2.0))
+        }
         ("lgamma", [a]) => v_lgamma(t, a),
         ("inv_logit", [a]) | ("logistic", [a]) => v_inv_logit(t, a),
         ("log_inv_logit", [a]) => v_log_inv_logit(t, a),
