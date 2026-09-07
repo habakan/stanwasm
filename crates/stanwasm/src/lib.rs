@@ -154,10 +154,19 @@ pub struct StanModel {
     model: Rc<Model>,
     compiled: Option<Compiled>,
     step: Option<StepSampler>,
-    /// Initial scratch contents for the last `compileToWasm` output: zeroed
-    /// primals and adjoints, then the re-rolled loops' constant table.
-    /// `sampleViaAot` cannot build the buffer without it.
-    aot_scratch_init: Option<Vec<f64>>,
+    /// What the last `compileToWasm` left for `sampleViaAot`. One field rather
+    /// than two, so the scratch buffer and the id of the module it belongs to
+    /// cannot be set apart from each other.
+    aot: Option<AotBuild>,
+}
+
+/// The half of a `compileToWasm` result that stays behind on this side.
+struct AotBuild {
+    /// Initial scratch contents: zeroed primals and adjoints, then the
+    /// re-rolled loops' constant table.
+    scratch_init: Vec<f64>,
+    /// The emitted module's `stanwasm_layout_id` global.
+    layout_id: u32,
 }
 
 /// nuts-rs asserts that its step-size adaptation has somewhere to run, and an
@@ -227,7 +236,7 @@ impl StanModel {
             model: Rc::new(model),
             compiled,
             step: None,
-            aot_scratch_init: None,
+            aot: None,
         })
     }
 
@@ -517,16 +526,13 @@ impl StanModel {
             )));
         }
         no_warmup_check(num_warmup)?;
-        let compiled = self
-            .compiled
-            .take()
-            .ok_or_else(|| {
-                if self.step.is_none() {
-                    no_recorded_tape("startStepSampling")
-                } else {
-                    compiled_checked_out("startStepSampling")
-                }
-            })?;
+        let compiled = self.compiled.take().ok_or_else(|| {
+            if self.step.is_none() {
+                no_recorded_tape("startStepSampling")
+            } else {
+                compiled_checked_out("startStepSampling")
+            }
+        })?;
         let math = CpuMath::new(LogpAdapter { compiled });
         let settings = DiagNutsSettings {
             num_tune: num_warmup as u64,
@@ -612,7 +618,8 @@ impl StanModel {
         let compiled = stanwasm_codegen::compile_with(&self.model, &dummy, mode).map_err(|e| {
             // Emitting a module for a graph that moves with the parameters would
             // freeze it at `dummy`, so say which path does work instead.
-            if matches!(&e, stanwasm_codegen::CodegenError::Eval(inner) if needs_fresh_trace(inner)) {
+            if matches!(&e, stanwasm_codegen::CodegenError::Eval(inner) if needs_fresh_trace(inner))
+            {
                 no_recorded_tape("compileToWasm")
             } else {
                 jserr(e)
@@ -621,7 +628,10 @@ impl StanModel {
         let mut scratch = vec![0.0_f64; compiled.scratch_len];
         let at = compiled.scratch_len - compiled.const_table.len();
         scratch[at..].copy_from_slice(&compiled.const_table);
-        self.aot_scratch_init = Some(scratch);
+        self.aot = Some(AotBuild {
+            scratch_init: scratch,
+            layout_id: compiled.layout_id,
+        });
         Ok(compiled.wasm)
     }
 }
@@ -693,10 +703,47 @@ extern "C" {
 
     #[wasm_bindgen(js_name = clear_aot_exports)]
     fn js_clear_aot_exports();
+
+    /// The bound module's `stanwasm_layout_id`, or NaN when nothing is bound.
+    #[wasm_bindgen(js_name = aot_layout_id)]
+    fn aot_layout_id() -> f64;
+}
+
+/// Refuse a binding that belongs to a different compilation.
+///
+/// `setAotExports` binds one module for the whole page, while the scratch
+/// buffer belongs to a single model. Running model B's module against model
+/// A's buffer writes at slot offsets A never sized for, so this compares the
+/// two ids before the sampler takes the buffer.
+fn check_aot_binding(want: u32) -> Result<(), JsError> {
+    let bound = aot_layout_id();
+    if bound.is_nan() {
+        return Err(JsError::new(
+            "no AOT module is bound: call setAotExports(instance.exports) with \
+             the module this model's compileToWasm() returned. A module built \
+             by an older stanwasm exports no layout id and cannot be checked, \
+             so it is refused here too.",
+        ));
+    }
+    if bound as u32 != want {
+        return Err(JsError::new(
+            "the bound AOT module was compiled for a different model. \
+             setAotExports() binds one module per page, so re-bind this \
+             model's own compileToWasm() output before sampling it — the \
+             module reads and writes a scratch buffer laid out for the model \
+             it was compiled from.",
+        ));
+    }
+    Ok(())
 }
 
 /// Bind a freshly-instantiated AOT model wasm's exports so subsequent
 /// `sampleViaAot` calls dispatch through it. Pass `instance.exports`.
+///
+/// One binding serves the whole page, so a page holding several models has to
+/// re-bind before sampling a different one. `sampleViaAot` compares the bound
+/// module's `stanwasm_layout_id` against the model it belongs to and refuses
+/// the pair rather than running it against the wrong scratch buffer.
 #[wasm_bindgen(js_name = setAotExports)]
 pub fn set_aot_exports(exports: JsValue) {
     js_set_aot_exports(exports);
@@ -779,9 +826,12 @@ impl StanModel {
     /// `sampleViaAot` does it internally.
     #[wasm_bindgen(js_name = aotScratchInit)]
     pub fn aot_scratch_init(&self) -> Result<Vec<f64>, JsError> {
-        self.aot_scratch_init.clone().ok_or_else(|| {
-            JsError::new("call compileToWasm() first: the scratch layout comes from it")
-        })
+        self.aot
+            .as_ref()
+            .map(|a| a.scratch_init.clone())
+            .ok_or_else(|| {
+                JsError::new("call compileToWasm() first: the scratch layout comes from it")
+            })
     }
 
     #[wasm_bindgen(js_name = sampleViaAot)]
@@ -805,12 +855,14 @@ impl StanModel {
         // silently becomes a different (possibly enormous) run length.
         let total = num_warmup as u64 + num_draws as u64;
 
-        let scratch_buf = self.aot_scratch_init.clone().ok_or_else(|| {
+        let built = self.aot.as_ref().ok_or_else(|| {
             JsError::new(
                 "call compileToWasm() before sampleViaAot(): the AOT \
                           module works in a scratch buffer this model has not built yet",
             )
         })?;
+        check_aot_binding(built.layout_id)?;
+        let scratch_buf = built.scratch_init.clone();
         let math = CpuMath::new(AotLogp {
             n_params: n,
             params_buf: vec![0.0; n],

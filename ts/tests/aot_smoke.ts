@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import init, {
   StanModel,
   setAotExports,
+  clearAotExports,
   sharedMemory,
 } from "../index.js";
 
@@ -65,12 +66,14 @@ const data = {
 const model = new StanModel(stanCode, JSON.stringify(data));
 const aotBytes = model.compileToWasm();
 
-// Instantiate the AOT module sharing stan's memory.
-const aot = await WebAssembly.instantiate(aotBytes, {
+const hostImports = {
   stan: { memory: sharedMemory() as WebAssembly.Memory },
   Math: { exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos, pow: Math.pow,
           tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan, lgamma, digamma, phi },
-});
+};
+
+// Instantiate the AOT module sharing stan's memory.
+const aot = await WebAssembly.instantiate(aotBytes, hostImports);
 setAotExports(aot.instance.exports);
 
 const init0 = new Float64Array([0, 0, 0]);
@@ -92,4 +95,45 @@ if (Math.abs(meanBeta - 1.8) > 0.5) {
   console.error("FAIL");
   process.exit(1);
 }
+// `setAotExports` binds one module for the whole page, but the scratch buffer
+// it works in belongs to a single model. Sampling this model through another
+// one's module would write at slot offsets this one's buffer was never sized
+// for, so the module carries an id of the buffers it expects.
+const other = new StanModel(
+  `data { int<lower=0> N; vector[N] y; }
+   parameters { real mu; }
+   model { mu ~ normal(0, 1); y ~ normal(mu, 1); }`,
+  JSON.stringify({ N: 4, y: [0.1, 0.2, 0.3, 0.4] }),
+);
+const otherAot = await WebAssembly.instantiate(other.compileToWasm(), hostImports);
+setAotExports(otherAot.instance.exports);
+
+let refusal = "";
+try {
+  model.sampleViaAot(init0, 10, 10, 42n);
+} catch (e) {
+  refusal = String(e);
+}
+if (!refusal.includes("compiled for a different model")) {
+  console.error(`FAIL: a mismatched AOT binding gave ${refusal || "no error"}`);
+  process.exit(1);
+}
+
+// Re-binding this model's own module has to make it work again.
+setAotExports(aot.instance.exports);
+model.sampleViaAot(init0, 10, 10, 42n);
+
+clearAotExports();
+let unbound = "";
+try {
+  model.sampleViaAot(init0, 10, 10, 42n);
+} catch (e) {
+  unbound = String(e);
+}
+if (!unbound.includes("no AOT module is bound")) {
+  console.error(`FAIL: sampling with nothing bound gave ${unbound || "no error"}`);
+  process.exit(1);
+}
+console.log("a mismatched or missing AOT binding is refused; re-binding restores it");
+
 console.log("OK");

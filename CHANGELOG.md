@@ -73,6 +73,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fourth-order convergence RK4 is supposed to have. The adaptive integrators
   still refuse.
 
+### Changed
+
+- **`sampleViaAot` refuses a binding compiled for a different model.** Every
+  emitted module now exports a `stanwasm_layout_id` global — a hash of the
+  recorded graph, the parameter count and the staged constants — and the
+  sampler compares it against the model whose scratch buffer it is about to
+  hand over. `setAotExports` binds one module for the whole page while the
+  buffer belongs to one model, so a page holding two of them could run the
+  larger one's module against the smaller one's buffer and write past its end.
+  It now says which call to repeat instead.
+
 ## [0.4.0] — 2026-09-06 (npm only)
 
 Published to npm as `stanwasm@0.4.0`. The crates stay off crates.io for the

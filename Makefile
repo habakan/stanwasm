@@ -75,8 +75,11 @@ $(WASM_OUT): $(WASM_SRC)
 	@ls -la $(ROOT)/ts/pkg/
 
 .PHONY: smoke
-smoke: wasm ## Node smoke test against the built bundle
+smoke: wasm ## Node smoke tests against the built bundle
 	cd ts && $(NODE) tests/smoke.ts
+# The AOT path has its own entry points and its own bridge, and neither is
+# reached by the replay smoke above.
+	cd ts && $(NODE) tests/aot_smoke.ts
 
 .PHONY: bench
 bench: wasm ## Node benchmark (replay vs AOT)
