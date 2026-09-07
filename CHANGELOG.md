@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The npm package is published from CI with provenance.** `release.yml` now
+  uploads the tarball itself, authenticating with npm's trusted publishing
+  rather than a stored token, so every release from here on carries an
+  attestation tying the published bytes to the commit and the workflow run that
+  built them — `npm view stanwasm@VERSION dist.attestations`. Publishing by hand
+  could never produce one. crates.io stays manual.
 - **`sampleViaAot` refuses a binding compiled for a different model.** Every
   emitted module now exports a `stanwasm_layout_id` global — a hash of the
   recorded graph, the parameter count and the staged constants — and the
