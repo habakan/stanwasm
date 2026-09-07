@@ -75,9 +75,8 @@ fn push_named(out: &mut Vec<String>, name: &str, idx: &mut Vec<usize>, typ: &Sta
             }
         }
         StanType::Matrix(r_e, c_e, _) => grid(out, idx, eval_int(r_e, env), eval_int(c_e, env)),
-        // These constrain to a K×K matrix, while `param_dims` counts the smaller
-        // unconstrained vector — naming from that would leave the labels short and
-        // misaligned against `constrained_draw`.
+        // These constrain to a K×K matrix while `param_dims` counts the smaller
+        // unconstrained vector, so names come from the constrained shape.
         StanType::CholeskyFactorCorr(k_e)
         | StanType::CholeskyFactorCov(k_e)
         | StanType::CovMatrix(k_e)
@@ -346,9 +345,8 @@ fn validate_data(prog: &StanProgram, env: &mut Env) -> Result<(), DataMismatch> 
                 Constraint::LowerUpper(lo, hi) => (resolve(lo), resolve(hi)),
             }
         };
-        // Borrowed and retagged in place. A `data` block holding an MNIST-sized
-        // matrix is gigabytes as `Val`, and a copy to check it and another to
-        // orient it were two more.
+        // Retagged in place: a `data` block can be gigabytes as `Val`, and checking
+        // and orienting it used to cost a copy each.
         let val = env
             .get(&decl.name)
             .expect("checked above that the binding is there");
@@ -609,8 +607,8 @@ impl Model {
                 let before = out.len();
                 flatten_val(&tape, v, &mut out)?;
 
-                // `gen_quantity_names` sizes the output from the declaration, so a value
-                // of a different length would land as a length-mismatch panic downstream.
+                // `gen_quantity_names` sizes the output from the declaration, so a
+                // different length would panic downstream.
                 let mut names = Vec::new();
                 push_names_for(&mut names, name, typ, &self.data_env);
                 if out.len() - before != names.len() {
@@ -662,7 +660,6 @@ impl Model {
         let mut env = Env::nested(Rc::clone(&self.data_env));
         env.set_strict_no_param_branch(strict);
 
-        // Apply constraint transforms; accumulate Jacobian into lp.
         let mut leaf_idx = 0usize;
         let mut lp: Val = Val::Num(0.0);
         for decl in &self.prog.parameters {
@@ -676,7 +673,6 @@ impl Model {
             lp = v_add(tape, &lp, &log_jac);
         }
 
-        // transformed_params are declared then the transformed_stmts run.
         for decl in &self.prog.transformed_params {
             let init = match &decl.init {
                 Some(e) => crate::eval::eval_expr(tape, e, &env)?,
@@ -691,7 +687,6 @@ impl Model {
             lp = v_add(tape, &lp, &r);
         }
 
-        // model block: each statement may add to log_prob.
         for stmt in &self.prog.model {
             let r = eval_stmt(tape, stmt, &mut env)?.into_val();
             lp = v_add(tape, &lp, &r);

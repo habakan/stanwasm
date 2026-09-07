@@ -37,8 +37,7 @@ interface Group {
   sigma: number;
 }
 
-// Chart labels are kept short enough to fit their slot without overlapping
-// neighbors; see the hint text below for each one's full campaign name.
+// Labels are short enough not to overlap; the hint text below carries the full name.
 const INITIAL_GROUPS: Group[] = [
   { label: "Homepage", n: "n ≈ 48,000", y: 7, sigma: 3 },
   { label: "Email Subj.", n: "n ≈ 61,000", y: 4, sigma: 3 },
@@ -200,8 +199,8 @@ export function HierarchicalShrinkage() {
     for (let j = 0; j < n; j++) means[j] /= N_DRAWS;
     warmStart.current = means;
 
-    // constrainDraw() output order: parameters (mu, tau, theta_tilde[1..J])
-    // then transformed_params (theta[1..J]) — theta starts right after n.
+    // constrainDraw() puts transformed_params after the parameters, so theta
+    // starts right after n.
     const thetaStart = n;
     const thetaSum = new Array(gs.length).fill(0);
     const thetaSqSum = new Array(gs.length).fill(0);

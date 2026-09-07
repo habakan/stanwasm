@@ -114,8 +114,8 @@ impl CpuLogpFunc for FreshLogp {
     }
 
     fn logp(&mut self, position: &[f64], gradient: &mut [f64]) -> Result<f64, SamplerError> {
-        // A model that only some points can evaluate is exactly the case this
-        // path exists for, so an error here is a rejected proposal, not a fault.
+        // This path exists for models only some points evaluate, so an error here is
+        // a rejected proposal, not a fault.
         let lp = self
             .model
             .log_prob_grad_into(position, gradient)
@@ -224,9 +224,8 @@ impl StanModel {
     pub fn new(stan_src: &str, data_json: &str) -> Result<StanModel, JsError> {
         let env = data_from_json(data_json).map_err(jserr)?;
         let model = Model::parse_and_load(stan_src, env).map_err(jserr)?;
-        // A model whose computation changes with the parameters cannot be
-        // recorded once, but it can still be sampled by re-recording. Loading
-        // keeps going without a `Compiled`, and the paths that need one say so.
+        // A model whose graph moves with the parameters cannot be recorded once, but
+        // still samples by re-recording, so loading keeps going without a `Compiled`.
         let compiled = match trace(&model) {
             Ok(c) => Some(c),
             Err(e) if needs_fresh_trace(&e) => None,
@@ -354,8 +353,7 @@ impl StanModel {
             )));
         }
         no_warmup_check(num_warmup)?;
-        // Before the start check, which reads the recorded tape this model may
-        // not have.
+        // Before the start check, which reads a tape this model may not have.
         if self.compiled.is_none() && self.step.is_none() {
             return Err(no_recorded_tape("sample"));
         }
@@ -370,8 +368,7 @@ impl StanModel {
             .take()
             .ok_or_else(|| compiled_checked_out("sample"))?;
 
-        // Closure so `self.compiled` is restored on every exit path: a
-        // rejected `init` used to leave the model unable to sample again.
+        // A closure so `self.compiled` is restored on every exit path.
         let result: Result<Vec<f64>, JsError> = (|| {
             let math = CpuMath::new(LogpAdapter { compiled });
             let settings = DiagNutsSettings {
@@ -589,8 +586,7 @@ impl StanModel {
     #[wasm_bindgen(js_name = finishStepSampling)]
     pub fn finish_step_sampling(&mut self) {
         if self.step.take().is_some() {
-            // Re-tracing the same model definition that already traced
-            // successfully at construction time cannot fail differently.
+            // The same definition already traced at construction time.
             self.compiled =
                 Some(trace(&self.model).expect("internal: re-trace of a valid model failed"));
         }
@@ -616,8 +612,7 @@ impl StanModel {
         };
         let dummy = vec![0.1_f64; self.model.n_params()];
         let compiled = stanwasm_codegen::compile_with(&self.model, &dummy, mode).map_err(|e| {
-            // Emitting a module for a graph that moves with the parameters would
-            // freeze it at `dummy`, so say which path does work instead.
+            // A graph that moves with the parameters would freeze at `dummy`.
             if matches!(&e, stanwasm_codegen::CodegenError::Eval(inner) if needs_fresh_trace(inner))
             {
                 no_recorded_tape("compileToWasm")

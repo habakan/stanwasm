@@ -69,8 +69,8 @@ for (const N of [10, 100, 500, 1000, 2000, 5000]) {
   const bytes = m.compileToWasm();
   const codegenMs = performance.now() - t;
 
-  // params, grads, then the module's primal/adjoint scratch (two f64 per tape
-  // node; the tape is roughly 12 nodes per data point here).
+  // params, grads, then primal/adjoint scratch — two f64 per tape node, and the
+  // tape is roughly 12 nodes per data point here.
   const pages = Math.ceil((2 * (16 * N + 512) * 8) / 65536) + 2;
   const mem = new WebAssembly.Memory({ initial: pages });
   t = performance.now();

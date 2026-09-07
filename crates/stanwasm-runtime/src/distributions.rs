@@ -689,14 +689,12 @@ pub fn eval_dist(t: &mut Tape, name: &str, x: &Val, args: &[Val]) -> Result<Val>
             }
             _ => return Err(wrong_type(name, "a data matrix x", &args[0])),
         },
-        // `array[N] vector[K] y` is N observations sharing one covariance, which
-        // Stan sums the density over; an unrecognised shape used to contribute 0.
-        // Both take a K×K covariance as the variate, so the structure is the
-        // observation rather than K of them.
+        // Both take a K×K covariance as the variate, so a container of them is N
+        // observations sharing one scale rather than K parts of one.
         "wishart" | "inv_wishart" => match (x, &args[0], &args[1]) {
             (Val::Vec(w), nu, Val::Vec(sc))
-                // Square and the same size, checked on the rows too — a length-K
-                // vector and a K x K matrix both have K entries at the top.
+                // Rows are checked too: a length-K vector and a K×K matrix both have
+                // K entries at the top.
                 if !w.is_empty()
                     && w.len() == sc.len()
                     && w.iter().chain(sc).all(|r| r.elems().is_some_and(|e| e.len() == w.len())) =>
@@ -813,13 +811,13 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Re
     if is_multivariate(name) {
         return eval_dist(t, name, &Val::Vec(xs.to_vec()), args);
     }
-    // Before the length check below, which would otherwise blame the arguments
-    // of a distribution that does not exist here at all.
+    // Before the length check, which would otherwise blame a nonexistent
+    // distribution's arguments.
     if arity(name).is_none() {
         return Err(EvalError::UnknownDistribution(name.to_string()));
     }
-    // `categorical`'s theta, and its logit form's beta, are shared by every element
-    // of the variate rather than being per-observation, so they skip the broadcast.
+    // `categorical`'s theta and its logit form's beta are shared by every element
+    // of the variate, so they skip the broadcast.
     if name == "categorical" || name == "categorical_logit" {
         let terms: Vec<Val> = xs
             .iter()
@@ -827,8 +825,7 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Re
             .collect::<Result<_>>()?;
         return Ok(v_sum(t, &terms));
     }
-    // Vectorized arguments must line up element-wise. Indexing without this check
-    // panicked on a short argument and ignored the tail of a long one.
+    // Vectorized arguments must line up element-wise before anything indexes them.
     for a in args {
         if let Val::Vec(av) = a {
             if av.len() != xs.len() {

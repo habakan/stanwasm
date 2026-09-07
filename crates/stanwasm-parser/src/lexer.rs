@@ -24,13 +24,11 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
     while i < n {
         let c = bytes[i];
 
-        // whitespace
         if matches!(c, b' ' | b'\t' | b'\n' | b'\r') {
             i += 1;
             continue;
         }
 
-        // line comment: //
         if c == b'/' && i + 1 < n && bytes[i + 1] == b'/' {
             while i < n && bytes[i] != b'\n' {
                 i += 1;
@@ -38,7 +36,6 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
             continue;
         }
 
-        // block comment: /* ... */
         if c == b'/' && i + 1 < n && bytes[i + 1] == b'*' {
             i += 2;
             while i + 1 < n && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
@@ -48,7 +45,6 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
             continue;
         }
 
-        // two-char operators
         if i + 1 < n {
             let c2 = bytes[i + 1];
             let matched: Option<Token> = match (c, c2) {
@@ -69,7 +65,6 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
             }
         }
 
-        // number: digit-led, or '.' followed by digit
         if c.is_ascii_digit() || (c == b'.' && i + 1 < n && bytes[i + 1].is_ascii_digit()) {
             let start = i;
             while i < n && bytes[i].is_ascii_digit() {
@@ -101,7 +96,6 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
             continue;
         }
 
-        // identifier / keyword
         if c.is_ascii_alphabetic() || c == b'_' {
             let start = i;
             while i < n && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
@@ -116,7 +110,6 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
             continue;
         }
 
-        // single-char tokens
         let tok: Option<Token> = match c {
             b'{' => Some(Token::LBrace),
             b'}' => Some(Token::RBrace),
@@ -127,8 +120,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
             b';' => Some(Token::Semi),
             b',' => Some(Token::Comma),
             b':' => Some(Token::Colon),
-            // `.5` was already taken as a number above, so a `.` here starts an
-            // elementwise operator.
+            // `.5` was already taken above, so a `.` here starts an elementwise op.
             b'.' if i + 1 < n => match bytes[i + 1] {
                 b'*' => {
                     i += 1;
@@ -161,8 +153,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, UnknownChar> {
         };
         match tok {
             Some(t) => tokens.push(t),
-            // `c as char` renders a UTF-8 continuation byte as a Latin-1 glyph, so
-            // decode the whole character from the source.
+            // `c as char` would render a continuation byte as a Latin-1 glyph.
             None => return Err(UnknownChar(src[i..].chars().next().unwrap_or('\u{fffd}'))),
         }
         i += 1;

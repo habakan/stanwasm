@@ -560,9 +560,8 @@ fn a_root_of_an_underflowed_value_does_not_poison_the_gradient() {
     assert_eq!(lp, 0.0);
     assert_eq!(g, vec![1.0]);
 
-    // The vector form is the one a real model reaches: `sqrt` of a spectral
-    // density whose tail underflows. It used to lower to `exp(0.5 log x)`,
-    // where the `log(0)` came back as 0/0.
+    // `sqrt` of a spectral density whose tail underflows used to lower to
+    // `exp(0.5 log x)`, where the `log(0)` came back as 0/0.
     let vector = "data { vector[3] w; }
                   parameters { real a; }
                   model { target += sum(sqrt(exp(-w * (a * a + 1)))) + a; }";

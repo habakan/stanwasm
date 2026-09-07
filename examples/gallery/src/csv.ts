@@ -30,7 +30,7 @@ export function csvToData(text: string): CsvParseResult | CsvParseError {
   }
 
   const header = splitCsvLine(lines[0]);
-  // Per-column raw strings (so we can decide numeric vs text after parsing).
+  // Raw per column: numeric vs text is decided after parsing.
   const rawCols: Record<string, string[]> = {};
   for (const c of header) rawCols[c] = [];
 
@@ -81,7 +81,6 @@ export function csvToData(text: string): CsvParseResult | CsvParseError {
 }
 
 function splitCsvLine(line: string): string[] {
-  // Minimal split: no quoted-field support. Stan data is numeric so commas
-  // in values aren't expected.
+  // No quoted-field support: Stan data is numeric, so no commas in values.
   return line.split(",").map((c) => c.trim());
 }

@@ -12,8 +12,8 @@ export function MathJaxProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Stan source -> graphical-model graph. Every diagram in this app is derived from
-// this parser, so it cannot drift out of sync with the model being sampled.
+// Stan source -> graphical-model graph. Every diagram here comes from this
+// parser, so none can drift out of sync with the model being sampled.
 
 const GREEK: Record<string, string> = {
   alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", zeta: "ζ",
@@ -475,8 +475,7 @@ function layout(graph: Graph): Layout {
       );
       y += ROW_GAP;
     }
-    // +78 leaves room under the last row for a formula (~34px) and an "observed"
-    // tag (~14px) — the worst case, a filled node that also has a formula.
+    // +78 clears a formula (~34px) and an "observed" tag (~14px) under the last row.
     const boxBottom = y - ROW_GAP + 78;
     plateBoxes.push({ plate, loopVar, x: SIDE_PAD - 22, y: boxTop - 28, w: width - 2 * (SIDE_PAD - 22), h: boxBottom - (boxTop - 28) });
     y = boxBottom + 4;

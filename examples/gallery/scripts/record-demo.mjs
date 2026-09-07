@@ -3,21 +3,16 @@
 //   npx vite preview --port 4173          # from examples/gallery, after `make gallery-build`
 //   node scripts/record-demo.mjs ./out    # writes a .webm plus sections.json
 //
-// The webm is the raw material; `sections.json` records when each beat actually
-// started and ended, which is what the OpenScreen zoom ranges are derived from.
-// Do not screen-record this: synthetic input never moves the OS cursor, so
-// --auto-zoom finds nothing and the cursor overlay freezes mid-screen.
-// 16:9 exactly, so the OpenScreen export (aspectRatio "16:9") does not stretch it.
-// Budget: ~3s per feature; the sandbox gets four beats because it is a flow
-// (whole view -> graphical model -> compile -> results), not a still.
+// `sections.json` records when each beat started and ended, which is where the
+// OpenScreen zoom ranges come from. Do not screen-record this instead: synthetic
+// input never moves the OS cursor, so --auto-zoom finds nothing.
 import { chromium } from "playwright";
 import { writeFileSync } from "node:fs";
 
 const OUT = process.argv[2];
 const URL = process.argv[3] ?? "http://localhost:4173/";
-// Record at the export resolution. Recording 1600x900 and exporting 1920x1080
-// upscales every frame; deviceScaleFactor 2 then renders at 3840x2160 and
-// downsamples into it, which is what keeps the small type legible.
+// Record at the export resolution, at deviceScaleFactor 2 so small type survives
+// the downsample. Recording smaller would upscale every frame.
 const W = 1920, H = 1080;
 
 const browser = await chromium.launch();
@@ -59,11 +54,8 @@ try {
   await page.getByRole("button", { name: "Live Regression" }).click();
   await page.waitForSelector("svg.plot-wrap circle", { timeout: 20000 });
   await beat(900);
-  // Two outliers at opposite corners, both left in place. Top-left (low x,
-  // high y) and bottom-right (high x, low y) each pull against the true
-  // positive slope, so they reinforce: the conjugate-normal fit collapses
-  // while the Student-t fit stays on the data. Dragging one out and back, as
-  // this used to, undid the effect before the viewer could read it.
+  // Two outliers at opposite corners, left in place: each pulls against the true
+  // slope, so the normal fit collapses while the Student-t fit stays on the data.
   const pts = page.locator("svg.plot-wrap circle");
   const n = await pts.count();
   const plot = await page.locator("svg.plot-wrap").boundingBox();
@@ -89,8 +81,7 @@ try {
   }
   await fill(6.5);
 
-  // The sandbox is the one section that earns more than 3s: it is a flow, not
-  // a still. Whole view -> open the graphical model -> compile -> results.
+  // The one section that earns more than 3s: it is a flow, not a still.
   section("sandbox-overview");
   await page.getByRole("button", { name: "Wasm Sandbox" }).click();
   await page.waitForSelector(".compile-status", { timeout: 20000 });

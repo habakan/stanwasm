@@ -13,8 +13,7 @@ export function DataTable({ data }: Props) {
   ) as [string, number[]][];
   const nRows = vectors.length === 0 ? 0 : Math.max(...vectors.map(([, v]) => v.length));
 
-  // 0.1-steps arrive as -0.899999999999999 from binary floating point, which
-  // sets the column width to several times the data it carries.
+  // 0.1-steps arrive as -0.899999999999999 and blow the column width out.
   const fmt = (v: number) =>
     Number.isInteger(v) || String(v).length <= 8 ? String(v) : Number(v.toPrecision(6)).toString();
 

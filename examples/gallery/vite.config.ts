@@ -6,10 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     fs: {
-      // The `stanwasm` package lives at ../../ts via a file: dep, and the
-      // wasm-pack output (ts/pkg/) sits outside this Vite project root.
-      // Vite blocks serving files outside the root by default — allow the
-      // repo root explicitly so wasm fetch works during `npm run dev`.
+      // `stanwasm` is a file: dep at ../../ts, outside this Vite root, and Vite
+      // refuses to serve outside the root unless told to.
       allow: ["..", "../.."],
     },
   },

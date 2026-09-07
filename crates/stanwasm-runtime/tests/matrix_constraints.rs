@@ -103,8 +103,7 @@ fn unit_vector_has_length_one() {
 #[test]
 fn parameter_names_line_up_with_the_constrained_draw() {
     // `param_names` used to be sized from the *unconstrained* dimension, so a
-    // cov_matrix[2] got three labels for four values and every name after it in the
-    // model was reported against its neighbour's number.
+    // cov_matrix[2] got three labels for four values and shifted every name after it.
     for (decl, raw) in [
         ("cov_matrix[2] S;", vec![0.3, -0.7, 0.2]),
         ("cholesky_factor_cov[2] L;", vec![0.3, -0.7, 0.2]),

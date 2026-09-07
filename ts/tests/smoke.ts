@@ -1,10 +1,5 @@
-// Node.js integration smoke test for stanwasm.
-//
-// Builds via `npm run build:wasm` first (or run from the repo root). The
-// wasm-bindgen output uses `target = "web"`, so we read the .wasm file
-// manually and pass it to the init() function.
-//
-// Run: cd ts && npm install && npm test
+// Node.js integration smoke test. Run `cd ts && npm install && npm test`; the
+// wasm-bindgen output targets "web", so the .wasm is read and passed to init().
 
 import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
@@ -174,8 +169,8 @@ for (let i = 0; i < 20; i++) {
 }
 console.log(`generatedQuantities OK (${20} draws)`);
 
-// nuts-rs asserts on a zero-length warmup schedule, and an assertion inside
-// wasm reaches the caller as an untraceable trap. Every entry point checks.
+// nuts-rs asserts on a zero-length warmup schedule, and an assertion inside wasm
+// reaches the caller as an untraceable trap.
 for (const [what, run] of [
   ["sample", (m: StanModel, i: Float64Array) => m.sample(i, 0, 10, 7n)],
   ["sampleViaAot", (m: StanModel, i: Float64Array) => m.sampleViaAot(i, 0, 10, 7n)],
@@ -195,8 +190,7 @@ for (const [what, run] of [
 }
 console.log("zero warmup rejected on every entry point");
 
-// A starting point the sampler refuses has to say which parameters make it one,
-// and `randomInit` has to find one that works.
+// A refused start has to name the parameters, and `randomInit` has to find one.
 {
   const src = `parameters { real a; real b; }
                model { a ~ normal(0, 1); target += a * b; }`;

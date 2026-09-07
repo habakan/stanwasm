@@ -1,15 +1,11 @@
 // How much of posteriordb this runtime can take, and what stops the rest.
+// stan-dev's collection is the honest answer to "how much of Stan is this
+// subset", because the models in it are ones people actually wrote.
 //
 //   git clone --depth 1 https://github.com/stan-dev/posteriordb
 //   make posteriordb PDB=../posteriordb
 //
-// posteriordb is stan-dev's collection of real posterior inference problems —
-// a Stan model, its data, and for some of them a reference posterior from a
-// long run. It is the honest answer to "how much of Stan is this subset",
-// because the models in it are ones people actually wrote.
-//
-// Each posterior is loaded in a subprocess: a model that exhausts memory or
-// never finishes should cost one row, not the run.
+// Each posterior loads in a subprocess: one that hangs costs a row, not the run.
 
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";

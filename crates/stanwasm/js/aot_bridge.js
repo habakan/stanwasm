@@ -1,31 +1,12 @@
-// Bridge between stanwasm.wasm and a per-model AOT-compiled wasm.
+// Bridge between stanwasm.wasm and a per-model AOT-compiled wasm, which imports
+// stanwasm's memory and exports `log_prob_grad` plus `stanwasm_layout_id`.
 //
-// The AOT module imports memory from stanwasm (zero-copy) and exports
-// `log_prob_grad(params_ptr, grads_ptr, n_params, scratch_ptr)` plus the global
-// `stanwasm_layout_id`. This snippet stores the active AOT exports in a
-// module-local variable and forwards calls.
-//
-// The binding is per page, not per model, while the scratch buffer it works in
-// belongs to one StanModel. `sampleViaAot` reads the id back to refuse a pair
-// that does not match; without it, a larger model's module would write past a
-// smaller model's scratch.
-//
-// Usage from app code:
-//   import init, { StanModel, setAotExports } from "stanwasm";
-//   await init();
-//   const model = new StanModel(src, data);
-//   const wasmBytes = model.compileToWasm();
-//   const stanMemory = /* obtain from init output */;
-//   const aot = await WebAssembly.instantiate(wasmBytes, {
-//     stan: { memory: stanMemory },
-//     Math: { exp: Math.exp, log: Math.log, pow: Math.pow, sin, cos, /* + a phi shim */ },
-//   });
-//   setAotExports(aot.instance.exports);
-//   const samples = model.sampleViaAot(init, warmup, draws, seed);
+// The binding is per page while the scratch buffer belongs to one StanModel, so
+// `sampleViaAot` reads the id back to refuse a mismatched pair. See
+// `ts/tests/aot_smoke.ts` for how a host binds one.
 
 let aotLogProbGrad = null;
-// NaN means nothing is bound, or what is bound exports no id. u32 ids are exact
-// as doubles, so no real id collides with it.
+// NaN means nothing is bound, or no id is exported; no u32 id collides with it.
 let aotLayoutId = NaN;
 
 export function set_aot_exports(exports) {

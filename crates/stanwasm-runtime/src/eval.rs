@@ -28,8 +28,8 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
             .get(n)
             .cloned()
             .ok_or_else(|| EvalError::UndefinedVariable(n.clone())),
-        // `&&` and `||` short-circuit, which Stan relies on to guard the operand
-        // beside them: `i <= n && x[i] > 0` must not index past the end.
+        // Short-circuiting is what guards the operand beside it: `i <= n && x[i] > 0`
+        // must not index past the end.
         Expr::BinOp(op, l, r) if op == "&&" || op == "||" => {
             let lv = eval_expr(t, l, env)?;
             check_no_param_branch(env, &lv)?;
@@ -45,8 +45,8 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
             let lv = eval_expr(t, l, env)?;
             let rv = eval_expr(t, r, env)?;
             if matches!(op.as_str(), "==" | "!=" | "<" | ">" | "<=" | ">=") {
-                // Comparison results collapse to `Val::Num`, so checking the result
-                // can never catch a parameter-dependent condition. Check the operands.
+                // A comparison result collapses to `Val::Num`, so the operands, not
+                // the result, are what carry parameter dependence.
                 check_no_param_branch(env, &lv)?;
                 check_no_param_branch(env, &rv)?;
             }
@@ -55,13 +55,12 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 "+" => v_add(t, &lv, &rv),
                 "-" => v_sub(t, &lv, &rv),
                 "*" => mul_or_matmul(t, &lv, &rv)?,
-                // Always element-wise, whatever the ranks — that is the whole point
-                // of the dotted spelling.
+                // Always element-wise, whatever the ranks.
                 ".*" => v_mul(t, &lv, &rv),
                 "./" => v_div(t, &lv, &rv),
                 ".^" => v_pow(t, &lv, &rv),
-                // `int / int` truncates toward zero (`N / 2` with `N = 3` is 1).
-                // Int-ness is a property of the declarations, so it comes from the tree.
+                // `int / int` truncates toward zero. Int-ness comes from the
+                // declarations, so it is read off the tree.
                 "/" if is_int_expr(l, env) && is_int_expr(r, env) => {
                     let denom = rv.to_f64(t)?;
                     if denom == 0.0 {
@@ -77,8 +76,7 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 ">" => bool_val(lv.to_f64(t)? > rv.to_f64(t)?),
                 "<=" => bool_val(lv.to_f64(t)? <= rv.to_f64(t)?),
                 ">=" => bool_val(lv.to_f64(t)? >= rv.to_f64(t)?),
-                // Unreachable in practice: the parser only ever produces the
-                // operator strings matched above.
+                // Unreachable: the parser produces only the operators matched above.
                 _ => Val::Num(0.0),
             })
         }
@@ -91,9 +89,8 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 _ => v,
             })
         }
-        // Both branches would be recorded if this were built from arithmetic, so it
-        // evaluates only the taken one — and the condition follows the same
-        // parameter-dependence rule as `if`.
+        // Built from arithmetic this would record both branches, so only the taken
+        // one is evaluated; the condition follows the same rule as `if`.
         Expr::Ternary(cond_e, then_e, else_e) => {
             let c = eval_expr(t, cond_e, env)?;
             check_no_param_branch(env, &c)?;
@@ -103,9 +100,8 @@ pub fn eval_expr(t: &mut Tape, expr: &Expr, env: &Env) -> Result<Val> {
                 eval_expr(t, else_e, env)
             }
         }
-        // `M[i, j]` reads one element out of the binding. Evaluating `M` first
-        // would copy the whole container to index it, which is quadratic in a
-        // loop over its elements.
+        // Reads one element out of the binding. Evaluating `M` first would copy the
+        // whole container, which is quadratic in a loop over its elements.
         Expr::Index(..) => {
             let mut path: Vec<Path> = Vec::new();
             let mut cur = expr;
@@ -443,15 +439,12 @@ fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
         (Scalar, Scalar) => true,
         // scalar ⊙ container broadcasts element-wise, in both directions.
         (Scalar, _) | (_, Scalar) => true,
-        // `*` between two 1-D operands is linear algebra: row·column is the inner
-        // product, column·row the outer one. Two of the same orientation is a
-        // type error in Stan, and answering it element-wise would be a wrong
-        // dot product.
+        // `*` on two 1-D operands is linear algebra, so two of the same orientation
+        // is a type error rather than an element-wise product.
         (RowVector(a), Vector(b)) if op == "*" => a == b,
         (Vector(_), RowVector(_)) if op == "*" => true,
         (Vector(_) | RowVector(_), Vector(_) | RowVector(_)) if op == "*" => false,
-        // Every other operator is element-wise, and orientation doesn't change
-        // what it computes, so a row and a column of one length are accepted.
+        // Every other operator is element-wise, so orientation does not matter.
         (Vector(a) | RowVector(a), Vector(b) | RowVector(b)) => a == b,
         // The linear-algebra cases, handled in `mul_or_matmul`.
         (RowVector(a), Matrix(rb, Some(_))) => op == "*" && a == rb,
@@ -524,8 +517,7 @@ fn eval_user_call(
         });
     }
 
-    // Starts from the caller's env so data and earlier declarations stay visible;
-    // Stan scopes function bodies that way too.
+    // Stan scopes function bodies from the caller's env, so data stays visible.
     let mut local = env.clone();
     local.enter_call(name);
     for ((typ, pname), v) in def.params.iter().zip(argv) {
@@ -608,8 +600,7 @@ fn eval_ode_rk45(t: &mut Tape, args: &[Expr], env: &Env) -> Result<Val> {
         while t_now < t_end {
             h = h.min(t_end - t_now);
             let (next, err) = cash_karp_step(t, &rhs, t_now, &y, h)?;
-            // The tolerance is on the value, so the error estimate is read off
-            // the tape rather than kept on it.
+            // The tolerance is on the value, so the error estimate stays off the tape.
             let scale = y
                 .iter()
                 .map(|v| abs_tol + rel_tol * v.to_f64(t).unwrap_or(0.0).abs())
@@ -910,8 +901,7 @@ fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<(
             }
             Path::Range(lo, hi) => {
                 let (lo, hi) = range_bounds(*lo, *hi, len)?;
-                // A container on the right is written across the span; a scalar
-                // is written into every slot of it.
+                // A container is written across the span, a scalar into every slot.
                 let src = val.elems();
                 if let Some(es) = src {
                     if es.len() as i32 != hi - lo + 1 {
@@ -936,8 +926,7 @@ fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<(
 
     let mut path = Vec::new();
     let root = walk(t, lhs, env, &mut path)?.clone();
-    // In place: copying the container out and back would be quadratic in a loop
-    // that fills it one element at a time.
+    // In place: copy out and back would be quadratic in a fill-one-at-a-time loop.
     let slot = env
         .get_mut(&root)
         .ok_or(EvalError::UndefinedVariable(root.clone()))?;
@@ -945,15 +934,14 @@ fn assign_indexed(t: &mut Tape, lhs: &Expr, val: Val, env: &mut Env) -> Result<(
 }
 
 fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> {
-    // Both are checked before the arguments, one of which is the name of the
-    // system function and would otherwise be reported as an undefined variable.
+    // Checked before the arguments: one of them names the system function and
+    // would otherwise be reported as an undefined variable.
     if name == "ode_rk4_fixed" {
         return eval_ode_rk4_fixed(t, args, env);
     }
     if name == "integrate_ode_rk45" || name == "ode_rk45" {
-        // The step sequence is chosen from the parameters, so a trace that will
-        // be replayed would freeze it at whatever the tracing point picked.
-        // A fresh trace per gradient has no such problem.
+        // The step sequence is chosen from the parameters, so a replayed trace would
+        // freeze it at whatever the tracing point picked. A fresh trace would not.
         if env.strict_no_param_branch() {
             return Err(EvalError::UnsupportedOdeIntegrator(name.to_string()));
         }
@@ -969,8 +957,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
     if let Some(def) = env.func(name) {
         return eval_user_call(t, name, &def, evaled, env);
     }
-    // These read their operands' orientation — which way a 1-D value lies decides
-    // the result's shape — so they are answered before it is dropped below.
+    // These read their operands' orientation, so they run before it is dropped below.
     match (name, evaled.as_slice()) {
         ("rep_matrix", [v, n_e]) => {
             let n = n_e.to_i32(t)?.max(0) as usize;
@@ -980,8 +967,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 scalar => Val::Vec(vec![Val::Row(vec![scalar.clone(); n]); n]),
             });
         }
-        // A matrix or a row vector on either side stacks rows; two columns, or
-        // scalars, run together into one column.
+        // A matrix or row vector on either side stacks rows; anything else is a column.
         ("append_row", [a, b]) => {
             let lies_across =
                 |v: &Val| matches!(v.shape(), Shape::Matrix(..) | Shape::RowVector(_));
@@ -1045,8 +1031,8 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
         ("asin", [a]) => v_asin(t, a),
         ("acos", [a]) => v_acos(t, a),
         ("atan", [a]) => v_atan(t, a),
-        // Stan's two-argument arctangent. The tape has no atan2 node, so it is built
-        // from atan plus the quadrant correction, which keeps the gradient exact.
+        // No atan2 tape node, so this is atan plus the quadrant correction, which
+        // keeps the gradient exact.
         ("atan2", [y, x]) => {
             let q = v_div(t, y, x);
             let base = v_atan(t, &q);
@@ -1059,8 +1045,8 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             }
         }
         ("Phi", [a]) | ("std_normal_cdf", [a]) => v_phi(t, a),
-        // `student_t_lccdf(y | nu, mu, sigma)`. The variate is standardised with
-        // ordinary arithmetic, so `y`, `mu` and `sigma` differentiate through it.
+        // The variate is standardised with ordinary arithmetic, so `y`, `mu` and
+        // `sigma` differentiate through it.
         ("student_t_lccdf", [y, nu, mu, sigma]) => {
             let Val::Num(nu) = nu else {
                 return Err(EvalError::NonDifferentiableArgument {
@@ -1086,8 +1072,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             let second = v_add(t, &log_1m, b);
             log_sum_exp(t, &[first, second])?
         }
-        // Stan's `sd` is the sample standard deviation: the denominator is
-        // `n - 1`, not `n`.
+        // Stan's `sd` is the sample standard deviation: denominator `n - 1`.
         ("sd", [Val::Vec(xs)]) => {
             if xs.len() < 2 {
                 return Err(EvalError::NotAScalar);
@@ -1107,8 +1092,6 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             let var = v_div(t, &ss, &Val::Num(n - 1.0));
             v_sqrt(t, &var)
         }
-        // The decomposition is already here for `multi_normal`; this only
-        // makes it reachable from a model.
         ("cholesky_decompose", [Val::Vec(rows)]) => Val::Vec(matrix::cholesky_decompose(t, rows)),
         ("diag_matrix", [Val::Vec(diag)]) => {
             let n = diag.len();
@@ -1134,8 +1117,8 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             }
             Val::Vec(out)
         }
-        // `alpha² exp(-(xᵢ - xⱼ)² / 2ρ²)`. The differences are data, so only the
-        // two scale parameters reach the tape; the matrix is still N² nodes.
+        // `alpha² exp(-(xᵢ - xⱼ)² / 2ρ²)`. The differences are data, so only the two
+        // scale parameters reach the tape.
         ("gp_exp_quad_cov", [Val::Vec(xs), alpha, rho]) => {
             let a2 = v_mul(t, alpha, alpha);
             let r2 = v_mul(t, rho, rho);
@@ -1171,9 +1154,8 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             }
             v_div(t, &acc, &Val::Num(n))
         }
-        // Stan's `min`/`max` return the extreme element itself, so the gradient
-        // reaches whichever one that is. Which one is chosen while tracing, so a
-        // container of parameters follows the same rule as a branch on one.
+        // The extreme element itself is returned, so the gradient reaches whichever
+        // one tracing picked — the same rule as a branch on a parameter.
         ("min", [Val::Vec(xs)]) | ("max", [Val::Vec(xs)]) => {
             let want_max = name == "max";
             let mut best: Option<&Val> = None;
@@ -1209,8 +1191,8 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             Val::Vec(out)
         }
         ("softmax", [Val::Vec(xs)]) => {
-            // exp(xᵢ − max x) / ∑ exp(xⱼ − max x): the shift cancels and keeps
-            // the exponentials from overflowing.
+            // exp(xᵢ − max x) / ∑ exp(xⱼ − max x): the shift cancels and keeps the
+            // exponentials from overflowing.
             let mut shift = f64::NEG_INFINITY;
             for x in xs {
                 shift = shift.max(x.to_f64(t)?);
@@ -1227,7 +1209,6 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
         }
         ("negative_infinity", []) => Val::Num(f64::NEG_INFINITY),
         ("pi", []) => Val::Num(PI),
-        // `tail(v, n)` — the last `n` entries.
         ("tail", [Val::Vec(xs), n_e]) => {
             let n = n_e.to_i32(t)?;
             let start = xs.len() as i32 - n;
@@ -1239,7 +1220,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             }
             Val::Vec(xs[start as usize..].to_vec())
         }
-        // `to_vector` flattens whatever it is given, in row-major order.
+        // Flattens in row-major order.
         ("to_vector", [v]) => {
             fn flat(v: &Val, out: &mut Vec<Val>) {
                 match v.elems() {
@@ -1251,20 +1232,17 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             flat(v, &mut out);
             Val::Vec(out)
         }
-        // `to_matrix` on a 2-D container is a retagging: the rows are already
-        // there, and what a matrix adds is that they lie across.
+        // On a 2-D container this is a retagging: the rows are already there.
         ("to_matrix", [v]) => match v.elems() {
             Some(rows) if rows.iter().all(|r| r.elems().is_some()) => Val::Vec(
                 rows.iter()
                     .map(|r| Val::Row(r.elems().unwrap().to_vec()))
                     .collect(),
             ),
-            // A vector is one column, which is Stan's reading too.
             Some(xs) => Val::Vec(xs.iter().map(|x| Val::Row(vec![x.clone()])).collect()),
             None => return Err(EvalError::NotAScalar),
         },
-        // `col(m, j)` and `row(m, i)`, both 1-based. A column comes out as a
-        // vector and a row as a row vector, which is what they multiply as.
+        // Both 1-based. A column comes out as a vector, a row as a row vector.
         ("col", [m, j_e]) | ("row", [m, j_e]) => {
             let rows = m.elems().ok_or(EvalError::NotAScalar)?;
             let j = j_e.to_i32(t)?;
@@ -1289,7 +1267,6 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 Val::Vec(out)
             }
         }
-        // `{a, b, c}`: an array, which is a container of whatever it holds.
         ("{}", args) => Val::Vec(args.to_vec()),
         // `[a, b, c]`: scalars make a row vector, containers make its rows.
         ("[]", args) if !args.is_empty() => {
@@ -1302,7 +1279,6 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 )?)
             }
         }
-        // `sub_col(m, i, j, n)` — `n` entries of column `j`, starting at row `i`.
         ("sub_col", [Val::Vec(rows), i_e, j_e, n_e]) => {
             let (i, j, n) = (i_e.to_i32(t)?, j_e.to_i32(t)?, n_e.to_i32(t)?);
             let mut out = Vec::with_capacity(n.max(0) as usize);
@@ -1325,8 +1301,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             }
             Val::Vec(out)
         }
-        // `diag(v) m diag(v)`, which is how a correlation matrix and a vector of
-        // scales become a covariance.
+        // `diag(v) m diag(v)`: a correlation matrix and scales become a covariance.
         ("quad_form_diag", [Val::Vec(rows), Val::Vec(d)]) => {
             let mut out = Vec::with_capacity(rows.len());
             for (i, row) in rows.iter().enumerate() {
@@ -1342,8 +1317,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             }
             Val::Vec(out)
         }
-        // `L Lᵀ` from the lower triangle of `L`, so entry (i, j) sums to
-        // `min(i, j)` rather than over the whole row.
+        // `L Lᵀ` from the lower triangle, so entry (i, j) sums to `min(i, j)`.
         ("multiply_lower_tri_self_transpose", [Val::Vec(rows)]) => {
             let n = rows.len();
             let mut out = Vec::with_capacity(n);
@@ -1426,8 +1400,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
         ("segment", [Val::Vec(xs), start_v, len_v]) => {
             let start_1b = start_v.to_i32(t)?;
             let len = len_v.to_i32(t)?;
-            // `skip`/`take` would silently return a short vector for an
-            // out-of-range slice; a range index is a bounds error in Stan.
+            // A range index out of bounds is an error in Stan, not a short vector.
             if start_1b < 1 || len < 0 || (start_1b - 1 + len) as usize > xs.len() {
                 return Err(EvalError::IndexOutOfBounds {
                     index: start_1b + len - 1,
@@ -1437,7 +1410,6 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
             let start = (start_1b - 1) as usize;
             Val::Vec(xs[start..start + len as usize].to_vec())
         }
-        // distribution _lpdf / _lpmf forms used as expressions
         (n, args) if n.ends_with("_lpdf") || n.ends_with("_lpmf") => {
             let base = &n[..n.len() - 5];
             if args.is_empty() {
@@ -1451,7 +1423,7 @@ fn eval_call(t: &mut Tape, name: &str, args: &[Expr], env: &Env) -> Result<Val> 
                 }
             }
         }
-        // RNG forms, valid only in generated quantities (env carries an rng).
+        // Valid only in generated quantities, where the env carries an rng.
         (n, args) if n.ends_with("_rng") => {
             let base = &n[..n.len() - 4];
             crate::rng::dispatch(t, base, args, env)?
@@ -1483,9 +1455,8 @@ fn eval_block(t: &mut Tape, stmts: &[Stmt], env: &mut Env) -> Result<Flow> {
     let mut acc = Val::Num(0.0);
     let mut result = None;
     for s in stmts {
-        // Between statements is where a runaway trace can still be reported. An
-        // allocator that runs out mid-expression aborts instead, and on wasm an
-        // abort is a trap that takes the module instance down.
+        // The last point a runaway trace can be reported: an allocator that runs out
+        // mid-expression aborts, and on wasm that traps the whole instance.
         if t.over_limit() {
             return Err(EvalError::TapeTooLarge(Tape::MAX_NODES));
         }
@@ -1527,8 +1498,6 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
         Stmt::TargetIncr(e) => Ok(Flow::Val(eval_expr(t, e, env)?)),
         Stmt::Block(body) => eval_block(t, body, env),
         Stmt::IncrAssign(lhs, rhs) => {
-            // For target += rhs (lhs is `target`), already handled above.
-            // Generic form: lhs += rhs.
             if let Expr::Index(..) | Expr::Slice(..) = lhs {
                 let cur = eval_expr(t, lhs, env)?;
                 let r = eval_expr(t, rhs, env)?;

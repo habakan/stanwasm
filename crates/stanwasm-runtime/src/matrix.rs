@@ -56,9 +56,8 @@ fn tape_run(xs: &[Val]) -> Option<(u32, u32)> {
 
 /// `A * b` where `a_rows` is a vec of row containers. Returns the length-rows vector.
 pub fn mat_vec_mul(t: &mut Tape, a_rows: &[Val], b: &[Val]) -> Vec<Val> {
-    // Data on the left against parameters on the right — `X * beta`, the shape
-    // regression is written in — is one contraction node per row instead of
-    // the `2K` multiplies and adds the chain would record.
+    // `X * beta` — data on the left, parameters on the right — is one contraction
+    // node per row instead of the `2K` nodes a chain would record.
     if let Some((base, stride)) = tape_run(b) {
         let all_data = a_rows.iter().all(|row| {
             row.elems()

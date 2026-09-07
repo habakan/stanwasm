@@ -12,8 +12,7 @@ use stanwasm_autodiff::{
     Tape,
 };
 
-// For Vec broadcasts we collect into Vec<Val> via a for-loop so the
-// recursive call has a clear borrow lifetime on the tape.
+// A for-loop rather than an iterator: the recursive call borrows the tape.
 
 fn map_pair(
     t: &mut Tape,
@@ -210,10 +209,8 @@ pub fn v_pow(t: &mut Tape, base: &Val, exp: &Val) -> Val {
     match (base, exp) {
         (Val::Num(x), Val::Num(n)) => Val::Num(x.powf(*n)),
         (Val::Tape(i), Val::Num(n)) => Val::Tape(t.pow(*i, *n)),
-        // Element-wise, so each element reaches the single node above. The
-        // `exp(n log x)` below is three nodes instead of one, and a `log(0)` in
-        // it cannot be differentiated back through: `sqrt` of a vector holding
-        // an underflowed entry came back as NaN rather than as no slope.
+        // Element-wise, so each element reaches the single node above rather than the
+        // `exp(n log x)` below, whose `log(0)` differentiates back as NaN.
         _ if base.elems().is_some() || exp.elems().is_some() => broadcast(t, base, exp, v_pow),
         // A variable exponent, which only this form expresses.
         _ => {

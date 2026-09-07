@@ -90,12 +90,10 @@ export function WasmSandbox() {
   const [compileError, setCompileError] = useState<string | null>(null);
   const [lastCompiledKey, setLastCompiledKey] = useState<string | null>(null);
   const [compiling, setCompiling] = useState(false);
-  // Right-column panels — independently collapsible so the whole tab fits
-  // one viewport without ever needing to scroll the page itself.
+  // Independently collapsible so the tab fits one viewport without scrolling.
   const [showData, setShowData] = useState(true);
   const [showResults, setShowResults] = useState(false);
-  // The diagram floats semi-transparent over the editor rather than taking sidebar
-  // height from Data/Posterior. Click to expand, click again or outside to shrink.
+  // The diagram floats over the editor rather than taking Data/Posterior's height.
   const [diagramExpanded, setDiagramExpanded] = useState(false);
   const diagramOverlayRef = useRef<HTMLDivElement>(null);
 
@@ -114,8 +112,7 @@ export function WasmSandbox() {
   const effectiveData = customData ?? preset.data;
   const effectiveStan = customStan ?? preset.stanCode;
 
-  // Debounced so re-parsing the Stan source and re-typesetting MathJax don't run
-  // on every keystroke.
+  // Debounced: re-parsing and re-typesetting MathJax must not run per keystroke.
   const [debouncedStan, setDebouncedStan] = useState(effectiveStan);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedStan(effectiveStan), 250);
@@ -133,8 +130,7 @@ export function WasmSandbox() {
   const compile = () => {
     setCompiling(true);
     setCompileError(null);
-    // Tiny defer so the spinner state lands before the synchronous parse
-    // and trace kicks the main thread.
+    // Defer so the spinner lands before the synchronous parse blocks the thread.
     setTimeout(() => {
       try {
         if (compiledModel) compiledModel.free();
@@ -207,8 +203,8 @@ export function WasmSandbox() {
       const n = compiledModel.n_params;
       const names = compiledModel.paramNames();
       const post = samples.subarray(nWarmup * n);
-      // `sample()` returns unconstrained draws; constrainDraw() maps them back and
-      // fills in transformed parameters, which paramNames() includes.
+      // `sample()` is unconstrained; constrainDraw() also fills in the
+      // transformed parameters that paramNames() includes.
       const draws: number[][] = Array.from({ length: names.length }, () => []);
       for (let i = 0; i < nDraws; i++) {
         const row = post.subarray(i * n, (i + 1) * n);

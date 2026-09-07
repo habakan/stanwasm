@@ -1,13 +1,6 @@
-// Public TS facade for stanwasm.
-//
-// Re-exports the wasm-bindgen-generated bindings under a stable name so
-// downstream callers can `import { StanModel } from "stanwasm"` without
-// poking into `pkg/`.
-//
-// Plain `.js` (with a hand-written `index.d.ts` alongside) rather than `.ts`:
-// this is the package entry point, so it has to load in a plain-JS project, in
-// a bundler, and in Node without `--experimental-strip-types`. There is no
-// TypeScript syntax here to lose.
+// Public facade: re-exports the wasm-bindgen bindings so callers never reach
+// into `pkg/`. Plain `.js` because a package entry point has to load without
+// `--experimental-strip-types`, and there is no TypeScript syntax here to lose.
 
 import init from "./pkg/stanwasm.js";
 export {

@@ -320,21 +320,16 @@ pub fn constrain(
             (Val::Vec(mat), log_jac)
         }
         // corr_matrix[K]: the same L, then x = L Lᵀ — but *not* the same Jacobian.
-        // A correlation matrix and its factor are different parameterisations
-        // with different volume elements, and the two agree only at K = 2,
-        // where the extra term below is an empty sum. Getting this wrong is
-        // invisible until K reaches 3.
+        // The two volume elements agree only at K = 2, where the extra term is empty.
         StanType::CorrMatrix(k_e) => {
             let kk = eval_plain_int(k_e, env);
             let l_rows = corr_l_column_major(t, raw, kk);
             let x = matrix::mat_mat_mul_transpose_rhs(t, &l_rows, kk);
             (Val::Vec(x), corr_matrix_log_jac(t, raw, kk))
         }
-        // array[N] T — constrain each element and sum the Jacobians. Without this,
-        // `array[N] real<lower=0> s;` passed through untransformed and unjacobianed.
+        // array[N] T — constrain each element and sum the Jacobians.
         StanType::Array(_, elem) => {
-            // `param_dims` is 0 for an element type with no unconstrained
-            // representation — `int` (rejected below) or a zero-sized vector.
+            // `param_dims` is 0 with no unconstrained representation: `int` or empty.
             if matches!(**elem, StanType::Int(_)) {
                 return Err(EvalError::IntParameter(name.to_string()));
             }
@@ -359,8 +354,7 @@ pub fn constrain(
             (Val::Vec(out), log_jac)
         }
         // matrix[R, C] — reshaped into rows so indexing and the matrix-shaped
-        // distributions see structure rather than one flat vector. An element
-        // bound transforms each entry the way a vector's does.
+        // distributions see structure rather than one flat vector.
         StanType::Matrix(r_e, c_e, elem_c) => {
             let cols = match eval_plain(t, c_e, env)? {
                 Val::Num(v) => v as usize,
@@ -403,8 +397,7 @@ pub fn constrain(
             (Val::Vec(mat), log_jac)
         }
         // cov_matrix[K]: the same L, then Σ = L Lᵀ. `K log 2 + Σ_k (K − k + 1) log L_kk`
-        // is the *whole* Jacobian, exp of the diagonal included, so `diag_jac` is not
-        // added on top of it the way cholesky_factor_cov does.
+        // is the *whole* Jacobian, so `diag_jac` is not added on top of it.
         StanType::CovMatrix(k_e) => {
             let kk = eval_plain_int(k_e, env);
             let (l_rows, _diag_jac, diag) = tri_from_raw(t, raw, kk);
@@ -545,8 +538,7 @@ pub fn unconstrain(
             out.push(x[0].ln());
             out.extend(x.windows(2).map(|w| (w[1] - w[0]).ln()));
         }
-        // The radius the transform divided out is not recoverable, and does not
-        // need to be: any preimage on the unit sphere gives back the same x.
+        // The radius is not recoverable, and any preimage on the sphere gives back x.
         StanType::UnitVector(_) => out.extend_from_slice(x),
         StanType::CholeskyFactorCorr(k_e) => {
             let kk = eval_plain_int(k_e, env);

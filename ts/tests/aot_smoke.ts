@@ -1,7 +1,5 @@
-// Smoke test for the AOT-via-V8 sampling path.
-// Loads stanwasm.wasm, instantiates a per-model AOT wasm sharing its
-// memory, binds the bridge, and samples — verifying samples agree with the
-// in-process tape replay path.
+// Smoke test for the AOT-via-V8 sampling path: instantiate a per-model AOT wasm
+// sharing stanwasm's memory, bind the bridge, and check it against tape replay.
 
 import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
@@ -95,10 +93,8 @@ if (Math.abs(meanBeta - 1.8) > 0.5) {
   console.error("FAIL");
   process.exit(1);
 }
-// `setAotExports` binds one module for the whole page, but the scratch buffer
-// it works in belongs to a single model. Sampling this model through another
-// one's module would write at slot offsets this one's buffer was never sized
-// for, so the module carries an id of the buffers it expects.
+// One binding per page, but the scratch buffer belongs to one model — so the
+// module carries an id of the buffers it expects.
 const other = new StanModel(
   `data { int<lower=0> N; vector[N] y; }
    parameters { real mu; }

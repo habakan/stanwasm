@@ -93,8 +93,7 @@ fn writing_into_data_does_not_disturb_the_caller_of_a_function() {
 #[test]
 fn an_uninitialised_transformed_parameter_arrives_shaped() {
     // `vector[W] k;` in `transformed parameters` used to bind a scalar zero, so the
-    // element assignments below it had nothing to write into and `sum` refused it —
-    // while the identical code inside `model` worked.
+    // element assignments below it had nothing to write into.
     let src = "data { int<lower=0> W; }\n\
                parameters { real a; }\n\
                transformed parameters { vector[W] k; for (w in 1:W) k[w] = a * w; }\n\

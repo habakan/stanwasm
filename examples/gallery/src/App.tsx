@@ -45,15 +45,14 @@ export function App() {
 
   useEffect(() => {
     // No explicit URL: wasm-bindgen resolves the wasm relative to the glue, which
-    // Vite content-hashes. `.catch` is required or a failed init sits on "Loading…".
+    // Vite content-hashes. Without `.catch` a failed init sits on "Loading…".
     init()
       .then(() => setLoaded(true))
       .catch((e: unknown) => setInitError(String((e as Error)?.message ?? e)));
   }, []);
 
   const active = TABS.find((t) => t.key === tab)!;
-  // Wasm Sandbox is a full IDE in its own right; the gallery chrome above it just
-  // eats into its one-viewport layout. Collapse to a single "back" affordance.
+  // The sandbox is a full IDE; the gallery chrome only eats into its viewport.
   const isSandbox = tab === "wasm-sandbox";
 
   return (

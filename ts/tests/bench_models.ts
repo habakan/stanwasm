@@ -1,10 +1,6 @@
-// The models the gradient benchmark runs, as plain Stan plus JSON data, so the
-// same definitions can be handed to any other implementation.
-//
-// Each model is evaluated at a fixed point in the *unconstrained* space, which
-// is the space `logProbGrad` takes and the one another implementation's
-// log_prob method takes too — so the log density and the gradient at that
-// point are comparable, not just the time to compute them.
+// The models the gradient benchmark runs, as plain Stan plus JSON data, each
+// evaluated at a fixed point in the *unconstrained* space — the space
+// `logProbGrad` takes — so densities and gradients are comparable, not just times.
 
 export type BenchModel = {
   name: string;
@@ -148,14 +144,8 @@ model {
     );
   }
 
-  // Small on purpose: the shapes it exercises are the constraint transforms and
-  // the multivariate density, not the length of a vectorised loop.
-  //
-  // The loop form is the only one this runtime takes — an array of vectors is a
-  // load-time error pointing at it — and it is also the form that flatters a
-  // trace-once implementation most, since the per-observation setup is
-  // identical at every observation and recorded once. Read its timing as the
-  // best case for that advantage, not as a like-for-like density comparison.
+  // Small on purpose: it exercises the constraint transforms and the multivariate
+  // density, not loop length. The loop form is the only one this runtime takes.
   const d = 4;
   const rows = Array.from({ length: 400 }, () =>
     Array.from({ length: d }, () => r() * 2 - 1),
@@ -188,9 +178,8 @@ model {
     10,
   );
 
-  // Not a shape anyone would fit, but every distribution and function added
-  // for the posteriordb sweep is in one of these two, so CmdStan checks each
-  // formula rather than only that it runs.
+  // Not a shape anyone would fit, but it puts every distribution added for the
+  // posteriordb sweep under the reference comparison.
   add(
     "binomial",
     `data { int<lower=0> N; array[N] int<lower=0> trials; array[N] int<lower=0> hits; array[N] int<lower=0,upper=1> flags; vector[N] x; }
@@ -244,10 +233,8 @@ model {
     (d * (d - 1)) / 2 + d + 1,
   );
 
-  // `eta` as a parameter rather than data, which is the case where LKJ's
-  // normalising constant is not constant. Dropping it used to leave the density
-  // wrong by an amount that moves with the point, and no other model here takes
-  // that path.
+  // `eta` as a parameter, the case where LKJ's normalising constant is not
+  // constant — the only model here that takes that path.
   add(
     "lkj_eta",
     `data { int<lower=0> D; array[2] vector[D] y; }

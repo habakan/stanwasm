@@ -1,12 +1,9 @@
-// Times the hand-written variants from `cargo run -p stanwasm-codegen
-// --example ceiling_probe` against the real AOT module, on the matrix-product
-// model whose gradient the scalar tape records one node at a time.
+// Times the hand-written variants from the `ceiling_probe` codegen example
+// against the real AOT module. Each is checked against the runtime's own
+// log_prob and gradients first: a variant computing something else is no ceiling.
 //
 //   cargo run -p stanwasm-codegen --example ceiling_probe -- 5000 4 target/ceiling
 //   cd ts && node --experimental-strip-types tests/ceiling_probe.ts ../target/ceiling
-//
-// Every variant's log_prob and gradients are checked against the runtime's own
-// before it is timed: a variant that computes something else is not a ceiling.
 
 import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
@@ -49,8 +46,8 @@ const params = new Float64Array(nP).fill(0.1);
 params[nP - 1] = -0.5;
 const ref = m.logProbGrad(params);
 
-// One memory for every hand-written variant: they agree on where the data is,
-// and each rewrites its own scratch on every call.
+// One memory for every variant: they agree on the data and rewrite their own
+// scratch on every call.
 const mem = new WebAssembly.Memory({ initial: Math.ceil(meta.end / 65536) + 2 });
 const view = new Float64Array(mem.buffer);
 view.set(params, 0);

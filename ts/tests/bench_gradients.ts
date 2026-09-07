@@ -3,12 +3,8 @@
 //   node --experimental-strip-types tests/bench_gradients.ts [N] [--emit DIR]
 //
 // Gradient granularity, not sampling wall clock: the two paths can take
-// different NUTS trajectories, and so can any other implementation.
-//
-// `--emit DIR` also writes each model out as `<name>.stan`, its data as
-// `<name>.data.json`, and the unconstrained point it is evaluated at as
-// `<name>.params.json`, so another implementation can be pointed at exactly
-// the same model, data and point.
+// different NUTS trajectories. `--emit DIR` writes each model, its data and the
+// point it is evaluated at, so another implementation can take the same input.
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
@@ -97,9 +93,8 @@ for (const model of benchModels(N)) {
   if (emitDir) {
     await writeFile(resolve(emitDir, `${model.name}.stan`), model.src + "\n");
     await writeFile(resolve(emitDir, `${model.name}.data.json`), JSON.stringify(model.data));
-    // Two points, so a comparison can tell a gradient that disagrees from a
-    // log density that only differs by the normalising constants Stan's `~`
-    // drops — those are the same at every point, the gradient is not.
+    // Two points: an offset from the constants Stan's `~` drops is the same at
+    // both, a disagreeing gradient is not.
     const second = model.init.map((v, i) => v + 0.05 * Math.cos(i + 1));
     for (const [tag, point] of [["", model.init], ["2", second]] as const) {
       const r = m.logProbGrad(new Float64Array(point));

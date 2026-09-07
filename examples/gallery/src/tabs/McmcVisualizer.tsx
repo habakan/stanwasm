@@ -143,8 +143,8 @@ function computeExplorationVeil(paths: Point[][]): ImageData {
   const img = new ImageData(GRID_N, GRID_N);
   for (let k = 0; k < counts.length; k++) {
     const rel = maxCount > 0 ? counts[k] / maxCount : 0;
-    // Any visited cell jumps to half-revealed at once; sqrt alone left an early
-    // visit imperceptible beside a hot spot, reading as nothing having happened.
+    // Any visited cell jumps to half-revealed: sqrt alone left an early visit
+    // imperceptible beside a hot spot.
     const revealed = counts[k] > 0 ? Math.min(1, 0.5 + 0.5 * Math.sqrt(rel)) : 0;
     const idx = k * 4;
     img.data[idx] = 245;
@@ -175,8 +175,7 @@ function drawForeground(canvas: HTMLCanvasElement | null, paths: Point[][]) {
     if (path.length === 0) return;
     const color = CHAIN_COLORS[c % CHAIN_COLORS.length];
 
-    // The fog veil already shows every draw so far, so this layer only needs the
-    // recent trail rather than re-encoding the same information.
+    // The fog veil already shows every draw, so this layer is the recent trail.
     const start = Math.max(0, path.length - TRAIL_LEN);
     ctx.beginPath();
     for (let i = start; i < path.length; i++) {
@@ -209,8 +208,8 @@ export function McmcVisualizer() {
   const [frame, setFrame] = useState(0);
   const [rwmAccepts, setRwmAccepts] = useState<number[]>([]);
   const [nutsDivergences, setNutsDivergences] = useState<number[]>([]);
-  // One status line per chain, read off its own stepDraw(). step_size/num_steps are
-  // nuts-rs's own adaptation, which a JS reimplementation would have to fake.
+  // One status line per chain, read off its own stepDraw(): step_size and
+  // num_steps are nuts-rs's own adaptation.
   const [nutsChainLog, setNutsChainLog] = useState<Array<ChainLogEntry | null>>([]);
   const nutsChainLogRef = useRef<Array<ChainLogEntry | null>>([]);
 
@@ -353,8 +352,7 @@ export function McmcVisualizer() {
         try {
           m.free();
         } catch {
-          // Freeing a mid-flight chain can trap; catch here too so an uncaught
-          // cleanup exception doesn't take down the React tree.
+          // Freeing a mid-flight chain can trap, and this runs during cleanup.
         }
       });
       try {

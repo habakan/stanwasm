@@ -2,13 +2,9 @@
 //
 //   npm pack --dry-run --json > pack.json && node tests/check_pack.mjs pack.json
 //
-// Apache-2.0 requires the licence text to travel with the artifact, and
-// `npm pack` collects only files under `ts/` — the LICENSE at the repo root
-// reaches no tarball on its own. The wasm has a second, invisible failure:
-// `wasm-pack` writes its own `.gitignore` (containing `*`) into `ts/pkg/`,
-// which npm honours when no `.npmignore` sits beside it, and that once
-// published a package carrying no wasm at all. A published version cannot be
-// taken back, so both are checked here.
+// Two failures a published version cannot be taken back from: `npm pack` collects
+// only files under `ts/`, so the repo-root LICENSE reaches no tarball on its own,
+// and `wasm-pack` writes a `.gitignore` of `*` into `ts/pkg/` that npm honours.
 
 import { readFileSync } from "node:fs";
 

@@ -1,28 +1,15 @@
 // Does sampling here land on the posterior the reference says it should?
+// `posteriordb_sweep.ts` answers "does it load"; this answers what comes after,
+// since agreeing on the gradient does not say the draws land in the same place.
 //
 //   git clone --depth 1 https://github.com/stan-dev/posteriordb
 //   make compare-reference PDB=../posteriordb
 //
-// `posteriordb_sweep.ts` answers "does the model load and evaluate"; this
-// answers the question after it. The log density and its gradient are checked
-// elsewhere against a reference implementation, but the sampler here is a
-// different one, so agreement on the gradient does not by itself say the draws
-// land in the same place.
-//
-// posteriordb ships a reference posterior for 47 of its posteriors: 10 chains
-// of a long, thinned run. The comparison is per parameter,
-//
-//     |our mean - reference mean| / reference sd
-//
-// in units of the posterior's own spread, because an absolute difference means
-// nothing without knowing how wide the parameter is.
-//
-// A gap is Monte Carlo error until shown otherwise, so read it against the
-// draw count: every posterior that sat past 0.2 sd at 300 draws fell to 0.02 -
-// 0.04 at 4000, which is the 1/sqrt(n) a mean is supposed to follow. The one
-// exception is `eight_schools_centered`, and it is the geometry rather than
-// this runtime — the non-centred parameterisation of the same model and data
-// comes to 0.02 sd where the centred one holds at 0.13.
+// Per parameter, `|our mean - reference mean| / reference sd`, in units of the
+// posterior's own spread. A gap is Monte Carlo error until shown otherwise, so
+// read it against the draw count: what sat past 0.2 sd at 300 draws fell to
+// 0.02-0.04 at 4000. `eight_schools_centered` is geometry, not this runtime —
+// the non-centred form of the same model comes to 0.02 sd against its 0.13.
 //
 // Each posterior runs in a subprocess: one that will not finish costs a row.
 
@@ -62,8 +49,7 @@ if (process.argv[2] === "--one") {
     const m = new StanModel(await readFile(stanPath, "utf8"), await readFile(dataPath, "utf8"));
 
     out.stage = "sample";
-    // The sampler refuses a start where some parameter has no slope, which is
-    // a property of the model rather than of this comparison.
+    // A start where some parameter has no slope is refused; that is the model.
     const start = m.randomInit(SEED);
     const raw = m.sample(start, WARMUP, DRAWS, SEED);
     const n = m.n_params;

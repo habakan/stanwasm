@@ -412,10 +412,8 @@ impl Parser {
                     SliceIdx::Range(..) => None,
                 })
                 .collect();
-            // Indices inside one bracket compose — `A[i, j]` reads `j` within
-            // `A[i]`. A second bracket does not: `A[idx][j]` indexes what the
-            // first one produced. The two differ once an index is an array, so
-            // `Slice` keeps the boundary that `Index` would fold away.
+            // `A[i, j]` composes, `A[idx][j]` does not — they differ once an index is
+            // an array, so `Slice` keeps the boundary `Index` would fold away.
             let first_bracket = !indexed;
             indexed = true;
             e = match plain {
@@ -510,9 +508,8 @@ impl Parser {
                 self.expect_tok(&Token::RBrace)?;
                 Ok(Expr::Call("{}".into(), args))
             }
-            // `[a, b, c]` — a row vector of scalars, or a matrix of its rows.
-            // Spelled as a call because it needs no evaluation rule of its own,
-            // and `[]` is not something a Stan program can name.
+            // `[a, b, c]` — a row vector of scalars, or a matrix of its rows. Spelled
+            // as a call because `[]` is not something a Stan program can name.
             Token::LBrack => {
                 self.consume();
                 let mut args = vec![self.parse_expr(0)?];
@@ -744,8 +741,7 @@ impl Parser {
     fn parse_functions_block(&mut self) -> Result<Vec<(String, FuncDef)>> {
         let mut funcs: Vec<(String, FuncDef)> = Vec::new();
         while !self.check_tok(&Token::RBrace) && !self.check_tok(&Token::Eof) {
-            // The return type is unsized too (`matrix f(...)`), and nothing downstream
-            // needs it — the returned value carries its own shape.
+            // Unsized too, and unneeded: the returned value carries its own shape.
             let _ret = self.parse_param_type()?;
             let fname = self.expect_id()?;
             self.expect_tok(&Token::LParen)?;

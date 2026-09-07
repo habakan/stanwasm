@@ -116,8 +116,7 @@ function fitModel(
   slot.warmStart.current = meansUnconstrained;
 
   if (!wantSpaghetti) {
-    // alpha/beta have no constraint transform, so their unconstrained mean
-    // already is the constrained mean — no need to walk every draw.
+    // alpha/beta have no constraint transform, so the unconstrained mean is it.
     return {
       meanAlpha: meansUnconstrained[0],
       meanBeta: meansUnconstrained[1],
@@ -160,8 +159,7 @@ export function LiveRegression() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Resample on every point change, throttled to one run per animation
-  // frame — during a drag this reads as continuous, not stepped.
+  // One resample per animation frame, so a drag reads as continuous.
   useEffect(() => {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {

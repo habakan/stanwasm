@@ -1,5 +1,4 @@
-// Types for `index.js`. The shapes themselves come from the wasm-bindgen
-// output in `pkg/`, which `make wasm` regenerates.
+// Types for `index.js`; the shapes come from `pkg/`, which `make wasm` writes.
 export {
   StanModel,
   version,

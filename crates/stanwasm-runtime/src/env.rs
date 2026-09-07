@@ -112,8 +112,7 @@ impl Env {
     /// rather than rebuild the container it lives in.
     pub fn get_mut(&mut self, name: &str) -> Option<&mut Val> {
         if !self.vars.iter().any(|b| b.name == name) {
-            // Writing through to a shared binding would edit every scope holding
-            // it, so the write gets its own copy. Stan data is never assigned.
+            // Writing through would edit every scope holding the binding, so copy first.
             let b = self.base.as_ref()?.binding(name)?.clone();
             self.vars.push(b);
         }

@@ -1,20 +1,13 @@
-// Check this implementation's log density and gradients against CmdStan, the
-// reference implementation, and time both.
+// Check this implementation's log density and gradients against the reference
+// implementation at the same two unconstrained points, and time both.
 //
 //   node --experimental-strip-types tests/bench_gradients.ts 5000 --emit ../target/bench
 //   CMDSTAN=~/cmdstan node --experimental-strip-types tests/compare_cmdstan.ts ../target/bench
 //
-// Compiles each emitted model with CmdStan if it is not built yet, runs its
-// `log_prob` method at the same two unconstrained points, and compares.
-//
-// The two log densities differ by a constant: Stan's `~` drops the normalising
-// terms that do not depend on the parameters, and this runtime keeps them.
-// That is why two points are checked — a constant offset is the expected
-// difference, an offset that moves with the point is a bug.
-//
-// Timing is static HMC, whose leapfrog count per draw is fixed and where every
-// leapfrog is one gradient. A thousand leapfrogs per draw amortises away the
-// CSV row each draw writes.
+// Two points, because the densities differ by the normalising terms Stan's `~`
+// drops: a constant offset is expected, one that moves with the point is a bug.
+// Timing uses static HMC, where the leapfrog count per draw is fixed and every
+// leapfrog is one gradient.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -92,9 +85,8 @@ let worst = 0;
 let wins = 0;
 for (const name of names.sort()) {
   const model = join(bench, name);
-  // Rebuild whenever the model is newer, not only when the binary is missing:
-  // editing a bench model and comparing the previous one against it reads as
-  // a disagreement in this runtime, which is the one thing this must not do.
+  // Rebuild whenever the model is newer: comparing against a stale binary reads
+  // as a disagreement in this runtime, which is the one thing this must not do.
   if (!existsSync(model) || statSync(`${model}.stan`).mtimeMs > statSync(model).mtimeMs) {
     run("make", [model], cmdstan);
   }
