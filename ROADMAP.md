@@ -169,6 +169,41 @@ Not supported, each a clean error rather than a wrong answer:
   the original NUTS integration. Not comparable in scope to the items
   above; would be its own initiative if ever pursued.
 
+## Sampler output: diagnostics, and a shape ArviZ can read
+
+`sample()`, `sampleFresh()` and `sampleViaAot()` each return one flat
+row-major buffer of `(num_warmup + num_draws) × n_params`. It is
+unconstrained, not reshaped per variable, warmup rows come first but carry no
+flag, and one call is one chain. Every per-draw diagnostic nuts-rs produces is
+reachable only from `stepDraw()`, which appends `tuning`, `diverging`,
+`step_size` and `num_steps` after the position.
+
+An adapter over that buffer would be misleading rather than merely
+incomplete: the chain dimension would be invented, warmup would be
+indistinguishable from sampling to anything that did not slice it by hand, and
+no divergence would be recorded. So the runtime moves first, and the target is
+a dict `az.from_dict()` already accepts rather than a stanwasm-specific IO
+function.
+
+- **Diagnostics out of the batch path.** `stepDraw()` reads them per draw and
+  `sample()` throws them away. This needs a return type that is not a flat
+  `Vec<f64>` — draws, a per-draw diagnostic record, and the settings that
+  produced them.
+- **`energy`, for E-BFMI and `lp__`.** `Chain::draw()` hands back `Progress`,
+  which does not carry either. `expanded_draw()` hands back the sampler's
+  `Stats`, whose `PointStats` has `logp`, `energy` and `energy_error`. Moving
+  the draw loop onto it is what makes those two possible at all.
+- **Constrained draws, per variable.** `constrainDraw()` and `paramNames()`
+  exist, but the vector is flat and the names are flattened, so a caller
+  cannot recover a variable's declared shape. `{name: array}` in that shape is
+  what `az.from_dict()` wants, and is the honest shape for the Python surface
+  too.
+
+Several chains stay the caller's job — the MCMC visualizer already steps a
+handful of independent models side by side — but R-hat and ESS mean nothing
+with one, so whatever record the first item settles on has to stack across
+calls.
+
 ## What the tape records, and what it costs
 
 Every tape node holds one `f64`, and for a while that meant a matrix-vector
