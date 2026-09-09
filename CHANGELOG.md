@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`compileTape`: the emitter, for a front end that is not the Stan parser.**
+  A caller that can build a tape hands it over as text and gets back the module
+  and the buffers `AotSampler` wants, in one object. The format is documented in
+  `stanwasm_codegen::tape_text`, which the `tape_from_text` example now shares
+  rather than keeping a second parser of its own — the one thing it is easy to
+  get wrong is that operands name instructions, not nodes, because equal
+  expressions are numbered into one node.
+- **A `codegen` feature**, which `stan` implies. The emitter and `compileTape`
+  can be built without the Stan front end over them.
+
 ### Changed
 
 - **Both registries are published by hand again.** The `publish-npm` job added

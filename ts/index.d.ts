@@ -2,6 +2,7 @@
 export {
   AotSampler,
   StanModel,
+  compileTape,
   version,
   setAotExports,
   clearAotExports,
