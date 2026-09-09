@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The metric is adapted from the draws, the way Stan adapts it.** nuts-rs
+  estimates the diagonal metric from the draws *and* the gradients by default,
+  and every entry point here inherited that. Stan uses the draws alone. On a
+  centred hierarchical model the difference is visible in the posterior:
+  eight_schools' `tau` sat 0.34 sd from the reference and now sits inside 0.2,
+  which is where all 55 sampled posteriordb references now are. The setting is
+  in one place, so `sample`, `sampleViaAot` and `AotSampler` cannot drift apart.
+
 - **A likelihood written as a loop over observations now re-rolls.** The
   detector considered blocks up to 96 nodes; one repeat of
   `multi_normal_cholesky` is about `1.2 * K * K`, so at `K = 10` it found no

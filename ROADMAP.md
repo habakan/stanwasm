@@ -95,17 +95,19 @@ wrote, with their data — and reports how far each gets. It is a better answer
 to "how much of Stan is this subset" than the table above, because nothing in
 it was chosen by this project.
 
-**141 of 147 posteriors load, evaluate a gradient, and compile to wasm.** Of the
-47 that come with a reference posterior, 45 are usable, and 42 of those 45 have
-posterior means within 0.2 sd of the reference — a check on the mean only; R-hat,
-ESS and divergences are not compared yet. What stops the rest:
+**141 of 148 posteriors load, evaluate a gradient, and compile to wasm**
+(2026-09-09). Of the 58 that come with a reference posterior, 56 are usable, and
+`make compare-reference` samples 55 of them: **every one has posterior means
+within 0.2 sd of the reference** — a check on the mean only; R-hat, ESS and
+divergences are not compared yet. What stops the rest:
 
 | | count |
 |---|---:|
-| an ODE integrator — `integrate_ode_rk45`, `integrate_ode_bdf` | 4 |
-| the 60,000-digit MNIST model, which does not fit a 32-bit address space | 1 |
+| a model with no recorded tape, which `compileToWasm` has nothing to emit from | 3 |
 | `eigenvectors_sym` | 1 |
+| `integrate_ode_bdf` | 1 |
 | did not finish in two minutes — 60,000 MNIST digits against 78,500 weights | 1 |
+| a posterior whose data file the collection does not carry | 1 |
 
 Each row is the *first* thing a model hit, so fixing one does not always
 unlock its models — some will land on the next.
