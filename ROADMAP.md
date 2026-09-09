@@ -272,6 +272,33 @@ anything if what it does compute is right.
   those two loops was measured on its own and was a *loss*, so the remaining
   distance is not simply available.
 
+## A second front end on the tape
+
+The emitter reads only the tape. `stanwasm_codegen::compile_tape` takes one
+directly, so a front end that records a tape reaches the AOT path without going
+through the Stan AST — the Stan parser and evaluator are one way to fill a
+tape, not the only one. `examples/tape_from_text.rs` is a worked example:
+it replays an instruction file onto a `Tape`, compiles it, and runs the module.
+Two details a caller has to know, both checked or documented there — the
+leading run of `Leaf` nodes is the parameter vector, and equal expressions are
+numbered into one node, so instruction order is not node order.
+
+What that path costs is measured by `examples/tape_scaling.rs`. The tape is
+scalar-level, so an array-shaped model records a node per scalar:
+
+- A `cholesky_factor_corr[K]` prior is quadratic in `K`, not cubic, and stays
+  cheap: `K = 50` is 25,109 nodes and a 196 KB module.
+- A vectorised likelihood is free at any size, because re-rolling collapses it.
+  Linear regression is a 3.0 KB module at `N = 10` and at `N = 10,000` alike.
+- A likelihood written as a loop over observations does not re-roll and grows
+  linearly. `for (n in 1:N) y[n] ~ multi_normal_cholesky(mu, L)` at
+  `N = 500, K = 10` is 67,934 nodes and a 2.2 MB module.
+
+All of these emit and validate, so what bounds the AOT path here is what an
+engine will accept and keep optimising, not what the emitter can produce. The
+gap between the second and third is the one worth closing: the same model
+written two ways differs by three orders of magnitude in module size.
+
 ## Correctness follow-ups from the pre-launch review
 
 A pre-launch review (external, via another agent) surfaced several
@@ -302,12 +329,13 @@ validation. Still open:
   shape reads/writes past the shared buffer. Needs a dimension check before
   the first `aot_logp` call.
 
-- **The AOT path has a hard size ceiling.** Two wasm locals per tape node
-  against V8's 50,000-local limit caps it at ~25,000 tape nodes (`N ≈ 2,000`
-  for a vectorized regression). `compile()` reports this cleanly now and
-  callers can fall back to `sample()`, but lifting it means spilling
-  intermediates to linear memory instead of locals, or splitting the
-  emitted function.
+- **The AOT path's size limit is soft, and what remains is the module.** Two
+  wasm locals per tape node against V8's 50,000-local limit once capped this at
+  ~25,000 tape nodes. It no longer does: `Layout::for_tape` puts primals and
+  adjoints in linear memory once the slots exceed `MAX_WASM_LOCALS`, or as soon
+  as anything re-rolls, so `compile()` has no size error left to report. What
+  is left is how big the emitted function is — see the loop-form entry below,
+  where the same model written two ways differs by three orders of magnitude.
 
 - **Loop-form model building is slow.** `for (i in 1:N) y[i] ~ ...` clones
   the whole vector per element (`Val::Vec` + `.get(n).cloned()`), so tracing
