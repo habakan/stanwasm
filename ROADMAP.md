@@ -290,14 +290,16 @@ scalar-level, so an array-shaped model records a node per scalar:
   cheap: `K = 50` is 25,109 nodes and a 196 KB module.
 - A vectorised likelihood is free at any size, because re-rolling collapses it.
   Linear regression is a 3.0 KB module at `N = 10` and at `N = 10,000` alike.
-- A likelihood written as a loop over observations does not re-roll and grows
-  linearly. `for (n in 1:N) y[n] ~ multi_normal_cholesky(mu, L)` at
-  `N = 500, K = 10` is 67,934 nodes and a 2.2 MB module.
+- A likelihood written as a loop over observations re-rolls too, since the
+  detector's block limit was raised past one repeat of a multivariate density.
+  `for (n in 1:N) y[n] ~ multi_normal_cholesky(mu, L)` at `K = 10` is 47 KB at
+  `N = 100` and at `N = 500` alike, where it used to grow with `N`. One repeat
+  is about `1.2 * K * K` nodes against a fixed limit of 288, so `K = 14` fits
+  and `K = 18` does not — `examples/reroll_probe.rs` is where that boundary is
+  measured.
 
 All of these emit and validate, so what bounds the AOT path here is what an
-engine will accept and keep optimising, not what the emitter can produce. The
-gap between the second and third is the one worth closing: the same model
-written two ways differs by three orders of magnitude in module size.
+engine will accept and keep optimising, not what the emitter can produce.
 
 ## Correctness follow-ups from the pre-launch review
 

@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SECURITY.md` now say what is true — no published version carries a
   provenance attestation — and record what turning CI publishing on would take.
 
+### Fixed
+
+- **A likelihood written as a loop over observations now re-rolls.** The
+  detector considered blocks up to 96 nodes; one repeat of
+  `multi_normal_cholesky` is about `1.2 * K * K`, so at `K = 10` it found no
+  per-observation block at all and shredded the tape into 1608 fragments
+  covering 78% of it. Raised to 288. At `K = 10, N = 200` the module goes from
+  896 KB to 47 KB and stops growing with `N`, and compiling it is faster —
+  finding the real block costs less than emitting the fragments.
+
 ## [0.5.0] — 2026-09-09 (npm only)
 
 The crates.io publish waits on a nuts-rs release carrying
