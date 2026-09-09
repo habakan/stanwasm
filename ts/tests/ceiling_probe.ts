@@ -69,7 +69,7 @@ const scratch = m.aotScratchInit();
 const aotMem = new WebAssembly.Memory({
   initial: Math.ceil((nP * 16 + scratch.length * 8) / 65536) + 4,
 });
-const aot = await WebAssembly.instantiate(bytes, { stan: { memory: aotMem }, Math: mathImports });
+const aot = await WebAssembly.instantiate(bytes, { tapewasm: { memory: aotMem }, Math: mathImports });
 const aotView = new Float64Array(aotMem.buffer);
 aotView.set(scratch, nP * 2);
 aotView.set(params, 0);
@@ -87,7 +87,7 @@ const aotLpg = aot.instance.exports.log_prob_grad as
 for (const name of Object.keys(meta.variants)) {
   const mod = await WebAssembly.instantiate(
     await readFile(resolve(dir, `${name}.wasm`)),
-    { stan: { memory: mem }, Math: mathImports },
+    { tapewasm: { memory: mem }, Math: mathImports },
   );
   const lpg = mod.instance.exports.log_prob_grad as
     (p: number, g: number, n: number, s: number) => number;

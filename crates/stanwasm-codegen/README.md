@@ -1,15 +1,15 @@
 # stanwasm-codegen
 
-Ahead-of-time compilation of a traced Stan model to a standalone wasm module.
+Traces a Stan model onto an autodiff tape and hands the tape to the emitter.
 
 Part of [stanwasm](https://github.com/habakan/stanwasm), which compiles and samples Stan models
 entirely in the browser — no server, no cmdstan.
 
-Takes the tape recorded by [`stanwasm-autodiff`](https://crates.io/crates/stanwasm-autodiff) and emits wasm bytes
-directly via `wasm-encoder` — a fully unrolled forward and backward pass, with
-no interpreter dispatch left in the inner loop. The result is instantiated
-next to the sampler and shares its linear memory, so gradients cross no copy
-boundary.
+The emitter is [`tapewasm-codegen`](https://crates.io/crates/tapewasm-codegen),
+which reads a tape and nothing else. What is here is the half that knows what a
+model is: running the evaluator forward to record one, and reporting an
+evaluation failure apart from a failure to emit. What the emitter exports is
+re-exported unchanged, so a caller needs one dependency rather than two.
 
 Emitted modules are plain wasm32 — linear memory and a manual heap, no wasm-gc.
 A test in CI validates the output with `wasmparser` and the GC feature

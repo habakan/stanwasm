@@ -276,14 +276,16 @@ anything if what it does compute is right.
 
 ## A second front end on the tape
 
-The emitter reads only the tape. `stanwasm_codegen::compile_tape` takes one
-directly, so a front end that records a tape reaches the AOT path without going
-through the Stan AST — the Stan parser and evaluator are one way to fill a
-tape, not the only one. `examples/tape_from_text.rs` is a worked example:
-it replays an instruction file onto a `Tape`, compiles it, and runs the module.
-Two details a caller has to know, both checked or documented there — the
-leading run of `Leaf` nodes is the parameter vector, and equal expressions are
-numbered into one node, so instruction order is not node order.
+The emitter reads only the tape, which is why it is
+[tapewasm](https://github.com/habakan/tapewasm) rather than something here: the
+Stan parser and evaluator are one way to fill a tape, not the only one, and
+nothing downstream of the tape can tell which filled it.
+`tapewasm_codegen::compile_tape` takes one directly, and tapewasm's
+`examples/tape_from_text.rs` is a worked example — it replays an instruction
+file onto a `Tape`, compiles it, and runs the module. Two details a caller has
+to know, both checked or documented there: the leading run of `Leaf` nodes is
+the parameter vector, and equal expressions are numbered into one node, so
+instruction order is not node order.
 
 What that path costs is measured by `examples/tape_scaling.rs`. The tape is
 scalar-level, so an array-shaped model records a node per scalar:

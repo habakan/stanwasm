@@ -119,9 +119,11 @@ Strictly in this order. Each manifest resolves the ones before it from the
 registry rather than from its path, so a crate cannot go up before its
 dependencies:
 
+`tapewasm-autodiff`, `tapewasm-codegen` and `tapewasm` are released from their
+own repository and have to be up first — a version of them, not a path.
+
 ```bash
 cargo publish -p stanwasm-ast
-cargo publish -p stanwasm-autodiff
 cargo publish -p stanwasm-parser
 cargo publish -p stanwasm-runtime
 cargo publish -p stanwasm-codegen

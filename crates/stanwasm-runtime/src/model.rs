@@ -11,7 +11,7 @@ use crate::ops::v_add;
 use crate::value::Val;
 use rand::rngs::ChaCha8Rng;
 use stanwasm_ast::{Constraint, StanProgram, StanType, Stmt};
-use stanwasm_autodiff::Tape;
+use tapewasm_autodiff::Tape;
 use thiserror::Error;
 
 /// Flatten a `Val` into `out`, reading primals through `tape`. Matches the

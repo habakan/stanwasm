@@ -5,7 +5,6 @@ Cargo.lock.bak
 # wasm-bindgen output
 /pkg
 /ts/pkg
-/ts/pkg-aot
 
 # node
 node_modules

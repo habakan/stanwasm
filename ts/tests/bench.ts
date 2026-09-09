@@ -105,7 +105,7 @@ for (const c of CASES) {
   // AOT path
   const m2 = new StanModel(c.src, JSON.stringify(c.data));
   const aot = await WebAssembly.instantiate(m2.compileToWasm(), {
-    stan: { memory: sharedMemory() as WebAssembly.Memory },
+    tapewasm: { memory: sharedMemory() as WebAssembly.Memory },
     Math: mathImports,
   });
   setAotExports(aot.instance.exports);

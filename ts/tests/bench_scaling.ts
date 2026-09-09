@@ -75,7 +75,7 @@ for (const N of [10, 100, 500, 1000, 2000, 5000]) {
   const mem = new WebAssembly.Memory({ initial: pages });
   t = performance.now();
   const aot = await WebAssembly.instantiate(bytes, {
-    stan: { memory: mem }, Math: mathImports,
+    tapewasm: { memory: mem }, Math: mathImports,
   });
   const instMs = performance.now() - t;
 

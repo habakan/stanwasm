@@ -7,7 +7,7 @@
 //! containers (e.g. `vector[N] y = exp(x);` is standard Stan).
 
 use crate::value::Val;
-use stanwasm_autodiff::{
+use tapewasm_autodiff::{
     lgamma as lgamma_double, phi_cdf as phi_cdf_double, student_t_lccdf as student_t_lccdf_double,
     Tape,
 };

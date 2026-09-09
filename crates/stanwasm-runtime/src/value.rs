@@ -7,7 +7,7 @@
 //! - `Row` — a row vector, which only `'` produces and only `*` reads
 
 use crate::error::EvalError;
-use stanwasm_autodiff::Tape;
+use tapewasm_autodiff::Tape;
 
 #[derive(Debug, Clone)]
 pub enum Val {

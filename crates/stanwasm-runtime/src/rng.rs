@@ -11,7 +11,7 @@ use rand_distr::{
     Bernoulli, Beta, Cauchy, Distribution, Exp, Gamma, LogNormal, Normal, Poisson, StudentT,
     Uniform,
 };
-use stanwasm_autodiff::Tape;
+use tapewasm_autodiff::Tape;
 
 type Result<T> = std::result::Result<T, EvalError>;
 

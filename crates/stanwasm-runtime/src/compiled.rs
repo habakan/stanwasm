@@ -4,7 +4,7 @@
 
 use crate::error::EvalError;
 use crate::model::Model;
-use stanwasm_autodiff::Tape;
+use tapewasm_autodiff::Tape;
 
 pub struct Compiled {
     /// Recorded forward-pass tape (frozen at construction).

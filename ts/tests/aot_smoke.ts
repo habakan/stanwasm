@@ -65,7 +65,7 @@ const model = new StanModel(stanCode, JSON.stringify(data));
 const aotBytes = model.compileToWasm();
 
 const hostImports = {
-  stan: { memory: sharedMemory() as WebAssembly.Memory },
+  tapewasm: { memory: sharedMemory() as WebAssembly.Memory },
   Math: { exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos, pow: Math.pow,
           tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan, lgamma, digamma, phi },
 };

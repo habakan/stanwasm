@@ -18,7 +18,7 @@ use crate::matrix;
 use crate::ops::{v_add, v_div, v_exp, v_inv_logit, v_log, v_mul, v_sqrt, v_sub, v_tanh};
 use crate::value::Val;
 use stanwasm_ast::{Constraint, StanType};
-use stanwasm_autodiff::Tape;
+use tapewasm_autodiff::Tape;
 
 /// Lower-triangular factor from the raw slice, row-major with each row's diagonal
 /// last. Returns the rows, the diagonal's own log Jacobian (Σ of the raw diagonal,

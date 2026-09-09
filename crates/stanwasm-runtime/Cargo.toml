@@ -11,7 +11,7 @@ categories = ["science", "mathematics"]
 
 [dependencies]
 stanwasm-ast.workspace = true
-stanwasm-autodiff.workspace = true
+tapewasm-autodiff.workspace = true
 stanwasm-parser.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, optional = true }

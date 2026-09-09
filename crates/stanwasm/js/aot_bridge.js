@@ -1,6 +1,6 @@
 // Bridge between stanwasm.wasm and a per-model AOT-compiled wasm, which imports
-// stanwasm's memory and exports `log_prob_grad`, `stanwasm_layout_id` and
-// `stanwasm_abi_version`.
+// stanwasm's memory and exports `log_prob_grad`, `tapewasm_layout_id` and
+// `tapewasm_abi_version`.
 //
 // The binding is per page while the scratch buffer belongs to one StanModel, so
 // `sampleViaAot` reads the id back to refuse a mismatched pair. See
@@ -14,9 +14,9 @@ let aotAbiVersion = NaN;
 
 export function set_aot_exports(exports) {
   aotLogProbGrad = exports.log_prob_grad;
-  const g = exports.stanwasm_layout_id;
+  const g = exports.tapewasm_layout_id;
   aotLayoutId = g ? g.value >>> 0 : NaN;
-  const v = exports.stanwasm_abi_version;
+  const v = exports.tapewasm_abi_version;
   aotAbiVersion = v ? v.value >>> 0 : NaN;
 }
 

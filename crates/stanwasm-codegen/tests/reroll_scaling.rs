@@ -1,8 +1,7 @@
-//! Emitting a model that re-rolls into many small blocks must not cost the
-//! number of blocks times the length of the tape. Deciding whether a node can
-//! live in a wasm local asks which block owns each of its arguments, and that
-//! search used to scan every block — quadratic on a model that fragments, which
-//! is what left four posteriordb posteriors unable to compile in two minutes.
+//! Parsing, tracing and emitting a model that fragments, end to end, inside a
+//! time bound. tapewasm holds the emitter to the same bound on a tape built
+//! directly; what this adds is that a real model reaches that shape at all —
+//! four posteriordb posteriors did, and could not compile in two minutes.
 //!
 //! The bound is wall clock, so it sits an order of magnitude above what the
 //! linear version takes: enough to catch the quadratic return, not to measure.

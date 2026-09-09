@@ -69,7 +69,7 @@ for (const model of benchModels(N)) {
   const mem = new WebAssembly.Memory({
     initial: Math.ceil((m.n_params * 16 + scratch.length * 8) / 65536) + 4,
   });
-  const aot = await WebAssembly.instantiate(bytes, { stan: { memory: mem }, Math: mathImports });
+  const aot = await WebAssembly.instantiate(bytes, { tapewasm: { memory: mem }, Math: mathImports });
   const view = new Float64Array(mem.buffer);
   view.set(scratch, m.n_params * 2);
   view.set(params, 0);
