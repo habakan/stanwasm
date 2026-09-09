@@ -107,6 +107,15 @@ the tag lands and nothing runs at all.
 
 ## 4. Publish to crates.io
 
+**Blocked as of 0.5.0.** The workspace `[patch.crates-io]` takes nuts-rs from
+their main branch for a wasm fix that no published version carries, and a patch
+does not travel into a published crate — so a crate published today builds, for
+anyone who depends on it, a module WebKit refuses. `cargo publish` succeeds at
+this, and a version cannot be taken back. Wait for a nuts-rs release, drop the
+patch, and let `cargo test -p stanwasm-codegen --test no_wasm_gc` confirm it.
+Skip this step until then and mark the CHANGELOG heading "(npm only)" with the
+reason.
+
 Strictly in this order. Each manifest resolves the ones before it from the
 registry rather than from its path, so a crate cannot go up before its
 dependencies:
