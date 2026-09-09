@@ -913,3 +913,140 @@ impl StanModel {
         Ok(out)
     }
 }
+
+/// A sampler over a module compiled somewhere else.
+///
+/// [`StanModel`] reaches the AOT path through a parsed model. This reaches it
+/// through the module alone, for a caller that compiled one ahead of time —
+/// the parser, the evaluator and the constraint transforms are not on this
+/// path. Bind the module with `setAotExports` first, exactly as for
+/// `sampleViaAot`.
+#[wasm_bindgen]
+pub struct AotSampler {
+    n_params: usize,
+    scratch_init: Vec<f64>,
+    layout_id: u32,
+    param_names: Vec<String>,
+}
+
+#[wasm_bindgen]
+impl AotSampler {
+    /// `scratch_init` is the buffer the module works in — zeroed primals and
+    /// adjoints followed by the re-rolled loops' constant table, which is what
+    /// `aotScratchInit` returns and what a compiler should record beside the
+    /// module. `layout_id` is the module's `stanwasm_layout_id` global, checked
+    /// against the bound exports before each run so a module and a scratch
+    /// buffer built for different models cannot be used together.
+    ///
+    /// `param_names` only names a parameter in a rejected starting point; pass
+    /// an empty array to go without.
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        n_params: usize,
+        scratch_init: Vec<f64>,
+        layout_id: u32,
+        param_names: Vec<String>,
+    ) -> Result<AotSampler, JsError> {
+        if n_params == 0 {
+            return Err(JsError::new("n_params must be at least 1"));
+        }
+        if scratch_init.len() < 2 * n_params {
+            return Err(JsError::new(&format!(
+                "scratch_init has {} slots, too few for {n_params} parameters",
+                scratch_init.len()
+            )));
+        }
+        if !param_names.is_empty() && param_names.len() != n_params {
+            return Err(JsError::new(&format!(
+                "param_names has {} entries but n_params is {n_params}",
+                param_names.len()
+            )));
+        }
+        Ok(Self {
+            n_params,
+            scratch_init,
+            layout_id,
+            param_names,
+        })
+    }
+
+    #[wasm_bindgen(getter, js_name = nParams)]
+    pub fn n_params(&self) -> usize {
+        self.n_params
+    }
+
+    fn logp_fn(&self) -> AotLogp {
+        AotLogp {
+            n_params: self.n_params,
+            params_buf: vec![0.0; self.n_params],
+            grads_buf: vec![0.0; self.n_params],
+            scratch_buf: self.scratch_init.clone(),
+        }
+    }
+
+    /// `[log_prob, d/dparam...]`, the shape [`StanModel::log_prob_grad`] uses.
+    #[wasm_bindgen(js_name = logProbGrad)]
+    pub fn log_prob_grad(&self, params: &[f64]) -> Result<Vec<f64>, JsError> {
+        if params.len() != self.n_params {
+            return Err(JsError::new(&format!(
+                "params length {} != n_params {}",
+                params.len(),
+                self.n_params
+            )));
+        }
+        check_aot_binding(self.layout_id)?;
+        let mut out = vec![0.0_f64; self.n_params + 1];
+        let lp = self
+            .logp_fn()
+            .logp(params, &mut out[1..])
+            .map_err(|e| JsError::new(&format!("{e}")))?;
+        out[0] = lp;
+        Ok(out)
+    }
+
+    /// `num_warmup + num_draws` draws, row-major, `n_params` wide.
+    pub fn sample(
+        &self,
+        init: &[f64],
+        num_warmup: u32,
+        num_draws: u32,
+        seed: u64,
+    ) -> Result<Vec<f64>, JsError> {
+        let n = self.n_params;
+        if init.len() != n {
+            return Err(JsError::new(&format!(
+                "init length {} != n_params {n}",
+                init.len()
+            )));
+        }
+        no_warmup_check(num_warmup)?;
+        check_aot_binding(self.layout_id)?;
+
+        let mut grad = vec![0.0_f64; n];
+        let lp = self
+            .logp_fn()
+            .logp(init, &mut grad)
+            .map_err(|e| JsError::new(&format!("{e}")))?;
+        init_gradient_check(&self.param_names, lp, &grad).map_err(|e| JsError::new(&e))?;
+
+        // Widen before adding: `u32 + u32` wraps, and a wrapped total
+        // silently becomes a different (possibly enormous) run length.
+        let total = num_warmup as u64 + num_draws as u64;
+        let math = CpuMath::new(self.logp_fn());
+        let settings = DiagNutsSettings {
+            num_tune: num_warmup as u64,
+            num_draws: num_draws as u64,
+            ..Default::default()
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let iter = sample_sequentially(math, settings, init, total, 0, &mut rng)
+            .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
+
+        let mut out = vec![0.0_f64; n * total as usize];
+        for (i, draw) in iter.enumerate() {
+            let (pos, _progress) = draw.map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
+            out[i * n..(i + 1) * n].copy_from_slice(pos.as_ref());
+        }
+        Ok(out)
+    }
+}

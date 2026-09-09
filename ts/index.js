@@ -4,6 +4,7 @@
 
 import init from "./pkg/stanwasm.js";
 export {
+  AotSampler,
   StanModel,
   version,
   setAotExports,
