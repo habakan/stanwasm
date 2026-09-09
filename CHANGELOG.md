@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Both registries are published by hand again.** The `publish-npm` job added
+  in 0.5.0 needed a trusted publisher configured on npmjs.com, which it never
+  had, so it failed on the first tag that ran it while every other job passed.
+  Removed rather than left failing every release. `RELEASING.md` and
+  `SECURITY.md` now say what is true — no published version carries a
+  provenance attestation — and record what turning CI publishing on would take.
+
 ### Fixed
 
 - **A likelihood written as a loop over observations now re-rolls.** The
