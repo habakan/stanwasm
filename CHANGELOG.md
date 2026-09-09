@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A bundle without the Stan front end.** `make wasm-aot` builds the crate with
+  `--no-default-features` into `ts/pkg-aot/`: `AotSampler` and the sampler, no
+  parser, evaluator or constraint transforms. **163,935 bytes rather than
+  734,657** (75,901 gzip rather than 276,239). `aot_only_bundle_smoke.ts` checks
+  that it reproduces the full bundle's draws exactly for a given seed, so the
+  smaller one is the same sampler and not a different answer.
 - **`AotSampler`: sampling a module compiled ahead of time.** `StanModel`
   reaches the AOT path through a parsed model; this reaches it through the
   module alone, given the scratch buffer and layout id a compiler records

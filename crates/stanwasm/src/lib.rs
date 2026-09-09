@@ -11,19 +11,21 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "stan")]
 use std::cell::RefCell;
 use std::collections::HashMap;
+#[cfg(feature = "stan")]
 use std::rc::Rc;
 
 use nuts_rs::{
-    sample_sequentially, Chain, CpuLogpFunc, CpuMath, CpuMathError, DiagNutsSettings, HasDims,
-    LogpError, Settings,
+    sample_sequentially, CpuLogpFunc, CpuMath, CpuMathError, DiagNutsSettings, HasDims, LogpError,
 };
-use rand::{
-    distr::{Distribution, Uniform},
-    rngs::ChaCha8Rng,
-    SeedableRng,
-};
+#[cfg(feature = "stan")]
+use nuts_rs::{Chain, Settings};
+#[cfg(feature = "stan")]
+use rand::distr::{Distribution, Uniform};
+use rand::{rngs::ChaCha8Rng, SeedableRng};
+#[cfg(feature = "stan")]
 use stanwasm_runtime::{data_from_json, Compiled, EvalError, Model};
 use thiserror::Error;
 use wasm_bindgen::prelude::*;
@@ -42,10 +44,12 @@ impl LogpError for SamplerError {
 
 /// nuts-rs adapter that replays the recorded autodiff tape. Owns the
 /// `Compiled` for one `sample()` call so `CpuMath` can take it by value.
+#[cfg(feature = "stan")]
 struct LogpAdapter {
     compiled: Compiled,
 }
 
+#[cfg(feature = "stan")]
 impl HasDims for LogpAdapter {
     fn dim_sizes(&self) -> HashMap<String, u64> {
         let n = self.compiled.n_params() as u64;
@@ -58,6 +62,7 @@ impl HasDims for LogpAdapter {
     }
 }
 
+#[cfg(feature = "stan")]
 impl CpuLogpFunc for LogpAdapter {
     type LogpError = SamplerError;
     type FlowParameters = ();
@@ -88,10 +93,12 @@ impl CpuLogpFunc for LogpAdapter {
 /// replaying one. About six times the cost of replay, which buys back the
 /// things a recorded graph cannot follow: a branch on a parameter, a loop whose
 /// length one decides, an adaptive solver choosing its own steps.
+#[cfg(feature = "stan")]
 struct FreshLogp {
     model: Rc<Model>,
 }
 
+#[cfg(feature = "stan")]
 impl HasDims for FreshLogp {
     fn dim_sizes(&self) -> HashMap<String, u64> {
         let n = self.model.n_params() as u64;
@@ -104,6 +111,7 @@ impl HasDims for FreshLogp {
     }
 }
 
+#[cfg(feature = "stan")]
 impl CpuLogpFunc for FreshLogp {
     type LogpError = SamplerError;
     type FlowParameters = ();
@@ -137,8 +145,10 @@ impl CpuLogpFunc for FreshLogp {
 
 /// Concrete type nuts-rs returns from `DiagNutsSettings::new_chain`. It owns
 /// its RNG, so it survives across wasm-bindgen calls and can be stepped.
+#[cfg(feature = "stan")]
 type StepChain = <DiagNutsSettings as Settings>::Chain<CpuMath<LogpAdapter>>;
 
+#[cfg(feature = "stan")]
 struct StepSampler {
     chain: StepChain,
     total: u32,
@@ -149,6 +159,7 @@ struct StepSampler {
 
 /// One compiled Stan model: the parsed AST plus a pre-traced `Compiled`.
 /// Sampling consumes the `Compiled` and rebuilds it from the AST after.
+#[cfg(feature = "stan")]
 #[wasm_bindgen]
 pub struct StanModel {
     model: Rc<Model>,
@@ -161,6 +172,7 @@ pub struct StanModel {
 }
 
 /// The half of a `compileToWasm` result that stays behind on this side.
+#[cfg(feature = "stan")]
 struct AotBuild {
     /// Initial scratch contents: zeroed primals and adjoints, then the
     /// re-rolled loops' constant table.
@@ -245,6 +257,7 @@ pub fn init_gradient_check(names: &[String], lp: f64, grad: &[f64]) -> Result<()
     ))
 }
 
+#[cfg(feature = "stan")]
 #[wasm_bindgen]
 impl StanModel {
     /// Parse `stan_src`, bind `data_json`, trace the model on the autodiff
@@ -664,6 +677,7 @@ impl StanModel {
 /// Whether a load-time trace failed because the model's computation depends on
 /// the parameters, rather than because the model is wrong. Only these fall back
 /// to the fresh-trace path; everything else is still a load error.
+#[cfg(feature = "stan")]
 fn needs_fresh_trace(e: &EvalError) -> bool {
     matches!(
         e,
@@ -671,17 +685,20 @@ fn needs_fresh_trace(e: &EvalError) -> bool {
     )
 }
 
+#[cfg(feature = "stan")]
 fn trace(model: &Model) -> Result<Compiled, EvalError> {
     let dummy = vec![0.1_f64; model.n_params()];
     Compiled::from(model, &dummy)
 }
 
+#[cfg(feature = "stan")]
 fn jserr<E: std::fmt::Display>(e: E) -> JsError {
     JsError::new(&e.to_string())
 }
 
 /// The one reason `self.compiled` is ever `None`: a step-sampling session has
 /// it checked out. Say so, instead of reporting an internal invariant.
+#[cfg(feature = "stan")]
 fn compiled_checked_out(method: &str) -> JsError {
     JsError::new(&format!(
         "{method} is unavailable while a step-sampling session is running — \
@@ -692,6 +709,7 @@ fn compiled_checked_out(method: &str) -> JsError {
 
 /// The model has no recorded tape because its computation changes with the
 /// parameters. Says which method does work rather than only what does not.
+#[cfg(feature = "stan")]
 fn no_recorded_tape(method: &str) -> JsError {
     JsError::new(&format!(
         "{method} needs a recorded tape, and this model does not have one — its \
@@ -841,6 +859,7 @@ impl CpuLogpFunc for AotLogp {
     }
 }
 
+#[cfg(feature = "stan")]
 #[wasm_bindgen]
 impl StanModel {
     /// `sample` through a `setAotExports`-bound AOT wasm instead of tape replay;

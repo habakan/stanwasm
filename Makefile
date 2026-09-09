@@ -74,14 +74,40 @@ $(WASM_OUT): $(WASM_SRC)
 	@rm -f $(ROOT)/ts/pkg/.gitignore
 	@ls -la $(ROOT)/ts/pkg/
 
+# The same crate without its Stan front end: `AotSampler` and the sampler, for a
+# page that ships a module compiled when the page was written. Separate out-dir
+# so it never overwrites the bundle the npm package publishes.
+AOT_OUT := ts/pkg-aot/stanwasm_bg.wasm
+
+.PHONY: wasm-aot
+wasm-aot: $(AOT_OUT) ## Build the AOT-only bundle into ts/pkg-aot/
+
+$(AOT_OUT): $(WASM_SRC)
+	@command -v wasm-pack >/dev/null 2>&1 \
+	  || { echo "error: wasm-pack not found. Install with: cargo install wasm-pack" >&2; exit 1; }
+	rm -rf $(ROOT)/ts/pkg-aot
+	wasm-pack build crates/stanwasm --target web --out-dir $(ROOT)/ts/pkg-aot \
+	  --release -- --no-default-features
+	@rm -f $(ROOT)/ts/pkg-aot/.gitignore
+# The point of this bundle is its size, so say it rather than leaving it to be
+# discovered. Compare against the full one when that has been built too.
+	@printf '  %-12s %8s bytes  %8s gzip\n' "aot-only" \
+	  "$$(wc -c < $(AOT_OUT) | tr -d ' ')" \
+	  "$$(gzip -c $(AOT_OUT) | wc -c | tr -d ' ')"
+	@test -f $(WASM_OUT) && printf '  %-12s %8s bytes  %8s gzip\n' "full" \
+	  "$$(wc -c < $(WASM_OUT) | tr -d ' ')" \
+	  "$$(gzip -c $(WASM_OUT) | wc -c | tr -d ' ')" || true
+
 .PHONY: smoke
-smoke: wasm ## Node smoke tests against the built bundle
+smoke: wasm wasm-aot ## Node smoke tests against the built bundles
 	cd ts && $(NODE) tests/smoke.ts
 # The AOT path has its own entry points and its own bridge, and neither is
 # reached by the replay smoke above.
 	cd ts && $(NODE) tests/aot_smoke.ts
 # A module compiled ahead of time, sampled with no StanModel behind it.
 	cd ts && $(NODE) tests/aot_sampler_smoke.ts
+# And the bundle built without the Stan front end, sampling that same module.
+	cd ts && $(NODE) tests/aot_only_bundle_smoke.ts
 
 .PHONY: bench
 bench: wasm ## Node benchmark (replay vs AOT)
