@@ -144,16 +144,19 @@ gallery-build: wasm ## Production build of the gallery (what GitHub Pages ships)
 # exactly when a path dependency missing its `version` needs to surface — not
 # halfway through publishing, when the crates already up cannot be taken back.
 .PHONY: package
-package: wasm ## Dry-run packaging every crate + the npm tarball
+package: package-crates package-npm ## Dry-run packaging every crate + the npm tarball
+
+# Blocked while the engine is a git dependency: `cargo package` rewrites a git
+# spec to the version beside it, and tapewasm is not on crates.io yet — so this
+# fails resolving rather than checking anything. It waits on the same nuts-rs
+# release the publish itself does; until then `package-npm` is the half that
+# runs, and it is the half 0.7.0 actually ships.
+.PHONY: package-crates
+package-crates: ## Dry-run packaging every crate (needs tapewasm on crates.io)
 	cargo package --workspace --no-verify
-# Apache-2.0 requires the licence text to travel with the artifact, and both
-# `cargo package` and `npm pack` only collect files inside their own directory
-# — the LICENSE at the repo root reaches no tarball on its own. The npm
-# tarball has a second invisible failure: `wasm-pack` writes its own
-# `.gitignore` (containing `*`) into `ts/pkg/`, which npm honours when no
-# `.npmignore` sits beside it, and that once published a package carrying no
-# wasm at all. A published version cannot be taken back, so both are asserted
-# rather than assumed.
+# Apache-2.0 requires the licence text to travel with the artifact, and
+# `cargo package` only collects files inside the crate directory — the LICENSE
+# at the repo root reaches no tarball on its own.
 	@list=$$(mktemp); \
 	for f in target/package/*.crate; do \
 	  tar tzf "$$f" > "$$list"; \
@@ -162,10 +165,18 @@ package: wasm ## Dry-run packaging every crate + the npm tarball
 	done; \
 	rm -f "$$list"
 	@echo "LICENSE present in every .crate"
-# The check is a script rather than a `node -e` here: make 4.3 and make 3.81
-# disagree about a backslash-continued line inside a recipe, and the older one
-# is what macOS ships, so the inline form passed locally and could never run
-# on CI.
+
+.PHONY: package-npm
+package-npm: wasm ## Dry-run the npm tarball, licence and wasm checks included
+# Two invisible failures. `npm pack` collects only files under `ts/`, so the
+# repo-root LICENSE reaches no tarball on its own. And `wasm-pack` writes its
+# own `.gitignore` (containing `*`) into `ts/pkg/`, which npm honours when no
+# `.npmignore` sits beside it — that once published a package carrying no wasm
+# at all. A published version cannot be taken back, so both are asserted.
+#
+# A script rather than a `node -e`: make 4.3 and make 3.81 disagree about a
+# backslash-continued line inside a recipe, and the older one is what macOS
+# ships, so the inline form passes locally and never runs on CI.
 	@pack=$$(mktemp); \
 	(cd ts && npm pack --dry-run --json) > "$$pack" \
 	  && node ts/tests/check_pack.mjs "$$pack"; \

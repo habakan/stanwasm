@@ -82,8 +82,10 @@ jobs:
       # The same check RELEASING.md asks for before publishing by hand.
       # Repeated here because the point of this workflow is to notice when the
       # manual procedure was not followed.
-      - name: dry-run every manifest and the npm tarball, licence checks included
-        run: make package
+      # `make package` would be the pair, but its crates half cannot run while
+      # the engine is a git dependency — see the comment on `package-crates`.
+      - name: dry-run the npm tarball, licence and wasm checks included
+        run: make package-npm
 
   github-release:
     name: create the GitHub release

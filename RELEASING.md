@@ -43,18 +43,17 @@ matches.
 ```bash
 make check TESTFLAGS=--release   # fmt + clippy + the release test suite
 make smoke                       # builds ts/pkg/, then exercises it in Node
-make package                     # what both registries would actually receive
+make package-npm                 # what npm would actually receive
 ```
 
-`make package` runs `cargo package --workspace`, not a per-crate loop. That
-matters before the first release: `cargo package -p stanwasm-parser` on its
-own resolves `stanwasm-ast` from the crates.io index and fails with `no
-matching package named stanwasm-ast found` until 0.1.0 is really published
-there, while the workspace form resolves siblings locally and can check all
-six manifests today.
+`make package` is the pair — `package-crates` and `package-npm` — but the
+crates half cannot run while the engine is a git dependency: `cargo package`
+rewrites a git spec to the version beside it, and tapewasm is not on crates.io
+yet, so it fails resolving rather than checking anything. It waits on the same
+nuts-rs release step 5 does. `package-npm` is the half that runs, and it is the
+half these releases actually ship.
 
-It then asserts two things that are invisible until someone installs the
-result. That the Apache-2.0 licence text is inside every artifact — `cargo
+The two halves assert what is invisible until someone installs the result. That the Apache-2.0 licence text is inside every artifact — `cargo
 package` and `npm pack` each collect only files under their own directory, so
 the repo-root `LICENSE` reaches no tarball on its own. And that `pkg/` carries
 the wasm: `wasm-pack` writes its own `.gitignore` (containing `*`) into
@@ -115,12 +114,15 @@ patch, and let `cargo test -p stanwasm-codegen --test no_wasm_gc` confirm it.
 Skip this step until then and mark the CHANGELOG heading "(npm only)" with the
 reason.
 
-Strictly in this order. Each manifest resolves the ones before it from the
+`tapewasm-autodiff`, `tapewasm-codegen` and `tapewasm` come from their own
+repository and have to be up first — the manifests here name them by git rev
+with a version beside it, and that version is what `cargo publish` writes. So
+this step also means replacing the rev with the version, which is a commit of
+its own, not something to do mid-publish.
+
+Then strictly in this order. Each manifest resolves the ones before it from the
 registry rather than from its path, so a crate cannot go up before its
 dependencies:
-
-`tapewasm-autodiff`, `tapewasm-codegen` and `tapewasm` are released from their
-own repository and have to be up first — a version of them, not a path.
 
 ```bash
 cargo publish -p stanwasm-ast
