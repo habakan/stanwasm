@@ -19,5 +19,5 @@ keywords:
   - probabilistic-programming
 license: Apache-2.0
 repository-code: 'https://github.com/habakan/stanwasm'
-version: 0.6.0
-date-released: '2026-09-09'
+version: 0.7.0
+date-released: 2026-09-10
