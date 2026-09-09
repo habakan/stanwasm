@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`AotSampler`: sampling a module compiled ahead of time.** `StanModel`
+  reaches the AOT path through a parsed model; this reaches it through the
+  module alone, given the scratch buffer and layout id a compiler records
+  beside it. Same nuts-rs, same bridge, same binding check — for a given seed
+  it reproduces `sampleViaAot` exactly, which is what `aot_sampler_smoke.ts`
+  pins. The point is what a page then has to load: with the parser, evaluator
+  and constraint transforms unreachable, the bundle is 164 KB rather than
+  735 KB (76 KB gzip rather than 276 KB), so a model compiled when the page was
+  written ships with a sampler and nothing else.
+
 - **The remaining compound assignments and scalar extrema.** `-=`, `*=` and
   `/=` now join `+=`; `fmin` and `fmax` use the same kink convention as `fabs`.
 - **Finite exponent gradients for known zero bases.** `pow(0, s)` now contributes
