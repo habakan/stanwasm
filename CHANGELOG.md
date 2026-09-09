@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parser, evaluator or constraint transforms. **163,935 bytes rather than
   734,657** (75,901 gzip rather than 276,239). `aot_only_bundle_smoke.ts` checks
   that it reproduces the full bundle's draws exactly for a given seed, so the
-  smaller one is the same sampler and not a different answer.
+  smaller one is the same sampler and not a different answer. Built locally and
+  not published: `files` in `ts/package.json` is an allowlist that excludes it.
 - **`AotSampler`: sampling a module compiled ahead of time.** `StanModel`
   reaches the AOT path through a parsed model; this reaches it through the
   module alone, given the scratch buffer and layout id a compiler records

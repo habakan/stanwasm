@@ -77,6 +77,11 @@ $(WASM_OUT): $(WASM_SRC)
 # The same crate without its Stan front end: `AotSampler` and the sampler, for a
 # page that ships a module compiled when the page was written. Separate out-dir
 # so it never overwrites the bundle the npm package publishes.
+#
+# Deliberately local: `ts/package.json` lists `files` as an allowlist that this
+# directory is not in, so the tarball cannot pick it up, and `check_pack.mjs`
+# fails on a second .wasm if that ever changes. Publishing it is a decision
+# about what to support, and nobody has asked for it yet.
 AOT_OUT := ts/pkg-aot/stanwasm_bg.wasm
 
 .PHONY: wasm-aot
