@@ -329,12 +329,13 @@ validation. Still open:
   shape reads/writes past the shared buffer. Needs a dimension check before
   the first `aot_logp` call.
 
-- **The AOT path has a hard size ceiling.** Two wasm locals per tape node
-  against V8's 50,000-local limit caps it at ~25,000 tape nodes (`N ≈ 2,000`
-  for a vectorized regression). `compile()` reports this cleanly now and
-  callers can fall back to `sample()`, but lifting it means spilling
-  intermediates to linear memory instead of locals, or splitting the
-  emitted function.
+- **The AOT path's size limit is soft, and what remains is the module.** Two
+  wasm locals per tape node against V8's 50,000-local limit once capped this at
+  ~25,000 tape nodes. It no longer does: `Layout::for_tape` puts primals and
+  adjoints in linear memory once the slots exceed `MAX_WASM_LOCALS`, or as soon
+  as anything re-rolls, so `compile()` has no size error left to report. What
+  is left is how big the emitted function is — see the loop-form entry below,
+  where the same model written two ways differs by three orders of magnitude.
 
 - **Loop-form model building is slow.** `for (i in 1:N) y[i] ~ ...` clones
   the whole vector per element (`Val::Vec` + `.get(n).cloned()`), so tracing
