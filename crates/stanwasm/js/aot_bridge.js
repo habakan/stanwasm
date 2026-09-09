@@ -1,5 +1,6 @@
 // Bridge between stanwasm.wasm and a per-model AOT-compiled wasm, which imports
-// stanwasm's memory and exports `log_prob_grad` plus `stanwasm_layout_id`.
+// stanwasm's memory and exports `log_prob_grad`, `stanwasm_layout_id` and
+// `stanwasm_abi_version`.
 //
 // The binding is per page while the scratch buffer belongs to one StanModel, so
 // `sampleViaAot` reads the id back to refuse a mismatched pair. See
@@ -8,20 +9,29 @@
 let aotLogProbGrad = null;
 // NaN means nothing is bound, or no id is exported; no u32 id collides with it.
 let aotLayoutId = NaN;
+// Likewise: a module from before the global existed reads as unknown, not as 0.
+let aotAbiVersion = NaN;
 
 export function set_aot_exports(exports) {
   aotLogProbGrad = exports.log_prob_grad;
   const g = exports.stanwasm_layout_id;
   aotLayoutId = g ? g.value >>> 0 : NaN;
+  const v = exports.stanwasm_abi_version;
+  aotAbiVersion = v ? v.value >>> 0 : NaN;
 }
 
 export function clear_aot_exports() {
   aotLogProbGrad = null;
   aotLayoutId = NaN;
+  aotAbiVersion = NaN;
 }
 
 export function aot_layout_id() {
   return aotLayoutId;
+}
+
+export function aot_abi_version() {
+  return aotAbiVersion;
 }
 
 export function aot_logp(paramsPtr, gradsPtr, nParams, scratchPtr) {

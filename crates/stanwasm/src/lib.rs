@@ -750,7 +750,18 @@ extern "C" {
     /// The bound module's `stanwasm_layout_id`, or NaN when nothing is bound.
     #[wasm_bindgen(js_name = aot_layout_id)]
     fn aot_layout_id() -> f64;
+
+    /// The bound module's `stanwasm_abi_version`, or NaN when it exports none.
+    #[wasm_bindgen(js_name = aot_abi_version)]
+    fn aot_abi_version() -> f64;
 }
+
+/// The module shape this build knows how to run.
+///
+/// Kept here rather than read from `stanwasm-codegen`, which is not a
+/// dependency of the build without the Stan front end. `abi_version_agrees`
+/// asserts the two are the same number wherever both are present.
+const ABI_VERSION: u32 = 1;
 
 /// Refuse a binding that belongs to a different compilation.
 ///
@@ -767,6 +778,22 @@ fn check_aot_binding(want: u32) -> Result<(), JsError> {
              by an older stanwasm exports no layout id and cannot be checked, \
              so it is refused here too.",
         ));
+    }
+    let abi = aot_abi_version();
+    if abi.is_nan() || abi as u32 != ABI_VERSION {
+        // Only reachable with a module and a runtime from different releases,
+        // which a page deploys together — so name both numbers and stop.
+        let found = if abi.is_nan() {
+            "no version at all".to_string()
+        } else {
+            format!("module ABI {}", abi as u32)
+        };
+        return Err(JsError::new(&format!(
+            "the bound AOT module names {found}, and this stanwasm runs module \
+             ABI {ABI_VERSION}. A precompiled module and the runtime that \
+             samples it ship together, so recompile the module with this \
+             version, or serve the runtime it was built with.",
+        )));
     }
     if bound as u32 != want {
         return Err(JsError::new(

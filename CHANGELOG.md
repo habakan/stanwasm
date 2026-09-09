@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A version number on the module ABI.** An emitted module now carries
+  `stanwasm_abi_version` beside `stanwasm_layout_id`, and a host refuses one
+  whose number is not its own. The two answer different questions: the layout id
+  asks whether this is the module a scratch buffer belongs to — and cannot
+  detect a version skew, since both sides of it come from the same build — while
+  the ABI version asks whether this is a module the runtime knows how to run.
+  It matters now that a module can be compiled once and served later.
+  `ARCHITECTURE.md` says what the ABI covers and when the number moves.
 - **A bundle without the Stan front end.** `make wasm-aot` builds the crate with
   `--no-default-features` into `ts/pkg-aot/`: `AotSampler` and the sampler, no
   parser, evaluator or constraint transforms. **163,935 bytes rather than
