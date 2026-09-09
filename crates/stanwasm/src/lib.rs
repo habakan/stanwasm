@@ -181,6 +181,27 @@ struct AotBuild {
     layout_id: u32,
 }
 
+/// The sampler configuration every entry point uses.
+///
+/// nuts-rs estimates the diagonal metric from both the draws and the gradients
+/// by default. Stan uses the draws alone, and so does the reference
+/// implementation this project's posteriors are checked against, so this turns
+/// the gradient term off: on a centred hierarchical model the two disagree
+/// about how far down the funnel the sampler goes, which is a difference in
+/// the posterior, not in the log density.
+fn nuts_settings(num_warmup: u32, num_draws: u32) -> DiagNutsSettings {
+    let mut settings = DiagNutsSettings {
+        num_tune: num_warmup as u64,
+        num_draws: num_draws as u64,
+        ..Default::default()
+    };
+    settings
+        .adapt_options
+        .mass_matrix_options
+        .use_grad_based_estimate = false;
+    settings
+}
+
 /// nuts-rs asserts that its step-size adaptation has somewhere to run, and an
 /// assertion inside wasm is a trap the caller cannot tell apart from any other.
 fn no_warmup_check(num_warmup: u32) -> Result<(), JsError> {
@@ -413,11 +434,7 @@ impl StanModel {
         // A closure so `self.compiled` is restored on every exit path.
         let result: Result<Vec<f64>, JsError> = (|| {
             let math = CpuMath::new(LogpAdapter { compiled });
-            let settings = DiagNutsSettings {
-                num_tune: num_warmup as u64,
-                num_draws: num_draws as u64,
-                ..Default::default()
-            };
+            let settings = nuts_settings(num_warmup, num_draws);
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let iter = sample_sequentially(math, settings, init, total, 0, &mut rng)
                 .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
@@ -462,11 +479,7 @@ impl StanModel {
         let math = CpuMath::new(FreshLogp {
             model: Rc::clone(&self.model),
         });
-        let settings = DiagNutsSettings {
-            num_tune: num_warmup as u64,
-            num_draws: num_draws as u64,
-            ..Default::default()
-        };
+        let settings = nuts_settings(num_warmup, num_draws);
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let iter = sample_sequentially(math, settings, init, total, 0, &mut rng)
             .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
@@ -574,11 +587,7 @@ impl StanModel {
             }
         })?;
         let math = CpuMath::new(LogpAdapter { compiled });
-        let settings = DiagNutsSettings {
-            num_tune: num_warmup as u64,
-            num_draws: num_draws as u64,
-            ..Default::default()
-        };
+        let settings = nuts_settings(num_warmup, num_draws);
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let mut chain = settings.new_chain(0, math, &mut rng);
         if let Err(e) = chain.set_position(init) {
@@ -941,11 +950,7 @@ impl StanModel {
             scratch_buf,
         });
 
-        let settings = DiagNutsSettings {
-            num_tune: num_warmup as u64,
-            num_draws: num_draws as u64,
-            ..Default::default()
-        };
+        let settings = nuts_settings(num_warmup, num_draws);
 
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let iter = sample_sequentially(math, settings, init, total, 0, &mut rng)
@@ -1079,11 +1084,7 @@ impl AotSampler {
         // silently becomes a different (possibly enormous) run length.
         let total = num_warmup as u64 + num_draws as u64;
         let math = CpuMath::new(self.logp_fn());
-        let settings = DiagNutsSettings {
-            num_tune: num_warmup as u64,
-            num_draws: num_draws as u64,
-            ..Default::default()
-        };
+        let settings = nuts_settings(num_warmup, num_draws);
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let iter = sample_sequentially(math, settings, init, total, 0, &mut rng)
             .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
