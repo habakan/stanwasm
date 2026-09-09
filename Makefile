@@ -80,6 +80,8 @@ smoke: wasm ## Node smoke tests against the built bundle
 # The AOT path has its own entry points and its own bridge, and neither is
 # reached by the replay smoke above.
 	cd ts && $(NODE) tests/aot_smoke.ts
+# A module compiled ahead of time, sampled with no StanModel behind it.
+	cd ts && $(NODE) tests/aot_sampler_smoke.ts
 
 .PHONY: bench
 bench: wasm ## Node benchmark (replay vs AOT)
