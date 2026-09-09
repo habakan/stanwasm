@@ -1,10 +1,14 @@
 # Releasing
 
 Maintainer notes. `.github/workflows/release.yml` runs on the tag: it verifies
-the tagged tree, creates the GitHub release, and publishes the npm package.
-crates.io is still published by hand from a local checkout. No CI job holds a
-registry credential either way — the npm publish authenticates with the run's
-own OIDC token.
+the tagged tree and creates the GitHub release. Both registries are published
+by hand from a local checkout, and no CI job holds a credential for either.
+
+npm can be published from the workflow instead, with a provenance attestation,
+by configuring a trusted publisher on npmjs.com — see **Publishing from CI**
+at the end. It is deliberately not set up: publishing by hand is what has
+always happened here, and a job that fails on every tag because the trust was
+never configured is worse than no job.
 
 **A published version is permanent.** crates.io can yank and npm can
 deprecate, but neither frees the version number or removes the code. Every
@@ -13,28 +17,6 @@ check below exists because something here is not reversible.
 Every published name is prefixed `stanwasm`, matching the npm package. A bare
 `stan-parser` or `stan-runtime` on a flat registry namespace reads as a crate
 belonging to Stan itself, and crates.io never frees a name once taken.
-
-## 0. One-time: trust this workflow on npm
-
-Only needed once per package, and again if `release.yml` is ever renamed.
-
-On npmjs.com, under the `stanwasm` package's **Settings → Trusted publisher**,
-add a GitHub Actions publisher:
-
-| Field | Value |
-|---|---|
-| Organization or user | `habakan` |
-| Repository | `stanwasm` |
-| Workflow filename | `release.yml` |
-| Environment | leave blank |
-
-Leave any existing automation token in place until the first tag publishes
-cleanly, then delete it. A stored token that nothing uses is the credential most
-likely to leak, and trusted publishing exists to not have one.
-
-Trusted publishing is also what produces the provenance attestation. A tarball
-published from a laptop cannot carry one, which is why `SECURITY.md` used to say
-the published bytes could not be traced back to a commit.
 
 ## 1. Set the version
 
@@ -89,23 +71,40 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-**Pushing the tag spends the npm version.** `guard` and `verify` run first and
-a failure in either stops `publish-npm` before it uploads, so a rejected tag can
-still be deleted with `git push --delete origin vX.Y.Z`. But once both pass, npm
-has the version and no one can take it back. The last fully reversible moment is
-the local `git tag`, before the push.
+Nothing is published by this. `guard` and `verify` check the tagged tree and
+`github-release` creates the release; a tag that fails either can be deleted
+with `git push --delete origin vX.Y.Z`. The registries are steps 4 and 5, and
+those are what cannot be taken back.
 
 `guard` compares the tag against every file in step 1. `verify` re-runs the
 full gate against the exact tagged commit — `test.yml` only covers pushes to
 `main` and pull requests, so a tag on a rebased or never-PR'd commit is
 otherwise unverified. `github-release` then creates the GitHub release from the
-CHANGELOG section, and `publish-npm` uploads the tarball.
+CHANGELOG section.
 
 Check that `release.yml` is actually enabled before tagging
 (`gh workflow list --all`). A disabled workflow does not fail on its trigger —
 the tag lands and nothing runs at all.
 
-## 4. Publish to crates.io
+## 4. Publish to npm
+
+From a checkout of the tag, with nothing uncommitted — `make wasm` bakes the
+working tree into the bundle, so a stray edit ships as the release:
+
+```bash
+git status --short          # must be clean
+git rev-parse HEAD          # must be the tagged commit
+make wasm
+cd ts && npm publish --access public
+```
+
+No `--provenance`: a tarball published from a laptop cannot carry an
+attestation, and passing the flag fails rather than being ignored.
+
+**This spends the version.** npm can deprecate but never frees a number.
+Confirm with `npm view stanwasm version`.
+
+## 5. Publish to crates.io
 
 **Blocked as of 0.5.0.** The workspace `[patch.crates-io]` takes nuts-rs from
 their main branch for a wasm fix that no published version carries, and a patch
@@ -139,24 +138,35 @@ five crates before `stanwasm` are published only because cargo requires a
 dependency to be on the registry before its dependent can be — their
 descriptions say so, and they carry no API stability guarantee.
 
-## 5. Confirm the npm publish
-
-Step 3 already did it. Check that it carried provenance:
-
-```bash
-npm view stanwasm@X.Y.Z dist.attestations
-```
-
-Nothing there means the publish fell back to a token, or the trusted publisher
-in step 0 does not match this workflow. The version is still published and
-usable; fix the trust before the next release rather than re-publishing.
-
-If `publish-npm` failed outright, read the log before reaching for a local
-`npm publish` — a tarball published from a laptop carries no provenance, and
-`npm view stanwasm` will show the gap for that version forever.
-
 ## 6. After
 
 - Open `CHANGELOG.md` and start a fresh `## [Unreleased]` section.
 - Check the GitHub release rendered the notes you expected.
 - `npm view stanwasm` and `cargo search stanwasm` to confirm what landed.
+
+## Publishing from CI, if that is ever wanted
+
+npm can publish from `release.yml` with a provenance attestation naming the
+commit and the run that built the tarball. It needs two things, and the second
+is what makes it a decision rather than a switch.
+
+A `publish-npm` job in `release.yml` with `permissions: id-token: write`, ending
+in `npm publish --provenance --access public`. `git log -S publish-npm --
+.github/workflows/release.yml` has one that worked as far as npm's door.
+
+And a trusted publisher on npmjs.com, under the `stanwasm` package's
+**Settings → Trusted publisher**:
+
+| Field | Value |
+|---|---|
+| Organization or user | `habakan` |
+| Repository | `stanwasm` |
+| Workflow filename | `release.yml` |
+| Environment | leave blank |
+
+Without it npm rejects the OIDC token, and the failure reads `E404 Not Found -
+PUT https://registry.npmjs.org/stanwasm` — npm answers a rejected credential
+with a 404 so that it does not confirm the package exists. That is what
+happened at 0.5.0, tagged with the job present and the trust never configured:
+the tag was spent, `github-release` succeeded, and the publish failed. Configure
+the trust first, then add the job.

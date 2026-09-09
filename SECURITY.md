@@ -55,16 +55,15 @@ counts as a vulnerability here.
 `stanwasm` is on [npm](https://www.npmjs.com/package/stanwasm) and
 [crates.io](https://crates.io/crates/stanwasm).
 
-The npm package is published by `.github/workflows/release.yml` using npm's
-trusted publishing, so releases from that workflow onward carry an
-[npm provenance](https://docs.npmjs.com/generating-provenance-statements)
-attestation naming the commit and the workflow run that built the tarball.
-`npm view stanwasm@VERSION dist.attestations` shows whether a given version has
-one. Versions published before that — 0.1.0 through 0.4.0, all uploaded by hand
-from a local checkout — carry none, and cannot be traced back to a commit
-cryptographically.
+Both are published by hand from a local checkout, so neither carries an
+attestation and no published version can be traced back to a commit
+cryptographically. `npm view stanwasm@VERSION dist.attestations` reports what a
+version has, and today that is nothing for every version.
 
-The crates.io half is still published by hand and has no equivalent attestation.
+npm supports publishing from CI with an
+[npm provenance](https://docs.npmjs.com/generating-provenance-statements)
+attestation, which would close this. `RELEASING.md` records what it takes and
+why it is not in place.
 
 Independently of either, `ts/pkg/` is generated entirely by
 `make wasm` from this source tree, so you can rebuild and compare
@@ -78,10 +77,8 @@ rather than trusting the published bytes.
   each in its own job block so nothing else in the run inherits it:
   `release.yml`'s `github-release` (`contents: write`, to create the release)
   and `pages.yml`'s `deploy` (`pages: write` + `id-token: write`, which is what
-  `actions/deploy-pages` mints its OIDC token with), plus `publish-npm`
-  (`id-token: write`, which npm's trusted publishing exchanges for the right to
-  upload). No workflow uses `pull_request_target`, and none holds a registry
-  credential: the npm publish authenticates with that short-lived OIDC token,
-  and crates.io is published by hand.
+  `actions/deploy-pages` mints its OIDC token with). No workflow uses
+  `pull_request_target`, and none holds a registry credential — both registries
+  are published by hand.
 - Dependabot watches Cargo, npm, and GitHub Actions — see
   [`.github/dependabot.yml`](.github/dependabot.yml).
