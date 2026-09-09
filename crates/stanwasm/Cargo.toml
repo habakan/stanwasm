@@ -18,11 +18,14 @@ default = ["stan"]
 # `StanModel` API over them. Without it only `AotSampler` is left, which reads a
 # module someone compiled earlier and needs none of that in the bundle.
 stan = [
+    "codegen",
     "dep:stanwasm-ast",
     "dep:stanwasm-parser",
     "dep:stanwasm-runtime",
-    "dep:stanwasm-codegen",
 ]
+# The emitter, and `compileTape` over it, for a front end that builds a tape
+# itself. `stan` needs this; the reverse does not hold.
+codegen = ["dep:stanwasm-codegen"]
 
 [dependencies]
 stanwasm-ast = { workspace = true, optional = true }

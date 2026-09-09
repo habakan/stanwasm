@@ -700,7 +700,8 @@ fn trace(model: &Model) -> Result<Compiled, EvalError> {
     Compiled::from(model, &dummy)
 }
 
-#[cfg(feature = "stan")]
+// Not Stan-specific: anything that compiles or evaluates reports through it.
+#[cfg(any(feature = "stan", feature = "codegen"))]
 fn jserr<E: std::fmt::Display>(e: E) -> JsError {
     JsError::new(&e.to_string())
 }
@@ -1096,4 +1097,74 @@ impl AotSampler {
         }
         Ok(out)
     }
+}
+
+/// What [`compile_tape`] produced, and everything [`AotSampler`] needs from it.
+#[cfg(feature = "codegen")]
+#[wasm_bindgen]
+pub struct CompiledTape {
+    wasm: Vec<u8>,
+    n_params: usize,
+    scratch_init: Vec<f64>,
+    layout_id: u32,
+}
+
+#[cfg(feature = "codegen")]
+#[wasm_bindgen]
+impl CompiledTape {
+    /// The module. Instantiate it against [`shared_memory`] and the `Math`
+    /// imports, then bind it with `setAotExports`.
+    #[wasm_bindgen(getter)]
+    pub fn wasm(&self) -> Vec<u8> {
+        self.wasm.clone()
+    }
+
+    #[wasm_bindgen(getter, js_name = nParams)]
+    pub fn n_params(&self) -> usize {
+        self.n_params
+    }
+
+    #[wasm_bindgen(getter, js_name = scratchInit)]
+    pub fn scratch_init(&self) -> Vec<f64> {
+        self.scratch_init.clone()
+    }
+
+    #[wasm_bindgen(getter, js_name = layoutId)]
+    pub fn layout_id(&self) -> u32 {
+        self.layout_id
+    }
+}
+
+/// Compile a tape written by another front end.
+///
+/// `tape` is the text format `stanwasm_codegen::tape_text` documents: one
+/// instruction per line, operands naming instructions rather than nodes. A
+/// front end that can build a tape reaches the same emitter `compileToWasm`
+/// uses, without going through the Stan parser — including one that is not
+/// Rust and not in this module.
+///
+/// The format is not an artifact and carries no compatibility promise: a tape
+/// is written and consumed inside one call.
+#[cfg(feature = "codegen")]
+#[wasm_bindgen(js_name = compileTape)]
+pub fn compile_tape(tape: &str) -> Result<CompiledTape, JsError> {
+    let program = stanwasm_codegen::tape_text::parse(tape).map_err(jserr)?;
+    let compiled = stanwasm_codegen::compile_tape(
+        &program.tape,
+        program.n_params,
+        program.root,
+        stanwasm_codegen::Reroll::default(),
+    )
+    .map_err(jserr)?;
+
+    let mut scratch_init = vec![0.0_f64; compiled.scratch_len];
+    let at = compiled.scratch_len - compiled.const_table.len();
+    scratch_init[at..].copy_from_slice(&compiled.const_table);
+
+    Ok(CompiledTape {
+        wasm: compiled.wasm,
+        n_params: compiled.n_params,
+        scratch_init,
+        layout_id: compiled.layout_id,
+    })
 }
