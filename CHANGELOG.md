@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] — 2026-09-09 (npm only)
+
+The crates.io publish waits on a nuts-rs release carrying
+[nuts-rs#76](https://github.com/pymc-devs/nuts-rs/pull/76). That fix is on
+their main branch but in no published version, and the `[patch.crates-io]`
+that picks it up here does not travel into a published crate — so a crate
+published today would build a module Safari refuses. The npm package ships the
+wasm built with the patch and is unaffected.
 
 ### Added
 
@@ -775,6 +782,7 @@ Comparable to the `nuts-rs` direct-call benchmark. See `docs/en/BENCHMARKS.md`.
   `sample()` behavior and correctly restores `logProbGrad`/`sample`
   afterward
 
+[0.5.0]: https://github.com/habakan/stanwasm/releases/tag/v0.5.0
 [0.4.0]: https://github.com/habakan/stanwasm/releases/tag/v0.4.0
 [0.3.0]: https://github.com/habakan/stanwasm/releases/tag/v0.3.0
 [0.2.0]: https://github.com/habakan/stanwasm/releases/tag/v0.2.0
