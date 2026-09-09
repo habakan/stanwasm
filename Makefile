@@ -114,6 +114,14 @@ smoke: wasm wasm-aot ## Node smoke tests against the built bundles
 # And the bundle built without the Stan front end, sampling that same module.
 	cd ts && $(NODE) tests/aot_only_bundle_smoke.ts
 
+# Not in CI: three engines is a large install per run, and the thing it checks
+# — that an engine accepts and runs an emitted module — changes with the
+# emitter, not with every commit. Run it when codegen or the sampler moves.
+.PHONY: browser
+browser: wasm ## Run a precompiled model in Chromium, Firefox and WebKit
+	cd browser-tests && npm install && npx playwright install chromium firefox webkit
+	cd browser-tests && npm test
+
 .PHONY: bench
 bench: wasm ## Node benchmark (replay vs AOT)
 	cd ts && $(NODE) tests/bench.ts
