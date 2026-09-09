@@ -92,9 +92,9 @@ if (worst !== 0) {
 console.log(`AotSampler reproduces sampleViaAot exactly (${draws} draws, same seed)`);
 
 // ---- the gradient entry point agrees with the model's ----------------------
-const at = new Float64Array([0.3, 1.1, -0.2]);
-const a = sampler.logProbGrad(at);
-const b = model.logProbGrad(at);
+const at2 = new Float64Array([0.3, 1.1, -0.2]);
+const a = sampler.logProbGrad(at2);
+const b = model.logProbGrad(at2);
 for (let i = 0; i < a.length; i++) {
   if (Math.abs(a[i] - b[i]) > 1e-12) {
     console.error(`FAIL: logProbGrad[${i}] ${a[i]} vs ${b[i]}`);
@@ -130,7 +130,7 @@ sampler.sample(init0, 10, 10, 42n);
 clearAotExports();
 let unbound = "";
 try {
-  sampler.logProbGrad(at);
+  sampler.logProbGrad(at2);
 } catch (e) {
   unbound = String(e);
 }
@@ -164,5 +164,39 @@ if (!wrongNames.includes("param_names has 2 entries")) {
   process.exit(1);
 }
 console.log("a scratch buffer or name list that cannot belong to the module is refused");
+
+// ---- a module carrying no ABI version is refused before anything else ------
+// Stripping the export is the only way to produce one here: every module this
+// build emits carries the number. A module from an older release would arrive
+// the same way.
+const stripped = new Uint8Array(moduleBytes);
+const marker = new TextEncoder().encode("stanwasm_abi_version");
+let at = -1;
+outer: for (let i = 0; i + marker.length <= stripped.length; i++) {
+  for (let j = 0; j < marker.length; j++) {
+    if (stripped[i + j] !== marker[j]) continue outer;
+  }
+  at = i;
+  break;
+}
+if (at < 0) {
+  console.error("FAIL: the emitted module exports no stanwasm_abi_version");
+  process.exit(1);
+}
+stripped[at] = "x".charCodeAt(0); // rename the export; the global stays
+
+const strippedInstance = await WebAssembly.instantiate(stripped, hostImports);
+setAotExports(strippedInstance.instance.exports);
+let noAbi = "";
+try {
+  sampler.logProbGrad(at2);
+} catch (e) {
+  noAbi = String(e);
+}
+if (!noAbi.includes("no version at all")) {
+  console.error(`FAIL: a module with no ABI version gave ${noAbi || "no error"}`);
+  process.exit(1);
+}
+console.log("a module that does not name an ABI this runtime knows is refused");
 
 console.log("OK");

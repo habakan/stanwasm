@@ -212,6 +212,44 @@ The emitted function declares one primal and one adjoint local per tape node, so
 
 The output validates without the `GC` feature in `wasmparser` — see `crates/stanwasm-codegen/tests/no_wasm_gc.rs`.
 
+## The module ABI, and what it promises
+
+A module `compileToWasm` emits can be saved and served later, and `AotSampler`
+will sample it with no model behind it. That makes the module a released
+artifact with a lifetime of its own, so what a host and a module have to agree
+on is written down here rather than left to whatever both happened to be built
+from.
+
+**The ABI is:** the imports a module asks for (`stan.memory`, and the subset of
+`Math.*` its tape reaches), `log_prob_grad`'s signature, the globals it
+exports, the layout of the scratch buffer it works in — two f64 per tape node,
+primals then adjoints, with the re-rolled loops' constant table at the tail —
+and the wasm proposals it may use.
+
+**A module carries its ABI number** as the immutable i32 global
+`stanwasm_abi_version` (`stanwasm_codegen::ABI_VERSION`, currently 1). A host
+compares it against the number that host was built with, and refuses anything
+else, naming both.
+
+**`stanwasm_layout_id` does not do this job and is not extended to.** It
+identifies the model and the buffer shape, and both sides of that comparison —
+the global in the module and the id kept beside it — come from the same build.
+They move together, so a host's own expectation never enters it. Two numbers,
+two questions: *is this the module my buffer belongs to*, and *is this a module
+I know how to run*.
+
+**The rule for changing it.** Bump `ABI_VERSION` for any change that would stop
+a newer host running an older module, or an older host running a newer one.
+Never for a change both survive — a new op with an emitter arm, a better
+instruction sequence, a smaller module are all invisible here. A bump is a
+breaking change and is released as one.
+
+**Version skew is refused, not tolerated.** A page that serves a precompiled
+module serves the runtime beside it, both static files the same person
+deployed, so the only way they disagree is upgrading one and not the other.
+Refusing that with a clear message costs a page nothing and catches the mistake
+at the first call rather than in the draws.
+
 ## Native vs wasm builds
 
 Same source tree, different feature surfaces:
