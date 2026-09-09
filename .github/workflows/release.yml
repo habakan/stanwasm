@@ -1,7 +1,7 @@
 name: release
 
 # Runs when a `v*` tag appears. It answers the two questions a release can get
-# wrong, and then publishes the npm package:
+# wrong, and then creates the GitHub release:
 #
 #   1. does the tag agree with what the manifests actually say?
 #   2. did anything ever verify the exact commit the tag points at?
@@ -10,12 +10,8 @@ name: release
 # an older commit, a rebased branch, or a local commit that was never pushed
 # through a PR can otherwise reach a release with nothing having checked it.
 #
-# The npm publish is here rather than on a maintainer's laptop so the tarball
-# carries a provenance attestation, which is what lets anyone tie the bytes on
-# the registry back to the commit and the workflow that built them. It costs no
-# stored credential: npm's trusted publishing exchanges this run's short-lived
-# OIDC token for publish rights, so there is still no NPM_TOKEN anywhere. The
-# crates.io half stays manual — see RELEASING.md.
+# Nothing here publishes. Both registries are published by hand from a local
+# checkout, and no job holds a credential for either — see RELEASING.md.
 on:
   push:
     tags: ["v*"]
