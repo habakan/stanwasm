@@ -82,6 +82,9 @@ smoke: wasm ## Node smoke tests against the built bundle
 	cd ts && $(NODE) tests/aot_smoke.ts
 # A module compiled ahead of time, sampled with no StanModel behind it.
 	cd ts && $(NODE) tests/aot_sampler_smoke.ts
+# The package entry point names its exports one by one, so a new binding can
+# ship in the wasm and be unreachable through the package.
+	cd ts && $(NODE) tests/facade_exports.mjs
 
 # Not in CI: three engines is a large install per run, and the thing it checks
 # — that an engine accepts and runs an emitted module — changes with the
