@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 # Floor set by nuts-rs 0.18 (edition 2024 + let-chains). Verified with
 # `cargo +1.88 test --workspace`.
@@ -21,18 +21,19 @@ repository = "https://github.com/habakan/stanwasm"
 [workspace.dependencies]
 # Each internal dep carries `path` (what local builds resolve) and `version` (what
 # `cargo publish` rewrites to). Bumping means these lines plus workspace.package.
-stanwasm-ast = { path = "crates/stanwasm-ast", version = "0.6.0" }
-stanwasm-parser = { path = "crates/stanwasm-parser", version = "0.6.0" }
-stanwasm-runtime = { path = "crates/stanwasm-runtime", version = "0.6.0" }
-stanwasm-codegen = { path = "crates/stanwasm-codegen", version = "0.6.0" }
-stanwasm = { path = "crates/stanwasm", version = "0.6.0" }
+stanwasm-ast = { path = "crates/stanwasm-ast", version = "0.7.0" }
+stanwasm-parser = { path = "crates/stanwasm-parser", version = "0.7.0" }
+stanwasm-runtime = { path = "crates/stanwasm-runtime", version = "0.7.0" }
+stanwasm-codegen = { path = "crates/stanwasm-codegen", version = "0.7.0" }
+stanwasm = { path = "crates/stanwasm", version = "0.7.0" }
 
 # The engine: the tape, its emitter, and the wasm-bindgen API over both. Split
-# out because nothing in it is about the Stan language. Pinned by rev until it
-# reaches crates.io, which waits on the same nuts-rs release this crate does.
-tapewasm-autodiff = { git = "https://github.com/habakan/tapewasm", rev = "44c96a9f089a9cc5d64b6549e46a02c90f5af5e6" }
-tapewasm-codegen = { git = "https://github.com/habakan/tapewasm", rev = "44c96a9f089a9cc5d64b6549e46a02c90f5af5e6" }
-tapewasm = { git = "https://github.com/habakan/tapewasm", rev = "44c96a9f089a9cc5d64b6549e46a02c90f5af5e6" }
+# out because nothing in it is about the Stan language. The rev is tapewasm's
+# own v0.1.0; the version beside it is what `cargo publish` rewrites to, once
+# crates.io opens for both — it waits on the same nuts-rs release.
+tapewasm-autodiff = { git = "https://github.com/habakan/tapewasm", rev = "50942d0948c0b8e44face865e3f1c3ce4583ffed", version = "0.1.0" }
+tapewasm-codegen = { git = "https://github.com/habakan/tapewasm", rev = "50942d0948c0b8e44face865e3f1c3ce4583ffed", version = "0.1.0" }
+tapewasm = { git = "https://github.com/habakan/tapewasm", rev = "50942d0948c0b8e44face865e3f1c3ce4583ffed", version = "0.1.0" }
 
 nuts-rs = { version = "0.18.1", default-features = false }
 wasm-bindgen = "0.2"
