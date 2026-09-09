@@ -53,7 +53,7 @@ await writeFile(resolve(fixtures, "model.wasm"), moduleBytes);
 
 // The same run, in Node, for the page to be compared against.
 const imports = {
-  stan: { memory: sharedMemory() },
+  tapewasm: { memory: sharedMemory() },
   Math: {
     exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos, pow: Math.pow,
     tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan,
@@ -62,7 +62,7 @@ const imports = {
 };
 const aot = await WebAssembly.instantiate(moduleBytes, imports);
 setAotExports(aot.instance.exports);
-meta.layoutId = aot.instance.exports.stanwasm_layout_id.value >>> 0;
+meta.layoutId = aot.instance.exports.tapewasm_layout_id.value >>> 0;
 
 const sampler = new AotSampler(
   meta.nParams, new Float64Array(meta.scratchInit), meta.layoutId, meta.paramNames,

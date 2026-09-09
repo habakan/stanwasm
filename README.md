@@ -7,11 +7,12 @@
 
 > **Status: alpha** — usable but pre-1.0, API may change, Stan language coverage is a subset (see below). Not a replacement for [cmdstan](https://github.com/stan-dev/cmdstan) or [Stan Playground](https://github.com/flatironinstitute/stan-playground); intended for browser-embedded use cases where those don't fit.
 
-Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~664 KB` wasm bundle (`~253 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
+Stan probabilistic models compiled and sampled entirely inside the browser. Pure Rust, single `~736 KB` wasm bundle (`~275 KB` gzipped), embedded [`nuts-rs`](https://github.com/pymc-devs/nuts-rs) sampler, zero backend required.
 
 **This is an independent implementation of the Stan language, not a port of
-Stan.** No stanc3, no Stan Math: the parser, the autodiff and the compiler are
-written here, and the sampler is `nuts-rs`. That is what buys the bundle size
+Stan.** No stanc3, no Stan Math: the parser is written here, the autodiff and
+the compiler are [tapewasm](https://github.com/habakan/tapewasm), and the
+sampler is `nuts-rs`. That is what buys the bundle size
 above, and it is also why the language is a subset. Log densities and gradients
 are checked against CmdStan, but a run here will not reproduce a Stan run draw
 for draw — the sampler is different code.
@@ -181,8 +182,8 @@ ordered by effort.
 ## Architecture
 
 [`ARCHITECTURE.md`](ARCHITECTURE.md) is the internals tour: the data flow from
-Stan source to samples, the seven-crate workspace layout, the autodiff tape
-design, the AOT codegen ABI, what differs between the native and wasm builds,
+Stan source to samples, the workspace layout and the engine it sits on, the
+autodiff tape design, the AOT codegen ABI, what differs between the native and wasm builds,
 and why wasm32 rather than wasm-gc. Performance numbers live in
 [`docs/en/BENCHMARKS.md`](docs/en/BENCHMARKS.md). Documentation is organized by
 language under `docs/en/` and `docs/ja/`.

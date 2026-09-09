@@ -4,7 +4,7 @@
 
 use crate::ops::{v_add, v_div, v_mul, v_sqrt, v_sub};
 use crate::value::Val;
-use stanwasm_autodiff::Tape;
+use tapewasm_autodiff::Tape;
 
 /// Sum of squares: ∑ vᵢ²
 pub fn vec_dot_self(t: &mut Tape, v: &[Val]) -> Val {

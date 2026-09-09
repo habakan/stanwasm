@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "crates/stanwasm-ast",
     "crates/stanwasm-parser",
-    "crates/stanwasm-autodiff",
     "crates/stanwasm-runtime",
     "crates/stanwasm-codegen",
     "crates/stanwasm",
@@ -21,13 +20,19 @@ repository = "https://github.com/habakan/stanwasm"
 
 [workspace.dependencies]
 # Each internal dep carries `path` (what local builds resolve) and `version` (what
-# `cargo publish` rewrites to). Bumping means these six lines plus workspace.package.
+# `cargo publish` rewrites to). Bumping means these lines plus workspace.package.
 stanwasm-ast = { path = "crates/stanwasm-ast", version = "0.6.0" }
 stanwasm-parser = { path = "crates/stanwasm-parser", version = "0.6.0" }
-stanwasm-autodiff = { path = "crates/stanwasm-autodiff", version = "0.6.0" }
 stanwasm-runtime = { path = "crates/stanwasm-runtime", version = "0.6.0" }
 stanwasm-codegen = { path = "crates/stanwasm-codegen", version = "0.6.0" }
 stanwasm = { path = "crates/stanwasm", version = "0.6.0" }
+
+# The engine: the tape, its emitter, and the wasm-bindgen API over both. Split
+# out because nothing in it is about the Stan language. Pinned by rev until it
+# reaches crates.io, which waits on the same nuts-rs release this crate does.
+tapewasm-autodiff = { git = "https://github.com/habakan/tapewasm", rev = "44c96a9f089a9cc5d64b6549e46a02c90f5af5e6" }
+tapewasm-codegen = { git = "https://github.com/habakan/tapewasm", rev = "44c96a9f089a9cc5d64b6549e46a02c90f5af5e6" }
+tapewasm = { git = "https://github.com/habakan/tapewasm", rev = "44c96a9f089a9cc5d64b6549e46a02c90f5af5e6" }
 
 nuts-rs = { version = "0.18.1", default-features = false }
 wasm-bindgen = "0.2"
@@ -45,6 +50,10 @@ codegen-units = 1
 panic = "abort"
 
 [profile.release.package."stanwasm"]
+opt-level = "z"
+
+# The engine ends up in the same bundle, so it wants the same trade.
+[profile.release.package."tapewasm"]
 opt-level = "z"
 
 # nuts-rs pulled pulp's relaxed-simd, which WebKit rejects — see README. #76 fixed it

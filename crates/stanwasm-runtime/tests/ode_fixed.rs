@@ -73,7 +73,7 @@ fn the_gradient_runs_through_the_solver() {
 /// parameter is — which is the whole reason this function exists.
 #[test]
 fn the_graph_does_not_depend_on_the_parameter() {
-    use stanwasm_autodiff::Tape;
+    use tapewasm_autodiff::Tape;
     let m = Model::parse_and_load(&decay(8), Env::new()).unwrap();
     let trace = |k: f64| {
         let mut tape = Tape::new();
@@ -168,7 +168,7 @@ fn the_tolerance_actually_controls_the_step() {
 /// parameter. That is exactly why the replay path refuses it.
 #[test]
 fn the_adaptive_graph_moves_with_the_parameter_and_replay_refuses() {
-    use stanwasm_autodiff::Tape;
+    use tapewasm_autodiff::Tape;
     let src = adaptive(", 1e-8, 1e-8, 100000");
     let m = Model::parse_and_load(&src, Env::new()).unwrap();
     let ops = |k: f64, strict: bool| {

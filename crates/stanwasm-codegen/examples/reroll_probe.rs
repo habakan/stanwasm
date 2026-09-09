@@ -7,9 +7,9 @@
 //! so the `K` where the `Always` column stops being flat is where it passed
 //! `reroll::MAX_BLOCK`.
 
-use stanwasm_autodiff::Tape;
 use stanwasm_codegen::{compile_with, Reroll};
 use stanwasm_runtime::{Env, Model, Val};
+use tapewasm_autodiff::Tape;
 
 const MULTIVARIATE_N: &str = r#"
 data {

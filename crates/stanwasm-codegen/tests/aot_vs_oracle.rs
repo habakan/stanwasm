@@ -1,20 +1,22 @@
-//! End-to-end: compile linear_regression / poisson_regression to wasm via
-//! stanwasm-codegen, instantiate with wasmi, and verify that the wasm-generated
-//! log_prob and gradients match the AST-evaluator oracle to floating-point
-//! precision.
+//! End-to-end: compile a Stan model to wasm, instantiate it with wasmi, and
+//! check the log_prob and gradients against the AST evaluator.
+//!
+//! The emitter's own tests are in tapewasm, against tapes built directly. What
+//! these add is the half in front of it: that tracing a model records the tape
+//! the evaluator would have walked.
 
-use stanwasm_codegen::{compile, compile_tape, Reroll};
+use stanwasm_codegen::compile;
 use stanwasm_runtime::{Env, Model};
 use wasmi::{Caller, Engine, Func, Linker, Memory, MemoryType, Module, Store};
 
 fn lgamma(x: f64) -> f64 {
-    stanwasm_autodiff::lgamma(x)
+    tapewasm_autodiff::lgamma(x)
 }
 fn digamma(x: f64) -> f64 {
-    stanwasm_autodiff::digamma(x)
+    tapewasm_autodiff::digamma(x)
 }
 fn phi(x: f64) -> f64 {
-    stanwasm_autodiff::phi_cdf(x)
+    tapewasm_autodiff::phi_cdf(x)
 }
 
 #[derive(Default)]
@@ -69,7 +71,7 @@ fn run_aot_log_prob_grad(
 
     let mut linker: Linker<HostState> = Linker::new(&engine);
     install_math(&mut linker, &mut store);
-    linker.define("stan", "memory", memory).unwrap();
+    linker.define("tapewasm", "memory", memory).unwrap();
 
     let instance = linker
         .instantiate_and_start(&mut store, &module)
@@ -293,10 +295,7 @@ model { for (n in 1:N) target += student_t_lccdf(y[n] | 4.0, a, 1.0); }
     let err = stanwasm_codegen::compile(&model, &[0.1])
         .expect_err("the Student-t tail has no AOT emitter")
         .to_string();
-    assert!(
-        err.contains("StudentTLccdf") && err.contains("sample()"),
-        "{err}"
-    );
+    assert!(err.contains("StudentTLccdf"), "{err}");
 }
 
 /// Enough data points that the emitter re-rolls the vectorised statement into
@@ -639,7 +638,7 @@ fn layout_id_is_exported_and_identifies_the_buffers() {
         if let wasmparser::Payload::ExportSection(section) = payload.unwrap() {
             for export in section {
                 let export = export.unwrap();
-                if export.name == "stanwasm_layout_id" {
+                if export.name == "tapewasm_layout_id" {
                     found = Some(export.kind);
                 }
             }
@@ -650,52 +649,4 @@ fn layout_id_is_exported_and_identifies_the_buffers() {
         Some(wasmparser::ExternalKind::Global),
         "the module exports no layout id global"
     );
-}
-
-// A tape recorded without going through the Stan AST: the shape another front
-// end would hand [`compile_tape`]. The tape's own reverse pass is the oracle.
-#[test]
-fn hand_built_tape_matches_its_own_backward_pass() {
-    use stanwasm_autodiff::Tape;
-
-    let params = [0.7, 1.3];
-    let mut tape = Tape::new();
-    let leaves: Vec<u32> = params.iter().map(|p| tape.new_var(*p)).collect();
-    let (a, b) = (leaves[0], leaves[1]);
-    let log_a = tape.log(a);
-    let log_a_b = tape.mul(log_a, b);
-    let diff = tape.sub(a, b);
-    let exp_diff = tape.exp(diff);
-    let root = tape.add(log_a_b, exp_diff);
-
-    let compiled = compile_tape(&tape, params.len(), root, Reroll::default()).unwrap();
-    let (lp, grads) = run_aot_log_prob_grad(
-        &compiled.wasm,
-        compiled.n_params,
-        &params,
-        compiled.scratch_len,
-        &compiled.const_table,
-    );
-
-    tape.backward(root);
-    assert!(close(lp, tape.value(root), 1e-12), "log_prob {lp}");
-    for (i, leaf) in leaves.iter().enumerate() {
-        let want = tape.grad_at(*leaf);
-        assert!(
-            close(grads[i], want, 1e-12),
-            "grad {i}: {} vs {want}",
-            grads[i]
-        );
-    }
-}
-
-#[test]
-fn compile_tape_rejects_a_param_count_the_tape_does_not_open_with() {
-    use stanwasm_autodiff::Tape;
-
-    let mut tape = Tape::new();
-    let a = tape.new_var(0.5);
-    let root = tape.exp(a);
-    let err = compile_tape(&tape, 2, root, Reroll::default()).unwrap_err();
-    assert!(err.to_string().contains("n_params is 2"), "{err}");
 }

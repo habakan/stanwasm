@@ -221,9 +221,9 @@ fn install_math(linker: &mut Linker<HostState>, store: &mut Store<HostState>) {
     unary!("log", f64::ln);
     unary!("sin", f64::sin);
     unary!("cos", f64::cos);
-    unary!("lgamma", stanwasm_autodiff_lgamma);
-    unary!("digamma", stanwasm_autodiff_digamma);
-    unary!("phi", stanwasm_autodiff_phi);
+    unary!("lgamma", tapewasm_autodiff_lgamma);
+    unary!("digamma", tapewasm_autodiff_digamma);
+    unary!("phi", tapewasm_autodiff_phi);
     let pow = Func::wrap(
         &mut *store,
         |_: Caller<'_, HostState>, x: f64, y: f64| -> f64 { x.powf(y) },
@@ -231,14 +231,14 @@ fn install_math(linker: &mut Linker<HostState>, store: &mut Store<HostState>) {
     linker.define("Math", "pow", pow).unwrap();
 }
 
-fn stanwasm_autodiff_lgamma(x: f64) -> f64 {
-    stanwasm_autodiff::lgamma(x)
+fn tapewasm_autodiff_lgamma(x: f64) -> f64 {
+    tapewasm_autodiff::lgamma(x)
 }
-fn stanwasm_autodiff_digamma(x: f64) -> f64 {
-    stanwasm_autodiff::digamma(x)
+fn tapewasm_autodiff_digamma(x: f64) -> f64 {
+    tapewasm_autodiff::digamma(x)
 }
-fn stanwasm_autodiff_phi(x: f64) -> f64 {
-    stanwasm_autodiff::phi_cdf(x)
+fn tapewasm_autodiff_phi(x: f64) -> f64 {
+    tapewasm_autodiff::phi_cdf(x)
 }
 
 fn bench_aot_via_wasmi(
@@ -258,7 +258,7 @@ fn bench_aot_via_wasmi(
     let mut linker: Linker<HostState> = Linker::new(&engine);
     install_math(&mut linker, &mut store);
     linker
-        .define("stan", "memory", memory)
+        .define("tapewasm", "memory", memory)
         .map_err(|e| anyhow::anyhow!("define memory: {e}"))?;
     let instance = linker
         .instantiate_and_start(&mut store, &module)

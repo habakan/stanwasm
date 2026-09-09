@@ -45,7 +45,7 @@ const artifact = {
 };
 
 const hostImports = {
-  stan: { memory: sharedMemory() as WebAssembly.Memory },
+  tapewasm: { memory: sharedMemory() as WebAssembly.Memory },
   Math: {
     exp: Math.exp, log: Math.log, sin: Math.sin, cos: Math.cos, pow: Math.pow,
     tan: Math.tan, asin: Math.asin, acos: Math.acos, atan: Math.atan,
@@ -60,7 +60,7 @@ setAotExports(aot.instance.exports);
 // The id is read off the module itself, the way a page with only the artifact
 // would have to.
 const layoutId = (aot.instance.exports as Record<string, WebAssembly.Global>)
-  .stanwasm_layout_id.value as number;
+  .tapewasm_layout_id.value as number;
 
 const sampler = new AotSampler(
   artifact.nParams,
@@ -170,7 +170,7 @@ console.log("a scratch buffer or name list that cannot belong to the module is r
 // build emits carries the number. A module from an older release would arrive
 // the same way.
 const stripped = new Uint8Array(moduleBytes);
-const marker = new TextEncoder().encode("stanwasm_abi_version");
+const marker = new TextEncoder().encode("tapewasm_abi_version");
 let at = -1;
 outer: for (let i = 0; i + marker.length <= stripped.length; i++) {
   for (let j = 0; j < marker.length; j++) {
@@ -180,7 +180,7 @@ outer: for (let i = 0; i + marker.length <= stripped.length; i++) {
   break;
 }
 if (at < 0) {
-  console.error("FAIL: the emitted module exports no stanwasm_abi_version");
+  console.error("FAIL: the emitted module exports no tapewasm_abi_version");
   process.exit(1);
 }
 stripped[at] = "x".charCodeAt(0); // rename the export; the global stays

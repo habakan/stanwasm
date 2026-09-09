@@ -55,17 +55,26 @@ The "tape replay" and "AOT" paths are both available via `StanModel::sample` and
 
 ## Workspace layout
 
-Seven crates, one TS facade.
+Five crates here, plus the engine, plus one TS facade.
+
+The tape, the emitter and the sampler live in
+[tapewasm](https://github.com/habakan/tapewasm), because none of them is about
+the Stan language: a tape is a flat list of arithmetic, and what wrote it makes
+no difference to either. What remains in this repository is the front end onto
+them — the parser, the evaluator, the constraint transforms, and the
+`StanModel` API.
 
 | Crate | Target | Role |
 |---|---|---|
 | `stanwasm-ast` | lib (native + wasm) | AST type definitions shared by parser, runtime, codegen. Optional `serde` for golden-value tests. |
 | `stanwasm-parser` | lib | Hand-written recursive-descent parser. Token enum + lexer + Pratt precedence climbing for expressions. |
-| `stanwasm-autodiff` | lib | Reverse-mode autodiff tape (SoA `Vec<f64>` / `Vec<u32>`). Per-op enum, 30 supported ops — 28 scalar plus a contraction and a reduction that each stand for a whole run of values — CSE caches for log/exp, O(1) reset via generation counter, and `forward_replay` for the sampling hot loop. |
 | `stanwasm-runtime` | lib (native by default) | Distributions, constraint transforms, Stan-program evaluator. `Compiled` struct wraps a frozen tape + root index for the replay path. The native-only AST evaluator is the **golden oracle** used in tests; production wasm does not reach it. |
-| `stanwasm-codegen` | lib | Emits per-model wasm via `wasm-encoder`. ABI imports memory from the host; exports `log_prob_grad(params_ptr, grads_ptr, n_params, scratch_ptr)`. No WAT, no `wabt`. |
-| `stanwasm` | cdylib (wasm32) | wasm-bindgen public API. Embeds `nuts-rs` (Rust crate) for sampling. Exposes `StanModel` class, `setAotExports` bridge, and the `aot_logp` JS shim. |
+| `stanwasm-codegen` | lib | Traces a model onto a tape and hands it to `tapewasm-codegen`. Re-exports what that crate exports, so a caller needs one dependency rather than two. |
+| `stanwasm` | cdylib (wasm32) | wasm-bindgen public API. Exposes `StanModel`, and re-exports `tapewasm`'s own bindings — `AotSampler`, `compileTape`, `setAotExports` — into the same bundle. |
 | `stanwasm-cli` | bin (native) | Development CLI. `bench all` times AST eval / replay / AOT (via `wasmi`) / end-to-end sampling. |
+| `tapewasm-autodiff` | lib, external | Reverse-mode autodiff tape (SoA `Vec<f64>` / `Vec<u32>`). Per-op enum, 30 supported ops — 28 scalar plus a contraction and a reduction that each stand for a whole run of values — CSE caches for log/exp, O(1) reset via generation counter, and `forward_replay` for the sampling hot loop. |
+| `tapewasm-codegen` | lib, external | Emits per-model wasm via `wasm-encoder`. ABI imports memory from the host; exports `log_prob_grad(params_ptr, grads_ptr, n_params, scratch_ptr)`. No WAT, no `wabt`. |
+| `tapewasm` | cdylib (wasm32), external | The sampler, `AotSampler`, and `compileTape`. Linked into this bundle; also publishable on its own for a page that carries no model language. |
 
 The `ts/` directory holds the wasm-pack output, hand-written facade, and Node.js integration tests. `examples/gallery/` is a Vite + React demo (tabbed: live regression, hierarchical shrinkage, a fuller API tour) that consumes the local `ts/` package as a `file:` dep.
 
@@ -114,7 +123,7 @@ for each leapfrog step in nuts-rs:
 
 ### Hot path: `sampleViaAot` (V8-JIT'd AOT)
 
-The recorded tape is one-shot rewritten to wasm32 by `stanwasm-codegen`. A small trace becomes straight-line code, every node a sequence of wasm instructions writing to a function-local `f64`; V8 JITs that aggressively. Past a few thousand nodes it stops, so the emitter finds the repeated blocks a vectorised statement leaves on the tape and re-rolls each into a loop over a caller-owned scratch buffer, running two repeats at a time as `f64x2` where the addresses allow. Which of the two an engine prefers is a per-engine matter and selectable — see `Reroll` in `stanwasm-codegen`.
+The recorded tape is one-shot rewritten to wasm32 by `tapewasm-codegen`. A small trace becomes straight-line code, every node a sequence of wasm instructions writing to a function-local `f64`; V8 JITs that aggressively. Past a few thousand nodes it stops, so the emitter finds the repeated blocks a vectorised statement leaves on the tape and re-rolls each into a loop over a caller-owned scratch buffer, running two repeats at a time as `f64x2` where the addresses allow. Which of the two an engine prefers is a per-engine matter and selectable — see `Reroll` in `tapewasm-codegen`.
 
 Per-leapfrog step:
 - `nuts-rs` calls `aot_logp(params_ptr, grads_ptr, n, scratch_ptr)` (a wasm-bindgen import)
@@ -128,7 +137,7 @@ Default: each wasm-pack-built bundle has one linear memory exported as `memory`.
 ```js
 const stanMemory = sharedMemory();             // WebAssembly.Memory of stanwasm
 const aot = await WebAssembly.instantiate(model.compileToWasm(), {
-  stan: { memory: stanMemory },                 // AOT imports stan's memory
+  tapewasm: { memory: stanMemory },             // the AOT module imports it
   Math: { exp, log, sin, cos, pow, phi },       // only what JS already has, plus phi
 });
 setAotExports(aot.instance.exports);            // bind aot_logp -> aot.log_prob_grad
@@ -145,7 +154,7 @@ This shared-memory design avoids any per-call JS-side `memcpy` between the two w
 
 ## Autodiff tape design
 
-`stanwasm-autodiff::Tape` is a struct of arrays:
+`tapewasm-autodiff::Tape` is a struct of arrays:
 
 ```rust
 val:   Vec<f64>     // primal value at each node
@@ -162,9 +171,9 @@ Direct-mapped CSE caches dedupe `log(x)` and `exp(x)` on the same tape index (ve
 
 Initial capacity: 65 536 nodes. Vec grows automatically; we do not pre-reserve from JS hints.
 
-## AOT codegen design (`stanwasm-codegen`)
+## AOT codegen design (`tapewasm-codegen`)
 
-After `Compiled::from` runs the trace on a `Tape`, `stanwasm-codegen::compile` walks `tape.op_at(k)` once and emits:
+After `Compiled::from` runs the trace on a `Tape`, `tapewasm-codegen::compile_tape` walks `tape.op_at(k)` once and emits:
 
 ```
 fn log_prob_grad(params_ptr: i32, grads_ptr: i32, n_params: i32) -> f64
@@ -208,7 +217,7 @@ Imports are emitted only for math functions the recorded tape actually used (`sc
 
 The emitted function declares one primal and one adjoint local per tape node, so a trace of *n* nodes needs *2n* wasm locals. V8 accepts at most **50,000 locals per function**, which caps the AOT path at a tape of ~25,000 nodes. Because the trace is fully unrolled, tape length grows with the data: a vectorized `y ~ normal(alpha + beta * x, sigma)` uses roughly a dozen nodes per observation, so the ceiling lands somewhere around `N ≈ 2,000` for that model and lower for models that do more work per observation.
 
-`stanwasm-codegen::compile` checks this before emitting and returns `CodegenError::TooManyLocals` rather than producing a module that fails to instantiate in the browser with an opaque `CompileError: local count too large`. The tape-replay path (`StanModel::sample`) has no such limit — it interprets the same tape and is the fallback for large models.
+`tapewasm-codegen::compile_tape` checks this before emitting and returns `CodegenError::TooManyLocals` rather than producing a module that fails to instantiate in the browser with an opaque `CompileError: local count too large`. The tape-replay path (`StanModel::sample`) has no such limit — it interprets the same tape and is the fallback for large models.
 
 The output validates without the `GC` feature in `wasmparser` — see `crates/stanwasm-codegen/tests/no_wasm_gc.rs`.
 
@@ -227,11 +236,11 @@ primals then adjoints, with the re-rolled loops' constant table at the tail —
 and the wasm proposals it may use.
 
 **A module carries its ABI number** as the immutable i32 global
-`stanwasm_abi_version` (`stanwasm_codegen::ABI_VERSION`, currently 1). A host
+`tapewasm_abi_version` (`tapewasm_codegen::ABI_VERSION`, currently 1). A host
 compares it against the number that host was built with, and refuses anything
 else, naming both.
 
-**`stanwasm_layout_id` does not do this job and is not extended to.** It
+**`tapewasm_layout_id` does not do this job and is not extended to.** It
 identifies the model and the buffer shape, and both sides of that comparison —
 the global in the module and the id kept beside it — come from the same build.
 They move together, so a host's own expectation never enters it. Two numbers,
@@ -292,11 +301,11 @@ The CI workflow (`.github/workflows/test.yml`) reproduces step 1 + 2 on Linux an
 
 Three layers of confidence:
 
-1. **Per-operation unit tests** in `stanwasm-autodiff/tests/gradients.rs`. Each derivative is checked analytically against hand-computed values.
+1. **Per-operation unit tests** in tapewasm's `tapewasm-autodiff/tests/gradients.rs`. Each derivative is checked analytically against hand-computed values.
 
 2. **Whole-model finite-difference tests** in `stanwasm-runtime/tests/log_prob.rs`. For each model that exercises a distribution / constraint, the autodiff-produced gradient is compared to a central-difference numerical gradient and required to agree to ~1e-4.
 
-3. **AOT-vs-oracle equivalence** in `stanwasm-codegen/tests/aot_vs_oracle.rs`. The codegen-emitted wasm is instantiated under `wasmi`, fed the same parameters as the AST evaluator, and the resulting `(log_prob, gradient)` pair is required to agree to 1e-12. The `no_wasm_gc.rs` companion pins that the output does not use `WasmFeatures::GC`.
+3. **AOT-vs-oracle equivalence** in `stanwasm-codegen/tests/aot_vs_oracle.rs`. The emitted wasm is instantiated under `wasmi`, fed the same parameters as the AST evaluator, and the resulting `(log_prob, gradient)` pair is required to agree to 1e-12. tapewasm holds the emitter to its own tape's reverse pass; what this adds is that tracing a model records the tape the evaluator would have walked. The `no_wasm_gc.rs` companion pins that the output does not use `WasmFeatures::GC`.
 
 End-to-end sampling is exercised by `stanwasm/tests/sampling.rs`: it runs the full nuts-rs loop on `linear_regression` and asserts the posterior mean of β recovers the true slope to within 0.3 over 400 post-warmup draws.
 

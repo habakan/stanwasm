@@ -14,7 +14,7 @@ use crate::error::EvalError;
 use crate::matrix::{cholesky_decompose, mat_mdiv_ltri_low, mat_vec_mul, vec_dot_self};
 use crate::ops::{v_abs, v_add, v_div, v_exp, v_lgamma, v_log, v_mul, v_neg, v_sub, v_sum};
 use crate::value::Val;
-use stanwasm_autodiff::Tape;
+use tapewasm_autodiff::Tape;
 
 type Result<T> = std::result::Result<T, EvalError>;
 
@@ -860,7 +860,7 @@ fn broadcast_elem(v: &Val, i: usize) -> Val {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stanwasm_autodiff::lgamma;
+    use tapewasm_autodiff::lgamma;
 
     /// K=2 has one free parameter ρ, so the kernel is `(2η-2)·log(L[1][1])`
     /// exactly, and the constant at K=2 is `lgamma(η+½) − lgamma(η) − ½log π`.

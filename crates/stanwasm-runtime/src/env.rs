@@ -6,7 +6,7 @@ use std::rc::Rc;
 use crate::value::Val;
 use rand::rngs::ChaCha8Rng;
 use stanwasm_ast::FuncDef;
-use stanwasm_autodiff::Tape;
+use tapewasm_autodiff::Tape;
 
 /// One binding, carrying whether the *declared* Stan type is integral. It lives
 /// here and not in `Val` because it is static, and only `/` cares.

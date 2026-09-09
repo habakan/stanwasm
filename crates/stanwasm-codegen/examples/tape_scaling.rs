@@ -7,9 +7,9 @@
 //! same likelihood written as a loop, and for a vectorised one — which is the
 //! comparison that matters, since only the last re-rolls.
 
-use stanwasm_autodiff::Tape;
 use stanwasm_codegen::compile;
 use stanwasm_runtime::{Env, Model, Val};
+use tapewasm_autodiff::Tape;
 
 const MULTIVARIATE_LKJ: &str = r#"
 data {

@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 stanwasm-parser.workspace = true
-stanwasm-autodiff.workspace = true
+tapewasm-autodiff.workspace = true
 stanwasm-runtime = { workspace = true, features = ["json"] }
 stanwasm-codegen.workspace = true
 stanwasm.workspace = true

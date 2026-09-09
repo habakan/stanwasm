@@ -697,7 +697,7 @@ dependencies = [
  "stanwasm-codegen",
  "stanwasm-parser",
  "stanwasm-runtime",
- "thiserror",
+ "tapewasm",
  "wasm-bindgen",
  "wasmparser 0.258.0",
 ]
@@ -710,19 +710,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "stanwasm-autodiff"
-version = "0.6.0"
-
-[[package]]
 name = "stanwasm-cli"
 version = "0.6.0"
 dependencies = [
  "anyhow",
  "stanwasm",
- "stanwasm-autodiff",
  "stanwasm-codegen",
  "stanwasm-parser",
  "stanwasm-runtime",
+ "tapewasm-autodiff",
  "wasmi",
 ]
 
@@ -730,9 +726,9 @@ dependencies = [
 name = "stanwasm-codegen"
 version = "0.6.0"
 dependencies = [
- "stanwasm-ast",
- "stanwasm-autodiff",
  "stanwasm-runtime",
+ "tapewasm-autodiff",
+ "tapewasm-codegen",
  "thiserror",
  "wasm-encoder",
  "wasmi",
@@ -756,8 +752,8 @@ dependencies = [
  "serde",
  "serde_json",
  "stanwasm-ast",
- "stanwasm-autodiff",
  "stanwasm-parser",
+ "tapewasm-autodiff",
  "thiserror",
 ]
 
@@ -802,6 +798,35 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tapewasm"
+version = "0.1.0"
+source = "git+https://github.com/habakan/tapewasm?rev=44c96a9f089a9cc5d64b6549e46a02c90f5af5e6#44c96a9f089a9cc5d64b6549e46a02c90f5af5e6"
+dependencies = [
+ "console_error_panic_hook",
+ "getrandom",
+ "nuts-rs",
+ "rand",
+ "tapewasm-codegen",
+ "thiserror",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "tapewasm-autodiff"
+version = "0.1.0"
+source = "git+https://github.com/habakan/tapewasm?rev=44c96a9f089a9cc5d64b6549e46a02c90f5af5e6#44c96a9f089a9cc5d64b6549e46a02c90f5af5e6"
+
+[[package]]
+name = "tapewasm-codegen"
+version = "0.1.0"
+source = "git+https://github.com/habakan/tapewasm?rev=44c96a9f089a9cc5d64b6549e46a02c90f5af5e6#44c96a9f089a9cc5d64b6549e46a02c90f5af5e6"
+dependencies = [
+ "tapewasm-autodiff",
+ "thiserror",
+ "wasm-encoder",
 ]
 
 [[package]]

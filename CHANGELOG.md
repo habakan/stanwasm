@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The tape, the emitter and the sampler moved to
+  [tapewasm](https://github.com/habakan/tapewasm).** None of them is about the
+  Stan language, and a front end reaching for them from somewhere else had to
+  depend on a package named for a language it does not use. What is left here
+  is the Stan front end onto them; `stanwasm-autodiff` is now
+  `tapewasm-autodiff`, and `stanwasm-codegen` is the tracing half with the
+  emitter behind it.
+- **The emitted module renames what it exports and imports.** The globals are
+  `tapewasm_layout_id` and `tapewasm_abi_version`, and shared memory is
+  imported as `tapewasm.memory` rather than `stan.memory`. A page that
+  instantiates a module itself passes the new import name; a module built by an
+  earlier version exports neither global, so binding one is refused rather than
+  mixed. Nothing changes for a page that only calls `sampleViaAot`.
+- **The npm bundle keeps every export it had** — `AotSampler`, `compileTape`,
+  `setAotExports`, `sharedMemory` — plus `tapewasmVersion` beside `version`.
+
+### Removed
+
+- **The `stan` and `codegen` cargo features, and the `ts/pkg-aot` bundle.** The
+  bundle without the Stan front end is what `tapewasm` now is, built there by
+  `make wasm-sampler`; building it from this crate would only produce the same
+  thing under a name that says Stan.
+
 ## [0.6.0] — 2026-09-09 (npm only)
 
 crates.io still waits on a nuts-rs release carrying
@@ -401,7 +426,7 @@ the next check is a test run rather than a manual build.
 - `lgamma`, `digamma` and `trigamma` were asymptotic series stopped where the
   first dropped term was still around 2e-9, which is what a gradient through
   `student_t` was worth. Against a reference computed at 60 decimal digits they
-  now hold to 1e-14, pinned by `stanwasm-autodiff`'s tests.
+  now hold to 1e-14, pinned by `tapewasm-autodiff`'s tests.
 
 ### Added
 
@@ -596,7 +621,7 @@ earlier published version.
 - `chacha20` 0.10.0 -> 0.10.2 and `spin` 0.9.8 -> 0.9.9 in `Cargo.lock`; both
   earlier versions were yanked. Lockfile only, no manifest change.
 - Every crate is renamed to a `stanwasm` prefix: `stanwasm-ast`,
-  `stanwasm-parser`, `stanwasm-autodiff`, `stanwasm-runtime`,
+  `stanwasm-parser`, `tapewasm-autodiff`, `stanwasm-runtime`,
   `stanwasm-codegen`, `stanwasm-cli`, and `stan-wasm-api` becomes plain
   `stanwasm` — the same name as the npm package. crates.io is a flat namespace
   and never frees a name once taken, so shipping `stan-parser` and
@@ -764,7 +789,7 @@ earlier published version.
 
 ### Architecture
 
-- Seven Rust crates: `stanwasm-ast`, `stanwasm-parser`, `stanwasm-autodiff`,
+- Seven Rust crates: `stanwasm-ast`, `stanwasm-parser`, `tapewasm-autodiff`,
   `stanwasm-runtime`, `stanwasm-codegen`, `stanwasm`, `stanwasm-cli`
 - Single wasm bundle (~431 KB after `wasm-opt`, including `rand`/
   `rand_distr` for `generated quantities` RNG support) shipping the

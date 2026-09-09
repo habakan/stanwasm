@@ -65,7 +65,7 @@ make smoke
 
 ## Pull request guidelines
 
-1. **One concern per PR.** Distribution additions, codegen optimizations, and doc tweaks all separate.
+1. **One concern per PR.** Distribution additions, codegen optimizations, and doc tweaks all separate. A change to the tape, the emitter or the sampler belongs in [tapewasm](https://github.com/habakan/tapewasm) instead — this repository is the Stan front end onto them.
 2. **Test coverage.** New distributions need at least:
    - one finite-difference gradient check in `crates/stanwasm-runtime/tests/`
    - one oracle-vs-AOT comparison in `crates/stanwasm-codegen/tests/`

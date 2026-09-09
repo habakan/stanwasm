@@ -3,8 +3,8 @@
 //! and forces a page reload in the browser). Every case here is reachable from
 //! hand-written Stan source, e.g. via the gallery's Wasm Sandbox tab.
 
-use stanwasm_autodiff::Tape;
 use stanwasm_runtime::{data_from_json, Env, EvalError, Model, Val};
+use tapewasm_autodiff::Tape;
 
 fn load(src: &str, data: &str) -> Result<Model, String> {
     let env = data_from_json(data).map_err(|e| e.to_string())?;

@@ -11,8 +11,8 @@ use crate::ops::{
 };
 use crate::value::{Shape, Val};
 use stanwasm_ast::{Expr, FuncDef, SliceIdx, StanType, Stmt};
-use stanwasm_autodiff::Tape;
 use std::f64::consts::PI;
+use tapewasm_autodiff::Tape;
 
 type Result<T> = std::result::Result<T, EvalError>;
 
