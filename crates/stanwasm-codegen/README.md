@@ -23,4 +23,4 @@ on it.
 Stan language coverage is a documented subset — see the workspace
 [README](https://github.com/habakan/stanwasm#stan-language-coverage).
 
-Licensed under Apache-2.0.
+Licensed under either of Apache-2.0 or MIT, at your option.

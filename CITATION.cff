@@ -17,7 +17,9 @@ keywords:
   - nuts
   - rust
   - probabilistic-programming
-license: Apache-2.0
+license:
+  - Apache-2.0
+  - MIT
 repository-code: 'https://github.com/habakan/stanwasm'
-version: 0.7.1
+version: 0.7.2
 date-released: 2026-09-10

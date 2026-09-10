@@ -686,7 +686,7 @@ checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
 
 [[package]]
 name = "stanwasm"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -704,14 +704,14 @@ dependencies = [
 
 [[package]]
 name = "stanwasm-ast"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "stanwasm-cli"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "stanwasm",
@@ -724,7 +724,7 @@ dependencies = [
 
 [[package]]
 name = "stanwasm-codegen"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "stanwasm-runtime",
  "tapewasm-autodiff",
@@ -737,7 +737,7 @@ dependencies = [
 
 [[package]]
 name = "stanwasm-parser"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "stanwasm-ast",
  "thiserror",
@@ -745,7 +745,7 @@ dependencies = [
 
 [[package]]
 name = "stanwasm-runtime"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "rand",
  "rand_distr",

@@ -157,22 +157,24 @@ package: package-crates package-npm ## Dry-run packaging every crate + the npm t
 .PHONY: package-crates
 package-crates: ## Dry-run packaging every crate (needs tapewasm on crates.io)
 	cargo package --workspace --no-verify
-# Apache-2.0 requires the licence text to travel with the artifact, and
-# `cargo package` only collects files inside the crate directory — the LICENSE
-# at the repo root reaches no tarball on its own.
+# Both licence texts have to travel with the artifact — the offer is either one,
+# so shipping half of it is not the offer — and `cargo package` only collects
+# files inside the crate directory, so the copies at the repo root reach none.
 	@list=$$(mktemp); \
 	for f in target/package/*.crate; do \
 	  tar tzf "$$f" > "$$list"; \
-	  grep -q '/LICENSE$$' "$$list" \
-	    || { echo "error: $$f ships no LICENSE" >&2; rm -f "$$list"; exit 1; }; \
+	  for l in LICENSE-APACHE LICENSE-MIT; do \
+	    grep -q "/$$l\$$" "$$list" \
+	      || { echo "error: $$f ships no $$l" >&2; rm -f "$$list"; exit 1; }; \
+	  done; \
 	done; \
 	rm -f "$$list"
-	@echo "LICENSE present in every .crate"
+	@echo "both licences present in every .crate"
 
 .PHONY: package-npm
 package-npm: wasm ## Dry-run the npm tarball, licence and wasm checks included
 # Two invisible failures. `npm pack` collects only files under `ts/`, so the
-# repo-root LICENSE reaches no tarball on its own. And `wasm-pack` writes its
+# repo-root licences reach no tarball on their own. And `wasm-pack` writes its
 # own `.gitignore` (containing `*`) into `ts/pkg/`, which npm honours when no
 # `.npmignore` sits beside it — that once published a package carrying no wasm
 # at all. A published version cannot be taken back, so both are asserted.
