@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/stanwasm?logo=npm&color=cb3837)](https://www.npmjs.com/package/stanwasm)
 [![crates.io](https://img.shields.io/crates/v/stanwasm?logo=rust&color=e43717)](https://crates.io/crates/stanwasm)
 [![bundle](https://img.shields.io/badge/wasm-664%20KB%20%7C%20253%20KB%20gzip-654ff0?logo=webassembly&logoColor=white)](https://github.com/habakan/stanwasm/blob/main/docs/en/BENCHMARKS.md)
-[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/habakan/stanwasm/blob/main/LICENSE)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](https://github.com/habakan/stanwasm/blob/main/LICENSE-APACHE)
 
 Stan probabilistic models compiled and sampled **entirely in the browser**.
 Pure Rust compiled to WebAssembly, a single ~664 KB bundle (~253 KB gzipped),
@@ -107,4 +107,4 @@ Runnable demos, the supported Stan subset, benchmarks and the architecture
 write-up all live in the repository:
 **<https://github.com/habakan/stanwasm>**
 
-Licensed under Apache-2.0.
+Licensed under either of Apache-2.0 or MIT, at your option.

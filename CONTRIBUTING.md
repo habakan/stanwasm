@@ -97,4 +97,5 @@ For broader Stan ecosystem coordination, ping me on Stan Discourse or @habakan o
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the same Apache-2.0 license as the project.
+By contributing, you agree that your contributions will be dual licensed as
+Apache-2.0 or MIT, the same as the project, with no additional terms.

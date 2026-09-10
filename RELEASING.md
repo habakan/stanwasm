@@ -29,6 +29,9 @@ It appears in four places, and nothing keeps them in sync automatically:
 | `ts/package.json` | `version` |
 | `CITATION.cff` | `version`, `date-released` |
 
+`LICENSE-APACHE` and `LICENSE-MIT` both have to sit beside every crate
+manifest and in `ts/`; `make package-npm` fails if either is missing.
+
 Cargo does not accept `version.workspace` inside `[workspace.dependencies]`,
 which is why the six requirements are written out by hand.
 
@@ -53,7 +56,9 @@ yet, so it fails resolving rather than checking anything. It waits on the same
 nuts-rs release step 5 does. `package-npm` is the half that runs, and it is the
 half these releases actually ship.
 
-The two halves assert what is invisible until someone installs the result. That the Apache-2.0 licence text is inside every artifact — `cargo
+The two halves assert what is invisible until someone installs the result. That
+both licence texts are inside every artifact — the offer is either one, so
+shipping half of it is not the offer, and `cargo
 package` and `npm pack` each collect only files under their own directory, so
 the repo-root `LICENSE` reaches no tarball on its own. And that `pkg/` carries
 the wasm: `wasm-pack` writes its own `.gitignore` (containing `*`) into

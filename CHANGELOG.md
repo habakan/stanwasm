@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-09-10 (npm only)
+
+### Changed
+
+- **Dual licensed: MIT OR Apache-2.0, at your option.** Nobody loses a right —
+  this only adds one — but a project that is itself MIT no longer has to carry a
+  second licence's notice obligations to use any of this. Apache-2.0 stays
+  available for its patent grant. Earlier versions remain Apache-2.0 for anyone
+  who took them.
+
 ## [0.7.1] — 2026-09-10 (npm only)
 
 ### Fixed
@@ -871,7 +881,8 @@ Comparable to the `nuts-rs` direct-call benchmark. See `docs/en/BENCHMARKS.md`.
   `sample()` behavior and correctly restores `logProbGrad`/`sample`
   afterward
 
-[Unreleased]: https://github.com/habakan/stanwasm/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/habakan/stanwasm/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/habakan/stanwasm/releases/tag/v0.7.2
 [0.7.1]: https://github.com/habakan/stanwasm/releases/tag/v0.7.1
 [0.7.0]: https://github.com/habakan/stanwasm/releases/tag/v0.7.0
 [0.6.0]: https://github.com/habakan/stanwasm/releases/tag/v0.6.0
