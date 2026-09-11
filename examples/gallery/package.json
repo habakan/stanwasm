@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "better-react-mathjax": "^3.0.1",
+    "posteriorwasm": "git+https://github.com/habakan/posteriorwasm.git#ca407445c7fe59741baca0acf1d527c9c8cfaaf3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "stanwasm": "file:../../ts"

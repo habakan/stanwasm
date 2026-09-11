@@ -13,7 +13,12 @@ export default defineConfig({
   },
   optimizeDeps: {
     // Don't pre-bundle the wasm-pack output; let Vite serve the .wasm verbatim.
-    exclude: ["stanwasm"],
+    // posteriorwasm starts its worker from `new URL(..., import.meta.url)`, which pre-bundling breaks.
+    exclude: ["stanwasm", "posteriorwasm"],
+  },
+  // posteriorwasm's worker imports Pyodide at run time, which a classic (iife) worker cannot.
+  worker: {
+    format: "es",
   },
   build: {
     target: "esnext",

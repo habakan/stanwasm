@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StanModel } from "stanwasm";
+import {
+  createAnalyzer, forestPlot, rankPlot, summaryTable, tracePlot,
+  type AnalyzeInput, type AnalyzeResult, type Analyzer,
+} from "posteriorwasm";
 import { PRESETS, type Preset } from "../models";
 import { Histogram } from "../Histogram";
 import { DataTable } from "../DataTable";
@@ -73,6 +77,7 @@ export function WasmSandbox() {
   const [nWarmup, setNWarmup] = useState(500);
   const [nDraws, setNDraws] = useState(1000);
   const [seed, setSeed] = useState(42);
+  const [nChains, setNChains] = useState(4);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ParamSummary[] | null>(null);
@@ -96,6 +101,36 @@ export function WasmSandbox() {
   // The diagram floats over the editor rather than taking Data/Posterior's height.
   const [diagramExpanded, setDiagramExpanded] = useState(false);
   const diagramOverlayRef = useRef<HTMLDivElement>(null);
+  const [showDiag, setShowDiag] = useState(false);
+  const [diag, setDiag] = useState<AnalyzeResult | null>(null);
+  const [diagStatus, setDiagStatus] = useState<string | null>(null);
+  const [diagBusy, setDiagBusy] = useState(false);
+  // Created on the first press: Pyodide and arviz-stats are about 24 MB.
+  const analyzerRef = useRef<Analyzer | null>(null);
+  const lastRunRef = useRef<AnalyzeInput | null>(null);
+
+  useEffect(() => () => analyzerRef.current?.terminate(), []);
+
+  const diagnose = async () => {
+    const run = lastRunRef.current;
+    if (!run) return;
+    setShowDiag(true);
+    setDiagBusy(true);
+    try {
+      analyzerRef.current ??= createAnalyzer({ onProgress: (s) => setDiagStatus(`loading ${s}…`) });
+      await analyzerRef.current.ready;
+      setDiagStatus("computing…");
+      const t0 = performance.now();
+      const res = await analyzerRef.current.analyze(run);
+      if (run !== lastRunRef.current) return;
+      setDiag(res);
+      setDiagStatus(`${res.nChains} chains × ${res.nDraws} draws, ${(performance.now() - t0).toFixed(0)}ms`);
+    } catch (e) {
+      setDiagStatus(String(e));
+    } finally {
+      setDiagBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!diagramExpanded) return;
@@ -157,6 +192,8 @@ export function WasmSandbox() {
     setCompileError(null);
     setLastCompiledKey(null);
     setSummary(null);
+    setDiag(null);
+    lastRunRef.current = null;
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -197,22 +234,30 @@ export function WasmSandbox() {
         preset.init.length === compiledModel.n_params
           ? new Float64Array(preset.init)
           : new Float64Array(compiledModel.n_params).fill(0.1);
-      const t0 = performance.now();
-      const samples = compiledModel.sample(initVec, nWarmup, nDraws, BigInt(seed));
-      const elapsed = performance.now() - t0;
       const n = compiledModel.n_params;
       const names = compiledModel.paramNames();
-      const post = samples.subarray(nWarmup * n);
-      // `sample()` is unconstrained; constrainDraw() also fills in the
-      // transformed parameters that paramNames() includes.
       const draws: number[][] = Array.from({ length: names.length }, () => []);
-      for (let i = 0; i < nDraws; i++) {
-        const row = post.subarray(i * n, (i + 1) * n);
-        const constrained = compiledModel.constrainDraw(row);
-        for (let j = 0; j < names.length; j++) draws[j].push(constrained[j]);
+      const chains: Float64Array[] = [];
+      let elapsed = 0;
+      for (let c = 0; c < nChains; c++) {
+        const t0 = performance.now();
+        const samples = compiledModel.sample(initVec, nWarmup, nDraws, BigInt(seed + c));
+        elapsed += performance.now() - t0;
+        const post = samples.subarray(nWarmup * n);
+        // `sample()` is unconstrained; constrainDraw() also fills in the
+        // transformed parameters that paramNames() includes.
+        const chain = new Float64Array(nDraws * names.length);
+        for (let i = 0; i < nDraws; i++) {
+          const constrained = compiledModel.constrainDraw(post.subarray(i * n, (i + 1) * n));
+          chain.set(constrained, i * names.length);
+          for (let j = 0; j < names.length; j++) draws[j].push(constrained[j]);
+        }
+        chains.push(chain);
       }
       setSummary(draws.map((vals, i) => summarize(names[i], vals)));
       setElapsedMs(elapsed);
+      lastRunRef.current = { names, chains };
+      if (analyzerRef.current) diagnose();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -308,6 +353,14 @@ export function WasmSandbox() {
                 min={1}
                 step={100}
                 onChange={(e) => setNDraws(Number(e.target.value))}
+              />
+              <label>Chains:</label>
+              <input
+                type="number"
+                value={nChains}
+                min={1}
+                max={8}
+                onChange={(e) => setNChains(Math.max(1, Number(e.target.value)))}
               />
               <label>Seed:</label>
               <input
@@ -410,7 +463,7 @@ export function WasmSandbox() {
               <div className="results">
                 {elapsedMs && (
                   <p style={{ fontSize: 13, color: "#666", margin: "0 0 8px" }}>
-                    sampled in {elapsedMs.toFixed(0)}ms
+                    {nChains} chain{nChains === 1 ? "" : "s"} sampled in {elapsedMs.toFixed(0)}ms
                   </p>
                 )}
                 <div className="param-row header">
@@ -434,6 +487,35 @@ export function WasmSandbox() {
               </div>
             ) : (
               <p className="hint">Compile and Run NUTS to see posterior summaries here.</p>
+            )}
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="ArviZ diagnostics"
+            open={showDiag}
+            onToggle={() => setShowDiag((o) => !o)}
+          >
+            <p className="hint">
+              R-hat, ESS and rank plots from arviz-stats itself, running on Pyodide in a worker.
+              The first run downloads about 24 MB; after that every new run is diagnosed as it lands.
+            </p>
+            <div className="row">
+              <button className="secondary" onClick={diagnose} disabled={diagBusy || !summary}>
+                Run ArviZ
+              </button>
+              {diagStatus && <span style={{ fontSize: 13, color: "#666" }}>{diagStatus}</span>}
+            </div>
+            {diag && (
+              <div className="arviz">
+                <div dangerouslySetInnerHTML={{ __html: summaryTable(diag) + forestPlot(diag) }} />
+                {diag.names.map((name, k) => (
+                  <div className="arviz-row" key={name}>
+                    <span className="param-name">{name}</span>
+                    <span dangerouslySetInnerHTML={{ __html: rankPlot(diag, k, { width: 180, height: 60 }) }} />
+                    <span dangerouslySetInnerHTML={{ __html: tracePlot(diag, k, { width: 180, height: 60 }) }} />
+                  </div>
+                ))}
+              </div>
             )}
           </CollapsibleSection>
         </div>
