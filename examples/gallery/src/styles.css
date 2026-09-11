@@ -338,6 +338,39 @@ footer a {
   border-bottom: 2px solid #1a1a1a;
 }
 
+.arviz {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.posteriorwasm-summary {
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.posteriorwasm-summary th,
+.posteriorwasm-summary td {
+  padding: 3px 8px;
+  text-align: right;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+}
+
+.posteriorwasm-summary th[scope="row"] {
+  text-align: left;
+  font-family: ui-monospace, monospace;
+  font-weight: 400;
+}
+
+.arviz-row {
+  display: grid;
+  grid-template-columns: 120px auto auto;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+}
+
 .param-name {
   font-family: "SF Mono", Menlo, monospace;
   font-weight: 600;
