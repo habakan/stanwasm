@@ -26,9 +26,10 @@ fn linear_regression_preset() {
     let x: Vec<String> = (0..30)
         .map(|i| format!("{}", -1.5 + i as f64 * 0.1))
         .collect();
-    let y: Vec<String> = (0..30)
-        .map(|i| format!("{}", -1.3 + i as f64 * 0.18))
-        .collect();
+    // The preset's y in examples/gallery/src/models.ts.
+    let y = "-2.15,-2.34,-2.01,-1.67,-1.22,-1.52,-1.46,-0.8,-0.48,-0.25,\
+             -0.45,-0.4,-0.38,0.37,-0.15,-0.15,0.21,0.85,0.94,0.76,\
+             0.6,1.74,1.72,1.35,2.44,2.82,2.69,2.91,3.23,3.04";
     check(
         "linear_regression",
         r#"
@@ -48,7 +49,7 @@ model {
   sigma ~ exponential(1);
   y ~ normal(alpha + beta * x, sigma);
 }"#,
-        &format!(r#"{{"N":30,"x":[{}],"y":[{}]}}"#, x.join(","), y.join(",")),
+        &format!(r#"{{"N":30,"x":[{}],"y":[{y}]}}"#, x.join(",")),
         &[0.0, 1.0, 0.0],
     );
 }
