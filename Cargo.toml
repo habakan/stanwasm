@@ -28,12 +28,13 @@ stanwasm-codegen = { path = "crates/stanwasm-codegen", version = "0.7.2" }
 stanwasm = { path = "crates/stanwasm", version = "0.7.2" }
 
 # The engine: the tape, its emitter, and the wasm-bindgen API over both. Split
-# out because nothing in it is about the Stan language. The rev is tapewasm's
-# own v0.1.0; the version beside it is what `cargo publish` rewrites to, once
-# crates.io opens for both — it waits on the same nuts-rs release.
-tapewasm-autodiff = { git = "https://github.com/habakan/tapewasm", rev = "50942d0948c0b8e44face865e3f1c3ce4583ffed", version = "0.1.0" }
-tapewasm-codegen = { git = "https://github.com/habakan/tapewasm", rev = "50942d0948c0b8e44face865e3f1c3ce4583ffed", version = "0.1.0" }
-tapewasm = { git = "https://github.com/habakan/tapewasm", rev = "50942d0948c0b8e44face865e3f1c3ce4583ffed", version = "0.1.0" }
+# out because nothing in it is about the Stan language. The rev is one commit
+# past tapewasm's v0.3.0, for the zero-root guard `v_sqrt` needs; re-pin it to a
+# tag once that lands. The version beside it is what `cargo publish` rewrites
+# to, once crates.io opens for both — it waits on the same nuts-rs release.
+tapewasm-autodiff = { git = "https://github.com/habakan/tapewasm", rev = "b1e8ea5ebdbfc9970466b4b3f0db5e93794357d0", version = "0.3.0" }
+tapewasm-codegen = { git = "https://github.com/habakan/tapewasm", rev = "b1e8ea5ebdbfc9970466b4b3f0db5e93794357d0", version = "0.3.0" }
+tapewasm = { git = "https://github.com/habakan/tapewasm", rev = "b1e8ea5ebdbfc9970466b4b3f0db5e93794357d0", version = "0.3.0" }
 
 nuts-rs = { version = "0.18.1", default-features = false }
 wasm-bindgen = "0.2"
