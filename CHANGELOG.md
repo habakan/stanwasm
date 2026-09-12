@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`sqrt` records its own tape node instead of `pow(x, 0.5)`.** It was routed
+  through the power so a root of zero would differentiate to zero rather than an
+  infinity; the tape now guards the root itself, and the root is a wasm
+  instruction where the power is a call out to the host in each direction. On
+  posteriordb's `garch11` — 200 time steps, one root each — that is 605 host
+  calls per gradient down to 207, and 18.8 µs down to 3.9 µs.
+
 ## [0.7.2] — 2026-09-10 (npm only)
 
 ### Changed
