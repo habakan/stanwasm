@@ -142,6 +142,18 @@ pub struct StanModel {
     /// than two, so the scratch buffer and the id of the module it belongs to
     /// cannot be set apart from each other.
     aot: Option<AotBuild>,
+    /// What the last `sampleViaAot` cost, for a caller that wants to divide a
+    /// run's time by the work in it. Kept here rather than returned, so the
+    /// draws still come back as one flat array.
+    last_run: RunCounters,
+}
+
+/// Counted over a whole run, warmup included, the way CmdStan's
+/// `n_leapfrog__` and stanli's "gradient evaluations" count them.
+#[derive(Default, Clone, Copy)]
+struct RunCounters {
+    gradient_evals: u64,
+    divergences: u32,
 }
 
 /// The half of a `compileToWasm` result that stays behind on this side.
@@ -173,6 +185,7 @@ impl StanModel {
             compiled,
             step: None,
             aot: None,
+            last_run: RunCounters::default(),
         })
     }
 
@@ -654,10 +667,28 @@ impl StanModel {
             .map_err(|e| JsError::new(&format!("nuts-rs init: {e}")))?;
 
         let mut out = vec![0.0_f64; n * total as usize];
+        let mut counters = RunCounters::default();
         for (i, draw) in iter.enumerate() {
-            let (pos, _progress) = draw.map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
+            let (pos, progress) = draw.map_err(|e| JsError::new(&format!("nuts-rs draw: {e}")))?;
+            counters.gradient_evals += progress.num_steps;
+            counters.divergences += u32::from(progress.diverging);
             out[i * n..(i + 1) * n].copy_from_slice(pos.as_ref());
         }
+        self.last_run = counters;
         Ok(out)
+    }
+
+    /// Leapfrog steps the last `sampleViaAot` took, warmup included — one
+    /// gradient each, so this is what to divide a run's time by. Zero before
+    /// the first run.
+    #[wasm_bindgen(getter, js_name = lastGradientEvals)]
+    pub fn last_gradient_evals(&self) -> f64 {
+        self.last_run.gradient_evals as f64
+    }
+
+    /// Divergent transitions in the last `sampleViaAot`, warmup included.
+    #[wasm_bindgen(getter, js_name = lastDivergences)]
+    pub fn last_divergences(&self) -> u32 {
+        self.last_run.divergences
     }
 }
