@@ -8,8 +8,10 @@
 
 import init from "./pkg/stanwasm.js";
 export {
+  AdviResult,
   AotSampler,
   CompiledTape,
+  SampleResult,
   StanModel,
   compileTape,
   version,
