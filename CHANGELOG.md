@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The engine moves from tapewasm v0.1.0 to v0.3.0.** It brings the re-roll
+  argument to `compileToWasm`, `digamma`, and a change of `abs`: its derivative
+  at the cusp is now zero. That last one *closes* a disagreement with Stan,
+  whose `fabs` returns a fresh constant at zero, so nothing flows back there.
+  It also moves `fmin`/`fmax` at a tie from 1 and 0 to a half each — those are
+  recorded as `(a + b ± |a - b|)/2`, and Stan resolves a tie by whichever
+  comparison its overload happens to use, which needs a branch on a parameter
+  to reproduce. The tie is a measure-zero point and Stan is not self-consistent
+  across its own overloads there; a subgradient midpoint is what a branch-free
+  recording can offer.
+- **`sqrt` records its own tape node instead of `pow(x, 0.5)`.** It was routed
+  through the power so a root of zero would differentiate to zero rather than an
+  infinity; the tape now guards the root itself, and the root is a wasm
+  instruction where the power is a call out to the host in each direction. On
+  posteriordb's `garch11` — 200 time steps, one root each — that is 605 host
+  calls per gradient down to 207, and 18.8 µs down to 3.9 µs.
+
 ## [0.7.2] — 2026-09-10 (npm only)
 
 ### Changed
