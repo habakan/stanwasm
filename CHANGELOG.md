@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`lastGradientEvals` and `lastDivergences`** on `StanModel`, covering the
+  last `sampleViaAot` including its warmup. The leapfrog count is what a run's
+  time divides by, and it is the same quantity CmdStan writes as
+  `n_leapfrog__`; until now the only way to reach it was `stepDraw`, which
+  crosses the boundary once per draw and so cannot be timed. Both read zero
+  before the first run.
+
 ### Changed
 
 - **The engine moves from tapewasm v0.1.0 to v0.3.0.** It brings the re-roll
