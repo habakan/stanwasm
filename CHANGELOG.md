@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`AdviResult` and `SampleResult` reach the package entry point.** The engine
+  bump below put them in the bundle, and `index.js` names its re-exports one by
+  one, so they shipped unreachable — the same way `tapewasmVersion` did in
+  0.7.0. `tests/facade_exports.mjs` is what catches this, and it runs under
+  `make smoke` rather than `cargo test`.
+
 ### Added
 
 - **`lastGradientEvals` and `lastDivergences`** on `StanModel`, covering the
