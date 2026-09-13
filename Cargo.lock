@@ -802,8 +802,8 @@ dependencies = [
 
 [[package]]
 name = "tapewasm"
-version = "0.3.0"
-source = "git+https://github.com/habakan/tapewasm?rev=b1e8ea5ebdbfc9970466b4b3f0db5e93794357d0#b1e8ea5ebdbfc9970466b4b3f0db5e93794357d0"
+version = "0.3.1"
+source = "git+https://github.com/habakan/tapewasm?tag=v0.3.1#5a290c5a09eaac31b7b2bc4331357756151880c2"
 dependencies = [
  "console_error_panic_hook",
  "getrandom",
@@ -816,13 +816,13 @@ dependencies = [
 
 [[package]]
 name = "tapewasm-autodiff"
-version = "0.3.0"
-source = "git+https://github.com/habakan/tapewasm?rev=b1e8ea5ebdbfc9970466b4b3f0db5e93794357d0#b1e8ea5ebdbfc9970466b4b3f0db5e93794357d0"
+version = "0.3.1"
+source = "git+https://github.com/habakan/tapewasm?tag=v0.3.1#5a290c5a09eaac31b7b2bc4331357756151880c2"
 
 [[package]]
 name = "tapewasm-codegen"
-version = "0.3.0"
-source = "git+https://github.com/habakan/tapewasm?rev=b1e8ea5ebdbfc9970466b4b3f0db5e93794357d0#b1e8ea5ebdbfc9970466b4b3f0db5e93794357d0"
+version = "0.3.1"
+source = "git+https://github.com/habakan/tapewasm?tag=v0.3.1#5a290c5a09eaac31b7b2bc4331357756151880c2"
 dependencies = [
  "tapewasm-autodiff",
  "thiserror",
