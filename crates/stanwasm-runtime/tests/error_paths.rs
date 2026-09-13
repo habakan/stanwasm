@@ -213,28 +213,39 @@ fn matrix_data_bounds_are_checked_element_wise() {
     load(src, r#"{"M":[[1,2],[3,4]]}"#).unwrap();
 }
 
+/// `fmin`/`fmax` are recorded as `(a + b ± |a - b|)/2`, which has no branch on a
+/// value and so survives being compiled once and evaluated anywhere.
+///
+/// At a tie that costs exact agreement with Stan, which resolves one there by
+/// whichever comparison its overload happens to use — `a >= b` in
+/// `fmax(var, double)` and `a <= b` in `fmin(var, double)` (the variable wins
+/// both, slope 1), but `a > b` and `a < b` between two vars (the second wins).
+/// Reproducing that needs a branch on a parameter, which this rejects
+/// elsewhere; the midpoint below is the subgradient at a measure-zero point.
 #[test]
-fn fmin_and_fmax_return_extrema_and_follow_the_fabs_kink() {
+fn fmin_and_fmax_return_extrema_and_split_the_tie() {
     let extrema = "parameters { real a; } \
                    model { target += fmin(a, 3) + fmax(a, 3); }";
     let (v, g) = lp(extrema, "{}", &[2.0]).unwrap();
     assert_eq!(v, 5.0);
     assert_eq!(g, vec![1.0]);
 
-    let (_, max_grad) = lp(
-        "parameters { real a; } model { target += fmax(a, 0); }",
-        "{}",
-        &[0.0],
-    )
-    .unwrap();
-    let (_, min_grad) = lp(
-        "parameters { real a; } model { target += fmin(a, 0); }",
-        "{}",
-        &[0.0],
-    )
-    .unwrap();
-    assert_eq!(max_grad, vec![1.0]);
-    assert_eq!(min_grad, vec![0.0]);
+    for name in ["fmax", "fmin"] {
+        let src = format!("parameters {{ real a; }} model {{ target += {name}(a, 0); }}");
+        let (_, grad) = lp(&src, "{}", &[0.0]).unwrap();
+        assert_eq!(grad, vec![0.5], "{name} at the tie");
+    }
+}
+
+/// `fabs` at zero: Stan returns a fresh constant there, so nothing flows back.
+#[test]
+fn fabs_contributes_nothing_at_the_cusp() {
+    for name in ["abs", "fabs"] {
+        let src = format!("parameters {{ real a; }} model {{ target += {name}(a); }}");
+        let (v, g) = lp(&src, "{}", &[0.0]).unwrap();
+        assert_eq!(v, 0.0, "{name}");
+        assert_eq!(g, vec![0.0], "{name} at the cusp");
+    }
 }
 
 #[test]

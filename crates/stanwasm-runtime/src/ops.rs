@@ -200,10 +200,9 @@ v_unary!(v_tan, tan, tan);
 v_unary!(v_asin, asin, asin);
 v_unary!(v_acos, acos, acos);
 v_unary!(v_atan, atan, atan);
-
-pub fn v_sqrt(t: &mut Tape, a: &Val) -> Val {
-    v_pow(t, a, &Val::Num(0.5))
-}
+// Its own node, not `pow(x, 0.5)`: the tape guards a root of zero the same way,
+// and `pow` costs a host call in each direction where `sqrt` is an instruction.
+v_unary!(v_sqrt, sqrt, sqrt);
 
 pub fn v_pow(t: &mut Tape, base: &Val, exp: &Val) -> Val {
     match (base, exp) {
