@@ -32,9 +32,9 @@ stanwasm = { path = "crates/stanwasm", version = "0.7.2" }
 # zero-root guard `v_sqrt` needs. The version beside it is what `cargo publish`
 # rewrites to, once crates.io opens for both — it waits on the same nuts-rs
 # release.
-tapewasm-autodiff = { git = "https://github.com/habakan/tapewasm", tag = "v0.3.1", version = "0.3.1" }
-tapewasm-codegen = { git = "https://github.com/habakan/tapewasm", tag = "v0.3.1", version = "0.3.1" }
-tapewasm = { git = "https://github.com/habakan/tapewasm", tag = "v0.3.1", version = "0.3.1" }
+tapewasm-autodiff = { git = "https://github.com/habakan/tapewasm", tag = "v0.3.2", version = "0.3.2" }
+tapewasm-codegen = { git = "https://github.com/habakan/tapewasm", tag = "v0.3.2", version = "0.3.2" }
+tapewasm = { git = "https://github.com/habakan/tapewasm", tag = "v0.3.2", version = "0.3.2" }
 
 nuts-rs = { version = "0.18.1", default-features = false }
 wasm-bindgen = "0.2"
