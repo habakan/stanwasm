@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`compileToWasm` takes a node count** where it takes a mode, and re-rolls
+  past it instead of the built-in threshold.
+
+  Which shape is faster is the engine's preference, and the engines are far
+  apart: straight-line and re-rolled cross over somewhere between 8,026 and
+  24,564 nodes in V8, and around 2,000 in SpiderMonkey and JavaScriptCore.
+  `"auto"` takes the lower one, which is near-optimal for the latter two and
+  leaves V8 re-rolling traces it would rather run flat.
+
+  A page that measures its engine — tapewasm's `calibrateReroll()` does it once,
+  in about 130 ms — passes the number it gets back. On eleven posteriordb models
+  through Node's V8, that turns 2,000 into 20,000 and the five models whose
+  shape changes run **2.4x faster** in the geometric mean, with none slower and
+  every log density unchanged:
+
+  | model | nodes | ns per gradient |
+  | --- | --- | --- |
+  | `kidscore_momiq` | 4,067 | 5,147 → 1,006 |
+  | `dogs` | 2,734 | 7,324 → 2,692 |
+  | `linreg` | 8,026 | 5,350 → 2,417 |
+  | `garch11` | 3,526 | 8,401 → 4,138 |
+  | `arK` | 3,957 | 2,035 → 1,199 |
+
+### Changed
+
+- **The engine moves to tapewasm 0.3.2**, which is what carries the threshold
+  and the calibration above.
+
 ### Fixed
 
 - **`AdviResult` and `SampleResult` reach the package entry point.** The engine
