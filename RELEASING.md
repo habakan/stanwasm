@@ -75,10 +75,11 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-Nothing is published by this. `guard` and `verify` check the tagged tree and
-`github-release` creates the release; a tag that fails either can be deleted
-with `git push --delete origin vX.Y.Z`. The registries are steps 4 and 5, and
-those are what cannot be taken back.
+Nothing becomes public from this. `guard` and `verify` check the tagged tree
+and `github-release` creates the release; a tag that fails either can be deleted
+with `git push --delete origin vX.Y.Z`, and nothing is staged, because
+`stage-npm` waits on both. Once they pass, the tag does spend the npm version
+number — `npm stage reject` is what frees it again.
 
 `guard` compares the tag against every file in step 1. `verify` re-runs the
 full gate against the exact tagged commit — `test.yml` only covers pushes to
@@ -90,23 +91,50 @@ Check that `release.yml` is actually enabled before tagging
 (`gh workflow list --all`). A disabled workflow does not fail on its trigger —
 the tag lands and nothing runs at all.
 
-## 4. Publish to npm
+## 4. Approve what CI staged
 
-From a checkout of the tag, with nothing uncommitted — `make wasm` bakes the
-working tree into the bundle, so a stray edit ships as the release:
+Pushing the tag stages the release: `release.yml`'s `stage-npm` job builds the
+bundle from the tagged tree and runs `npm stage publish`. Staging needs no 2FA,
+which is why it can run unattended — and nothing is public until the maintainer
+approves with 2FA. Needs npm 11.15 or later, which is why the job installs its
+own npm rather than using the one Node ships.
+
+The job holds no stored token. It exchanges GitHub's OIDC identity for a
+short-lived npm one, so npm has to know which workflow is allowed to speak for
+the package: on npmjs.com, **Settings → Trusted publisher → GitHub Actions**,
+with this repository and the workflow file `release.yml`. Without that the job
+fails with `ENEEDAUTH`, having published nothing.
+
+Building in CI also gets the release something a laptop cannot produce: npm
+enables provenance automatically over a trusted-publisher token, so the tarball
+carries an attestation tying it to this commit and this workflow run.
+
+Then check what was staged and approve it:
+
+```bash
+npm stage list stanwasm
+npm stage view <stage-id>       # version, file list, integrity
+npm stage approve <stage-id>    # 2FA; `npm stage reject <stage-id>` drops it instead
+```
+
+**A staged version already holds its number.** npm can deprecate but never frees
+a number, and the registry refuses a publish of a version that is staged.
+Approval waits on the registry's malware scan; confirm a few minutes later with
+`npm view stanwasm version --prefer-online`.
+
+To stage by hand instead — the job is broken, or the tag is already spent — do
+it from a clean checkout of the tag, where `make wasm` bakes the working tree
+into the bundle:
 
 ```bash
 git status --short          # must be clean
 git rev-parse HEAD          # must be the tagged commit
 make wasm
-cd ts && npm publish --access public
+cd ts && npm stage publish --access public
 ```
 
-No `--provenance`: a tarball published from a laptop cannot carry an
-attestation, and passing the flag fails rather than being ignored.
-
-**This spends the version.** npm can deprecate but never frees a number.
-Confirm with `npm view stanwasm version`.
+Pass no `--provenance` there: a tarball staged from a laptop cannot carry an
+attestation, and the flag fails rather than being ignored.
 
 ## 5. Publish to crates.io
 

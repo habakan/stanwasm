@@ -535,19 +535,28 @@ impl StanModel {
     /// `WebAssembly.instantiate` for an independent log_prob_grad runtime.
     #[wasm_bindgen(js_name = compileToWasm)]
     /// `reroll` selects how vectorised statements are lowered: `"auto"`
-    /// (default), `"always"`, or `"never"`. Which is faster is an engine
-    /// preference — Safari prefers `"always"`, Chrome and Firefox `"auto"` —
-    /// so the page, which knows what it is running on, gets to choose.
+    /// (default), `"always"`, `"never"`, or a node count to re-roll past,
+    /// written as a number.
+    ///
+    /// Which is faster is an engine preference, and the engines are far apart:
+    /// straight-line and re-rolled cross over around 60,000 nodes in V8 and
+    /// around 2,000 in SpiderMonkey and JavaScriptCore. `"auto"` takes the
+    /// lower one. A page that has measured its engine — tapewasm's
+    /// `calibrateReroll()` does it once — passes the number it got.
     pub fn compile_to_wasm(&mut self, reroll: Option<String>) -> Result<Vec<u8>, JsError> {
         let mode = match reroll.as_deref() {
             None | Some("auto") => stanwasm_codegen::Reroll::Auto,
             Some("always") => stanwasm_codegen::Reroll::Always,
             Some("never") => stanwasm_codegen::Reroll::Never,
-            Some(other) => {
-                return Err(JsError::new(&format!(
-                    "reroll must be \"auto\", \"always\" or \"never\", got {other:?}"
-                )))
-            }
+            Some(other) => match other.parse::<usize>() {
+                Ok(n) => stanwasm_codegen::Reroll::Above(n),
+                Err(_) => {
+                    return Err(JsError::new(&format!(
+                        "reroll must be \"auto\", \"always\", \"never\" or a node count, \
+                         got {other:?}"
+                    )))
+                }
+            },
         };
         let dummy = vec![0.1_f64; self.model.n_params()];
         let compiled = stanwasm_codegen::compile_with(&self.model, &dummy, mode).map_err(|e| {
