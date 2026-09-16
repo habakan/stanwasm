@@ -112,6 +112,52 @@ fn run_suffix(terms: &[Val]) -> Option<(usize, u32, u32)> {
     Some((len, idx[n - len].expect("in the run"), stride))
 }
 
+/// The terms as a multiset on one arithmetic progression: its first tape index,
+/// the spacing, and how many times each slot appears.
+///
+/// A gather makes one node serve several elements — `y_hat[i] = a[county[i]]`
+/// — so value numbering leaves the run repeated and out of order, where
+/// `run_suffix` sees nothing. The sum is still a contraction against the counts.
+fn run_counts(terms: &[Val]) -> Option<(u32, u32, Vec<f64>)> {
+    let mut idx = Vec::with_capacity(terms.len());
+    for v in terms {
+        match v {
+            Val::Tape(i) => idx.push(*i),
+            _ => return None,
+        }
+    }
+    // Below a few elements the chain is no worse, matching `v_sum`'s own bound.
+    if idx.len() < 4 {
+        return None;
+    }
+    let base = *idx.iter().min()?;
+    let span = *idx.iter().max()? - base;
+    let stride = idx.iter().fold(0u32, |g, i| gcd(g, i - base));
+    // Every index equal is `n * x`, which is not a contraction worth building.
+    if stride == 0 {
+        return None;
+    }
+    // The contraction walks every slot, gaps included, so it has to be shorter
+    // than the chain — equal length means no repeat, where adds beat multiplies.
+    let len = (span / stride) as usize + 1;
+    if len >= idx.len() {
+        return None;
+    }
+    let mut counts = vec![0.0; len];
+    for i in idx {
+        counts[((i - base) / stride) as usize] += 1.0;
+    }
+    Some((base, stride, counts))
+}
+
+fn gcd(a: u32, b: u32) -> u32 {
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
+}
+
 /// Sum a vectorised statement's per-element terms.
 ///
 /// An evenly spaced run of tape values becomes one reduction node. The chain of
@@ -127,6 +173,13 @@ pub fn v_sum(t: &mut Tape, terms: &[Val]) -> Val {
         Some((len, _, _)) if len >= 4 => terms.len() - len.min(terms.len() - 1),
         _ => terms.len(),
     };
+    // A gathered run repeats out of order, so `run_suffix` sees nothing — or, by
+    // chance, a short tail that would leave the rest a chain.
+    if head * 2 > terms.len() {
+        if let Some((base, stride, counts)) = run_counts(terms) {
+            return Val::Tape(t.dot_c(base, stride, &counts));
+        }
+    }
     let mut acc = Val::Num(0.0);
     for x in &terms[..head] {
         acc = v_add(t, &acc, x);
