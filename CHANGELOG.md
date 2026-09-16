@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-17
+
+### Added
+
+- **`compileToWasm` takes a node count** where it takes a mode, and re-rolls
+  past it instead of the built-in threshold.
+
+  Which shape is faster is the engine's preference, and the engines are far
+  apart: straight-line and re-rolled cross over somewhere between 8,026 and
+  24,564 nodes in V8, and around 2,000 in SpiderMonkey and JavaScriptCore.
+  `"auto"` takes the lower one, which is near-optimal for the latter two and
+  leaves V8 re-rolling traces it would rather run flat.
+
+  A page that measures its engine — tapewasm's `calibrateReroll()` does it once,
+  in about 130 ms — passes the number it gets back. On eleven posteriordb models
+  through Node's V8, that turns 2,000 into 20,000 and the five models whose
+  shape changes run **2.4x faster** in the geometric mean, with none slower and
+  every log density unchanged:
+
+  | model | nodes | ns per gradient |
+  | --- | --- | --- |
+  | `kidscore_momiq` | 4,067 | 5,147 → 1,006 |
+  | `dogs` | 2,734 | 7,324 → 2,692 |
+  | `linreg` | 8,026 | 5,350 → 2,417 |
+  | `garch11` | 3,526 | 8,401 → 4,138 |
+  | `arK` | 3,957 | 2,035 → 1,199 |
+
+
+- **`lastGradientEvals` and `lastDivergences`** on `StanModel`, covering the
+  last `sampleViaAot` including its warmup. The leapfrog count is what a run's
+  time divides by, and it is the same quantity CmdStan writes as
+  `n_leapfrog__`; until now the only way to reach it was `stepDraw`, which
+  crosses the boundary once per draw and so cannot be timed. Both read zero
+  before the first run.
+
 ### Changed
 
 - **`simplex` is the inverse ILR transform Stan uses, not stick-breaking.** Stan
@@ -30,7 +65,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unconstrained draw from an earlier version no longer names the same simplex;
   a constrained one is unaffected. `unconstrainDraw` moves with it.
 
-### Changed
 
 - **A contraction leaves the first element to the chain.** The run a gathered
   sum contracts starts one node before the re-rolled block that holds the rest:
@@ -60,7 +94,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a difference the same build produces between halves of its own runs, and one
   that shrank as seeds were added.
 
-### Changed
 
 - **A gathered sum contracts instead of building a chain of adds.** A vectorised
   statement over a gather — `y_hat[i] = a[county[i]]` — hands `v_sum` the same
@@ -95,54 +128,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and 1.02x on `kidscore_momiq`, with the two ranges overlapping, against 2.32x
   and 1.42x on ESS per second.
 
-### Added
-
-- **`compileToWasm` takes a node count** where it takes a mode, and re-rolls
-  past it instead of the built-in threshold.
-
-  Which shape is faster is the engine's preference, and the engines are far
-  apart: straight-line and re-rolled cross over somewhere between 8,026 and
-  24,564 nodes in V8, and around 2,000 in SpiderMonkey and JavaScriptCore.
-  `"auto"` takes the lower one, which is near-optimal for the latter two and
-  leaves V8 re-rolling traces it would rather run flat.
-
-  A page that measures its engine — tapewasm's `calibrateReroll()` does it once,
-  in about 130 ms — passes the number it gets back. On eleven posteriordb models
-  through Node's V8, that turns 2,000 into 20,000 and the five models whose
-  shape changes run **2.4x faster** in the geometric mean, with none slower and
-  every log density unchanged:
-
-  | model | nodes | ns per gradient |
-  | --- | --- | --- |
-  | `kidscore_momiq` | 4,067 | 5,147 → 1,006 |
-  | `dogs` | 2,734 | 7,324 → 2,692 |
-  | `linreg` | 8,026 | 5,350 → 2,417 |
-  | `garch11` | 3,526 | 8,401 → 4,138 |
-  | `arK` | 3,957 | 2,035 → 1,199 |
-
-### Changed
 
 - **The engine moves to the tapewasm commit carrying the threshold** and the
   calibration above, pinned by rev because 0.3.1 is unreleased upstream.
 
-### Fixed
-
-- **`AdviResult` and `SampleResult` reach the package entry point.** The engine
-  bump below put them in the bundle, and `index.js` names its re-exports one by
-  one, so they shipped unreachable — the same way `tapewasmVersion` did in
-  0.7.0. `tests/facade_exports.mjs` is what catches this, and it runs under
-  `make smoke` rather than `cargo test`.
-
-### Added
-
-- **`lastGradientEvals` and `lastDivergences`** on `StanModel`, covering the
-  last `sampleViaAot` including its warmup. The leapfrog count is what a run's
-  time divides by, and it is the same quantity CmdStan writes as
-  `n_leapfrog__`; until now the only way to reach it was `stepDraw`, which
-  crosses the boundary once per draw and so cannot be timed. Both read zero
-  before the first run.
-
-### Changed
 
 - **The engine moves from tapewasm v0.1.0 to v0.3.1.** It brings the re-roll
   argument to `compileToWasm`, `digamma`, and a change of `abs`: its derivative
@@ -166,6 +155,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from the tagged tree; the version still goes public only when the maintainer
   approves it with 2FA. The job authenticates through npm trusted publishing
   rather than a stored token, so published tarballs carry provenance.
+
+### Fixed
+
+- **`AdviResult` and `SampleResult` reach the package entry point.** The engine
+  bump below put them in the bundle, and `index.js` names its re-exports one by
+  one, so they shipped unreachable — the same way `tapewasmVersion` did in
+  0.7.0. `tests/facade_exports.mjs` is what catches this, and it runs under
+  `make smoke` rather than `cargo test`.
 
 ## [0.7.2] — 2026-09-10 (npm only)
 
@@ -1041,7 +1038,8 @@ Comparable to the `nuts-rs` direct-call benchmark. See `docs/en/BENCHMARKS.md`.
   `sample()` behavior and correctly restores `logProbGrad`/`sample`
   afterward
 
-[Unreleased]: https://github.com/habakan/stanwasm/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/habakan/stanwasm/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/habakan/stanwasm/releases/tag/v0.8.0
 [0.7.2]: https://github.com/habakan/stanwasm/releases/tag/v0.7.2
 [0.7.1]: https://github.com/habakan/stanwasm/releases/tag/v0.7.1
 [0.7.0]: https://github.com/habakan/stanwasm/releases/tag/v0.7.0
