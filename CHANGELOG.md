@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A gathered sum contracts instead of building a chain of adds.** A vectorised
+  statement over a gather — `y_hat[i] = a[county[i]]` — hands `v_sum` the same
+  tape nodes several times and out of order, because value numbering folds the
+  repeats. `run_suffix` looks for a monotone evenly spaced run and finds none,
+  so the sum fell back to one `Add` per element: on posteriordb's `radon_county`
+  that was a 12,573-node chain, a quarter of the tape, re-rolled into a loop of
+  one node whose two arguments both needed index tables and which kept nothing
+  in locals.
+
+  The repeats are what makes it a contraction: the distinct terms still sit at a
+  constant stride, so the sum is a dot product against how often each appears.
+  One `DotC` node replaces the chain.
+
+  | model | ns per gradient | wasm |
+  | --- | --- | --- |
+  | `radon_county` | 115,848 → 57,788 (**2.19x**) | 16,571 → 388,259 B |
+  | `nes` | 15,857 → 7,864 (**2.02x**) | 4,295 → 49,285 B |
+  | `election88_full` | 194,263 → 116,355 (**1.67x**) | 273,758 → 708,203 B |
+  | `kidscore_momiq` | 3,096 → 2,621 (1.18x) | 2,274 → 23,455 B |
+
+  The modules grow because a contraction outside a re-rolled block emits its
+  coefficients inline. It costs instantiation 0.3 ms on `radon_county`, against
+  a gradient that a sampling run calls thousands of times. The other nineteen
+  posteriordb models emit byte-identical modules.
+
+  The contraction sums in run order and multiplies by a count where the chain
+  added repeatedly, so this is not bit-identical in general; `radon_county`'s
+  log density and gradient agree to every digit printed.
+
 ### Added
 
 - **`compileToWasm` takes a node count** where it takes a mode, and re-rolls
