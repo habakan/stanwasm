@@ -176,6 +176,14 @@ pub fn v_sum(t: &mut Tape, terms: &[Val]) -> Val {
     // A gathered run repeats out of order, so `run_suffix` sees nothing — or, by
     // chance, a short tail that would leave the rest a chain.
     if head * 2 > terms.len() {
+        // The first element's nodes are unlike the rest, for the same reason the
+        // reduction path peels a head: its subexpressions were not shared yet.
+        if let (Val::Tape(first), Some((base, stride, counts))) =
+            (&terms[0], run_counts(&terms[1..]))
+        {
+            let run = t.dot_c(base, stride, &counts);
+            return Val::Tape(t.add(*first, run));
+        }
         if let Some((base, stride, counts)) = run_counts(terms) {
             return Val::Tape(t.dot_c(base, stride, &counts));
         }
