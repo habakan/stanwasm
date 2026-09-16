@@ -35,8 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   posteriordb models emit byte-identical modules.
 
   The contraction sums in run order and multiplies by a count where the chain
-  added repeatedly, so this is not bit-identical in general; `radon_county`'s
-  log density and gradient agree to every digit printed.
+  added repeatedly, so this is not bit-identical: `radon_county` takes 130,520
+  leapfrog steps where it took 128,316, and a run at a given seed no longer
+  reproduces the draws an older version gave. The posterior it samples is the
+  same one — over four seeds, minimum bulk ESS comes to 0.99x on `radon_county`
+  and 1.02x on `kidscore_momiq`, with the two ranges overlapping, against 2.32x
+  and 1.42x on ESS per second.
 
 ### Added
 
