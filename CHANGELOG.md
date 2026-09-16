@@ -74,6 +74,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instruction where the power is a call out to the host in each direction. On
   posteriordb's `garch11` — 200 time steps, one root each — that is 605 host
   calls per gradient down to 207, and 18.8 µs down to 3.9 µs.
+- **Releases are staged by CI.** Pushing a `v*` tag now runs `npm stage publish`
+  from the tagged tree; the version still goes public only when the maintainer
+  approves it with 2FA. The job authenticates through npm trusted publishing
+  rather than a stored token, so published tarballs carry provenance.
 
 ## [0.7.2] — 2026-09-10 (npm only)
 
