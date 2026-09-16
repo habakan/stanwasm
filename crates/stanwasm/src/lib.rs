@@ -539,9 +539,9 @@ impl StanModel {
     /// written as a number.
     ///
     /// Which is faster is an engine preference, and the engines are far apart:
-    /// straight-line and re-rolled cross over around 60,000 nodes in V8 and
-    /// around 2,000 in SpiderMonkey and JavaScriptCore. `"auto"` takes the
-    /// lower one. A page that has measured its engine — tapewasm's
+    /// straight-line and re-rolled cross over between 8,026 and 24,564 nodes in
+    /// V8 and around 2,000 in SpiderMonkey and JavaScriptCore. `"auto"` takes
+    /// the lower one. A page that has measured its engine — tapewasm's
     /// `calibrateReroll()` does it once — passes the number it got.
     pub fn compile_to_wasm(&mut self, reroll: Option<String>) -> Result<Vec<u8>, JsError> {
         let mode = match reroll.as_deref() {

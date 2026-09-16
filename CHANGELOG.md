@@ -34,8 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **The engine moves to tapewasm 0.3.2**, which is what carries the threshold
-  and the calibration above.
+- **The engine moves to the tapewasm commit carrying the threshold** and the
+  calibration above, pinned by rev because 0.3.1 is unreleased upstream.
 
 ### Fixed
 
