@@ -13,7 +13,7 @@
 
 use crate::env::Env;
 use crate::error::EvalError;
-use crate::eval::eval_plain;
+use crate::eval::{eval_plain, log_sum_exp};
 use crate::matrix;
 use crate::ops::{v_add, v_div, v_exp, v_inv_logit, v_log, v_mul, v_sqrt, v_sub, v_tanh};
 use crate::value::Val;
@@ -260,28 +260,34 @@ pub fn constrain(
             }
             (Val::Vec(cs), jac)
         }
-        // simplex[K]: K-1 raw → K-dim simplex. Stick-breaking with the (K-1-i)
-        // shift, so the zero vector maps to the uniform simplex (1/K, ..., 1/K).
+        // simplex[K]: K-1 raw → K-dim simplex, as `softmax(sum_to_zero_constrain(y))`
+        // — the inverse ILR Stan uses, not the stick-breaking of the older manual.
         StanType::Simplex(_) => {
-            let k = raw.len() + 1;
-            let mut theta = vec![Val::Num(0.0); k];
-            let mut log_jac = Val::Num(0.0);
-            let mut stick = Val::Num(1.0);
-            for i in 0..(k - 1) {
-                let shift = ((k - 1 - i) as f64).ln();
-                let adj = v_sub(t, &raw[i], &Val::Num(shift));
-                let z = v_inv_logit(t, &adj);
-                theta[i] = v_mul(t, &stick, &z);
-                let one_z = v_sub(t, &Val::Num(1.0), &z);
-                let log_stick = v_log(t, &stick);
-                let log_z = v_log(t, &z);
-                let log_oz = v_log(t, &one_z);
-                let term1 = v_add(t, &log_z, &log_oz);
-                let term2 = v_add(t, &log_stick, &term1);
-                log_jac = v_add(t, &log_jac, &term2);
-                stick = v_mul(t, &stick, &one_z);
+            let n = raw.len();
+            let k = n + 1;
+            // `sum_to_zero_constrain`: isometric, so it carries no Jacobian of its own.
+            let mut z = vec![Val::Num(0.0); k];
+            let mut sum_w = Val::Num(0.0);
+            for i in (1..=n).rev() {
+                let m = i as f64;
+                let w = v_mul(t, &raw[i - 1], &Val::Num((m * (m + 1.0)).sqrt().recip()));
+                sum_w = v_add(t, &sum_w, &w);
+                z[i - 1] = v_add(t, &z[i - 1], &sum_w);
+                let wn = v_mul(t, &w, &Val::Num(m));
+                z[i] = v_sub(t, &z[i], &wn);
             }
-            theta[k - 1] = stick;
+            let lse = log_sum_exp(t, &z)?;
+            let theta = z
+                .iter()
+                .map(|zi| {
+                    let d = v_sub(t, zi, &lse);
+                    v_exp(t, &d)
+                })
+                .collect();
+            // Stan accumulates `-(N+1) * (max + log d) + 0.5 * log(N+1)`, and
+            // `max + log d` is exactly the log-sum-exp the softmax already needs.
+            let scaled = v_mul(t, &lse, &Val::Num(-(k as f64)));
+            let log_jac = v_add(t, &scaled, &Val::Num(0.5 * (k as f64).ln()));
             (Val::Vec(theta), log_jac)
         }
         // ordered[K]: K unconstrained → K reals with μ₀ < μ₁ < … < μ_{K-1}
@@ -519,16 +525,25 @@ pub fn unconstrain(
                 out.push(free_scalar(*v, c, env)?);
             }
         }
-        // Stick-breaking run backwards: z is what the remaining stick was cut by,
-        // and the shift is what puts the uniform simplex at the origin.
+        // The inverse of `softmax(sum_to_zero_constrain(y))`. Softmax drops a
+        // constant, and the one it drops is whatever makes the logs sum to zero.
         StanType::Simplex(_) => {
-            let k = x.len();
-            let mut stick = 1.0_f64;
-            for (i, xi) in x.iter().take(k - 1).enumerate() {
-                let z = xi / stick;
-                out.push(logit(z) + ((k - 1 - i) as f64).ln());
-                stick *= 1.0 - z;
+            let n = x.len() - 1;
+            if n == 0 {
+                return Ok(());
             }
+            let logs: Vec<f64> = x.iter().map(|v| v.ln()).collect();
+            let mean = logs.iter().sum::<f64>() / logs.len() as f64;
+            let z: Vec<f64> = logs.iter().map(|v| v - mean).collect();
+            let mut y = vec![0.0_f64; n];
+            y[n - 1] = -z[n] * ((n * (n + 1)) as f64).sqrt() / n as f64;
+            let mut sum_w = 0.0_f64;
+            for i in (0..n.saturating_sub(1)).rev() {
+                let m = (i + 1) as f64;
+                sum_w += y[i + 1] / ((m + 1.0) * (m + 2.0)).sqrt();
+                y[i] = (sum_w - z[i + 1]) * (m * (m + 1.0)).sqrt() / m;
+            }
+            out.extend(y);
         }
         StanType::Ordered(_) => {
             out.push(x[0]);

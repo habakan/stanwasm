@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`simplex` is the inverse ILR transform Stan uses, not stick-breaking.** Stan
+  constrains a simplex as `softmax(sum_to_zero_constrain(y))`, and has since the
+  transform was changed out from under the older reference manual. This runtime
+  implemented the manual's stick-breaking, so for any model declaring a
+  `simplex` its log density and gradient at the *same unconstrained point*
+  disagreed with CmdStan — by 5e-2 to 9e-1 on posteriordb's `hmm_example`,
+  `hmm_drive_0`, `iohmm_reg` and `ldaK2`, while every non-simplex model in that
+  set agreed to 6e-14.
+
+  The constrained posterior was never wrong: it is the same distribution, drawn
+  through a different parameterisation. What was wrong is that the two could not
+  be compared, and unconstrained draws could not pass between them.
+
+  `sum_to_zero_constrain` is isometric and carries no Jacobian of its own, so
+  the whole adjustment is the softmax's: `-K * log_sum_exp(z) + 0.5 * log K`,
+  where Stan's streaming `max + log d` is that same log-sum-exp.
+
+  **This changes what an unconstrained point means for these models.** A saved
+  unconstrained draw from an earlier version no longer names the same simplex;
+  a constrained one is unaffected. `unconstrainDraw` moves with it.
+
+### Changed
+
 - **A contraction leaves the first element to the chain.** The run a gathered
   sum contracts starts one node before the re-rolled block that holds the rest:
   common subexpressions make the first element's nodes unlike the others, so

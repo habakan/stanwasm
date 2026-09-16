@@ -227,3 +227,59 @@ fn a_bound_naming_an_earlier_parameter_has_that_parameter_in_its_jacobian() {
         &raw,
     );
 }
+
+/// Stan constrains a simplex as `softmax(sum_to_zero_constrain(y))` — the
+/// inverse ILR — not the stick-breaking of the older reference manual. The
+/// values here are that definition evaluated by hand at the same points.
+#[test]
+fn simplex_is_the_inverse_ilr_stan_uses() {
+    let model = Model::parse_and_load(
+        "parameters { simplex[3] p; }\nmodel { }",
+        Env::new(),
+    )
+    .unwrap();
+
+    // y = [0, 0] is the uniform simplex, as it is for stick-breaking too.
+    let p0 = model.constrained_draw(&[0.0, 0.0]).unwrap();
+    for v in &p0 {
+        assert!((v - 1.0 / 3.0).abs() < 1e-14, "uniform: {p0:?}");
+    }
+
+    // sum_to_zero_constrain([0.1, -0.2]) worked through Stan's recurrence:
+    //   i=2: w2 = -0.2/sqrt(6), z[1] += w2, z[2] -= 2*w2
+    //   i=1: w1 =  0.1/sqrt(2), z[0] += w2 + w1, z[1] -= w1
+    let (w2, w1) = (-0.2 / 6.0_f64.sqrt(), 0.1 / 2.0_f64.sqrt());
+    let z = [w2 + w1, w2 - w1, -2.0 * w2];
+    assert!(z.iter().sum::<f64>().abs() < 1e-15, "z must sum to zero: {z:?}");
+    let m = z.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let d: f64 = z.iter().map(|v| (v - m).exp()).sum();
+    let want: Vec<f64> = z.iter().map(|v| (v - m).exp() / d).collect();
+
+    let got = model.constrained_draw(&[0.1, -0.2]).unwrap();
+    for (a, b) in got.iter().zip(&want) {
+        assert!((a - b).abs() < 1e-13, "got {got:?} want {want:?}");
+    }
+
+    // And the log Jacobian is `-K * log_sum_exp(z) + 0.5 * log K`.
+    let (lp, _) = model.log_prob_grad(&[0.1, -0.2]).unwrap();
+    let want_lp = -3.0 * (m + d.ln()) + 0.5 * 3.0_f64.ln();
+    assert!((lp - want_lp).abs() < 1e-13, "lp {lp} want {want_lp}");
+}
+
+#[test]
+fn simplex_unconstrains_back_to_where_it_came_from() {
+    for (k, raw) in [
+        (2, vec![0.4]),
+        (3, vec![0.1, -0.2]),
+        (5, vec![0.3, -1.1, 0.7, 0.05]),
+    ] {
+        let src = format!("parameters {{ simplex[{k}] p; }}\nmodel {{ }}");
+        let model = Model::parse_and_load(&src, Env::new()).unwrap();
+        let p = model.constrained_draw(&raw).unwrap();
+        assert!((p.iter().sum::<f64>() - 1.0).abs() < 1e-13, "k={k}: {p:?}");
+        let back = model.unconstrain_draw(&p).unwrap();
+        for (a, b) in back.iter().zip(&raw) {
+            assert!((a - b).abs() < 1e-11, "k={k}: {back:?} vs {raw:?}");
+        }
+    }
+}
