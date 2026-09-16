@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   | model | ns per gradient | wasm |
   | --- | --- | --- |
-  | `radon_county` | 115,848 → 57,788 (**2.19x**) | 16,571 → 388,259 B |
+  | `radon_county` | 115,848 → 52,788 (**2.19x**) | 16,571 → 388,259 B |
   | `nes` | 15,857 → 7,864 (**2.02x**) | 4,295 → 49,285 B |
   | `election88_full` | 194,263 → 116,355 (**1.67x**) | 273,758 → 708,203 B |
   | `kidscore_momiq` | 3,096 → 2,621 (1.18x) | 2,274 → 23,455 B |
