@@ -473,7 +473,7 @@ fn check_binop_shapes(op: &str, lhs: &Val, rhs: &Val) -> Result<()> {
 /// at the largest element there — and stays that element for every parameter
 /// value afterwards. The result is exact either way; only how much cancellation
 /// it survives depends on the choice.
-fn log_sum_exp(t: &mut Tape, xs: &[Val]) -> Result<Val> {
+pub(crate) fn log_sum_exp(t: &mut Tape, xs: &[Val]) -> Result<Val> {
     let mut at = 0;
     let mut best = f64::NEG_INFINITY;
     for (i, x) in xs.iter().enumerate() {
