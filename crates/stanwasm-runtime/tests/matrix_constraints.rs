@@ -233,11 +233,8 @@ fn a_bound_naming_an_earlier_parameter_has_that_parameter_in_its_jacobian() {
 /// values here are that definition evaluated by hand at the same points.
 #[test]
 fn simplex_is_the_inverse_ilr_stan_uses() {
-    let model = Model::parse_and_load(
-        "parameters { simplex[3] p; }\nmodel { }",
-        Env::new(),
-    )
-    .unwrap();
+    let model =
+        Model::parse_and_load("parameters { simplex[3] p; }\nmodel { }", Env::new()).unwrap();
 
     // y = [0, 0] is the uniform simplex, as it is for stick-breaking too.
     let p0 = model.constrained_draw(&[0.0, 0.0]).unwrap();
@@ -250,7 +247,10 @@ fn simplex_is_the_inverse_ilr_stan_uses() {
     //   i=1: w1 =  0.1/sqrt(2), z[0] += w2 + w1, z[1] -= w1
     let (w2, w1) = (-0.2 / 6.0_f64.sqrt(), 0.1 / 2.0_f64.sqrt());
     let z = [w2 + w1, w2 - w1, -2.0 * w2];
-    assert!(z.iter().sum::<f64>().abs() < 1e-15, "z must sum to zero: {z:?}");
+    assert!(
+        z.iter().sum::<f64>().abs() < 1e-15,
+        "z must sum to zero: {z:?}"
+    );
     let m = z.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let d: f64 = z.iter().map(|v| (v - m).exp()).sum();
     let want: Vec<f64> = z.iter().map(|v| (v - m).exp() / d).collect();
