@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A contraction leaves the first element to the chain.** The run a gathered
+  sum contracts starts one node before the re-rolled block that holds the rest:
+  common subexpressions make the first element's nodes unlike the others, so
+  `detect` opens the block at the second. That one node sits at a different
+  scratch slot, the run is no longer evenly spaced there, and the emitter falls
+  back to writing every coefficient inline — 7,437 of them on `radon_county`.
+
+  `v_sum` already peels a head for the reduction path, for the same reason and
+  with the same comment. The contraction now does it too, and falls back to
+  contracting everything when peeling does not produce a run.
+
+  | model | ns per gradient | wasm |
+  | --- | --- | --- |
+  | `radon_county` | 54,638 → 40,475 | 388,259 → **16,627 B** |
+  | `nes` | 7,879 → 6,858 | 49,285 → **4,349 B** |
+  | `election88_full` | 154,729 → 119,642 | 708,203 → 708,270 B |
+  | `kidscore_momiq` | 2,656 → 2,647 | 23,455 → **2,169 B** |
+
+  Against the version before either change that is 2.87x, 2.19x and 1.55x, with
+  the modules back to the size they were. `election88_full` keeps its inline
+  coefficients: `y_hat[i]` there sums five gathers, so the irregularity is not
+  confined to the first element.
+
+  Sampling `radon_county` takes 5.7 s where it took 17.3, and ESS per second
+  goes 266 → 747. Minimum bulk ESS over sixteen seeds is 4,642 against 4,886 —
+  a difference the same build produces between halves of its own runs, and one
+  that shrank as seeds were added.
+
+### Changed
+
 - **A gathered sum contracts instead of building a chain of adds.** A vectorised
   statement over a gather — `y_hat[i] = a[county[i]]` — hands `v_sum` the same
   tape nodes several times and out of order, because value numbering folds the
