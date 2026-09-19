@@ -146,6 +146,9 @@ pub struct StanModel {
     /// run's time by the work in it. Kept here rather than returned, so the
     /// draws still come back as one flat array.
     last_run: RunCounters,
+    /// How many terms `logLik` reports. Counting means tracing the model, so
+    /// the answer is kept — it is a property of the statements, not the point.
+    log_lik_count: RefCell<Option<usize>>,
 }
 
 /// Counted over a whole run, warmup included, the way CmdStan's
@@ -192,6 +195,7 @@ impl StanModel {
             step: None,
             aot: None,
             last_run: RunCounters::default(),
+            log_lik_count: RefCell::new(None),
         })
     }
 
@@ -321,7 +325,12 @@ impl StanModel {
     /// written as a `target +=` sum.
     #[wasm_bindgen(getter, js_name = logLikCount)]
     pub fn log_lik_count(&self) -> Result<usize, JsError> {
-        Ok(self.log_lik(&vec![0.1_f64; self.model.n_params()])?.len())
+        if let Some(n) = *self.log_lik_count.borrow() {
+            return Ok(n);
+        }
+        let n = self.log_lik(&vec![0.1_f64; self.model.n_params()])?.len();
+        *self.log_lik_count.borrow_mut() = Some(n);
+        Ok(n)
     }
 
     /// Run NUTS sampling. Returns a flat row-major buffer of shape
