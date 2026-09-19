@@ -1,6 +1,6 @@
 //! AST evaluator. Walks Stan AST, pushes tape ops, returns Val.
 
-use crate::distributions::{eval_dist, eval_sample_vec};
+use crate::distributions::{eval_dist, eval_sample_terms, eval_sample_vec};
 use crate::env::Env;
 use crate::error::EvalError;
 use crate::matrix;
@@ -1459,6 +1459,16 @@ impl Flow {
     }
 }
 
+/// Whether a value holds any tape node, which is how a parameter shows through
+/// a container the evaluator has already broadcast.
+fn depends_on_params(v: &Val) -> bool {
+    match v {
+        Val::Tape(_) => true,
+        Val::Num(_) => false,
+        Val::Vec(xs) | Val::Row(xs) => xs.iter().any(depends_on_params),
+    }
+}
+
 /// Evaluate a statement list as a scoped block: locals stay local, and
 /// `break`/`continue` short-circuits while propagating the signal and log-prob.
 fn eval_block(t: &mut Tape, stmts: &[Stmt], env: &mut Env) -> Result<Flow> {
@@ -1500,11 +1510,25 @@ pub fn eval_stmt(t: &mut Tape, stmt: &Stmt, env: &mut Env) -> Result<Flow> {
                     .map(|a| eval_expr(t, a, env))
                     .collect::<Result<Vec<_>>>()?,
             );
-            let v = match &x {
-                Val::Vec(xs) | Val::Row(xs) => eval_sample_vec(t, dist, xs, &evaled_args)?,
-                _ => eval_dist(t, dist, &x, &evaled_args)?,
-            };
-            Ok(Flow::Val(v))
+            // A variate holding no tape node is data, which is what makes the
+            // statement a likelihood rather than a prior.
+            match env.log_lik_sink().filter(|_| !depends_on_params(&x)) {
+                Some(sink) => {
+                    let (v, terms) = eval_sample_terms(t, dist, &x, &evaled_args)?;
+                    let mut ids = sink.borrow_mut();
+                    for term in &terms {
+                        ids.push(term.to_tape(t)?);
+                    }
+                    Ok(Flow::Val(v))
+                }
+                None => {
+                    let v = match &x {
+                        Val::Vec(xs) | Val::Row(xs) => eval_sample_vec(t, dist, xs, &evaled_args)?,
+                        _ => eval_dist(t, dist, &x, &evaled_args)?,
+                    };
+                    Ok(Flow::Val(v))
+                }
+            }
         }
         Stmt::TargetIncr(e) => Ok(Flow::Val(eval_expr(t, e, env)?)),
         Stmt::Block(body) => eval_block(t, body, env),

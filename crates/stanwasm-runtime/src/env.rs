@@ -29,6 +29,10 @@ pub struct Env {
     /// Set while tracing for the one-shot `Compiled` tape, which is replayed for
     /// every draw — a parameter-dependent branch would freeze at its trace-time value.
     strict_no_param_branch: bool,
+    /// Where a `~` statement over data records its per-observation terms, when
+    /// a caller asked for the pointwise log-likelihood. Shared by `Rc`, so a
+    /// statement inside a loop or a function body reaches the same list.
+    log_lik: Option<Rc<RefCell<Vec<u32>>>>,
     /// User-defined functions, shared by `Rc` because `Env` is cloned per scope.
     funcs: Option<Rc<Vec<(String, FuncDef)>>>,
     /// Names currently being inlined. Calls are unrolled into the tape, so a
@@ -47,6 +51,7 @@ impl Env {
             vars: Vec::new(),
             rng: base.rng.clone(),
             strict_no_param_branch: base.strict_no_param_branch,
+            log_lik: base.log_lik.clone(),
             funcs: base.funcs.clone(),
             call_stack: base.call_stack.clone(),
             base: Some(base),
@@ -185,6 +190,14 @@ impl Env {
 
     pub fn set_strict_no_param_branch(&mut self, v: bool) {
         self.strict_no_param_branch = v;
+    }
+
+    pub fn set_log_lik_sink(&mut self, sink: Rc<RefCell<Vec<u32>>>) {
+        self.log_lik = Some(sink);
+    }
+
+    pub fn log_lik_sink(&self) -> Option<Rc<RefCell<Vec<u32>>>> {
+        self.log_lik.clone()
     }
 
     pub fn set_funcs(&mut self, funcs: Rc<Vec<(String, FuncDef)>>) {

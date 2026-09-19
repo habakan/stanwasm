@@ -118,6 +118,17 @@ const samples = model.sample(
 // parameter values (e.g. sigma on its natural, not log, scale) per draw:
 const constrained = model.constrainDraw(samples.slice(0, model.n_params));
 
+// The pointwise log-likelihood, one term per observation — what `az.loo` and
+// loo's PSIS read. A `~` statement whose variate is data is a likelihood term;
+// a prior is not.
+const terms = model.logLik(samples.slice(0, model.n_params));
+// Per draw, that trace is the expensive way round. `compileToWasm(reroll, true)`
+// names the terms in the module, and `logLikViaAot` reads them back with one
+// forward pass:
+const aotBytes = model.compileToWasm("auto", /*logLik*/ true);
+// ... instantiate and setAotExports(aot.instance.exports) as below ...
+const logLik = model.logLikViaAot(samples.slice(0, model.n_params));
+
 // If the model has a `generated quantities` block, evaluate it over a batch
 // of draws (one shared, seeded RNG stream across the whole batch):
 console.log(model.genQuantityNames().join(", "));
