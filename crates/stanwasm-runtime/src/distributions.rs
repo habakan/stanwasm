@@ -811,6 +811,36 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Re
     if is_multivariate(name) {
         return eval_dist(t, name, &Val::Vec(xs.to_vec()), args);
     }
+    let terms = sample_vec_terms(t, name, xs, args)?;
+    Ok(v_sum(t, &terms))
+}
+
+/// A `~` statement's contribution, and the per-observation terms behind it.
+///
+/// One term per element of a vectorised variate; a scalar or a multivariate
+/// variate is one observation and has one. This is what a pointwise
+/// log-likelihood is made of, which is why the terms come back rather than
+/// only their sum.
+pub fn eval_sample_terms(
+    t: &mut Tape,
+    name: &str,
+    x: &Val,
+    args: &[Val],
+) -> Result<(Val, Vec<Val>)> {
+    match x {
+        Val::Vec(xs) | Val::Row(xs) if !is_multivariate(name) => {
+            let terms = sample_vec_terms(t, name, xs, args)?;
+            Ok((v_sum(t, &terms), terms))
+        }
+        _ => {
+            let v = eval_dist(t, name, x, args)?;
+            Ok((v.clone(), vec![v]))
+        }
+    }
+}
+
+/// One term per element, with the arguments broadcast alongside.
+fn sample_vec_terms(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Result<Vec<Val>> {
     // Before the length check, which would otherwise blame a nonexistent
     // distribution's arguments.
     if arity(name).is_none() {
@@ -819,11 +849,7 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Re
     // `categorical`'s theta and its logit form's beta are shared by every element
     // of the variate, so they skip the broadcast.
     if name == "categorical" || name == "categorical_logit" {
-        let terms: Vec<Val> = xs
-            .iter()
-            .map(|x| eval_dist(t, name, x, args))
-            .collect::<Result<_>>()?;
-        return Ok(v_sum(t, &terms));
+        return xs.iter().map(|x| eval_dist(t, name, x, args)).collect();
     }
     // Vectorized arguments must line up element-wise before anything indexes them.
     for a in args {
@@ -846,7 +872,7 @@ pub fn eval_sample_vec(t: &mut Tape, name: &str, xs: &[Val], args: &[Val]) -> Re
         }
         terms.push(eval_dist(t, name, x, &elem_args)?);
     }
-    Ok(v_sum(t, &terms))
+    Ok(terms)
 }
 
 fn broadcast_elem(v: &Val, i: usize) -> Val {

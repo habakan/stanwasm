@@ -82,6 +82,8 @@ smoke: wasm ## Node smoke tests against the built bundle
 	cd ts && $(NODE) tests/aot_smoke.ts
 # A module compiled ahead of time, sampled with no StanModel behind it.
 	cd ts && $(NODE) tests/aot_sampler_smoke.ts
+# The pointwise log-likelihood, traced and through the module, against each other.
+	cd ts && $(NODE) tests/log_lik_smoke.ts
 # The package entry point names its exports one by one, so a new binding can
 # ship in the wasm and be unreachable through the package.
 	cd ts && $(NODE) tests/facade_exports.mjs

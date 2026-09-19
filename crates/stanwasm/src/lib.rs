@@ -146,6 +146,9 @@ pub struct StanModel {
     /// run's time by the work in it. Kept here rather than returned, so the
     /// draws still come back as one flat array.
     last_run: RunCounters,
+    /// How many terms `logLik` reports. Counting means tracing the model, so
+    /// the answer is kept — it is a property of the statements, not the point.
+    log_lik_count: RefCell<Option<usize>>,
 }
 
 /// Counted over a whole run, warmup included, the way CmdStan's
@@ -163,6 +166,12 @@ struct AotBuild {
     scratch_init: Vec<f64>,
     /// The emitted module's `tapewasm_layout_id` global.
     layout_id: u32,
+    /// Pointwise log-likelihood terms the module reports, 0 when it was
+    /// compiled without them.
+    n_log_lik: usize,
+    /// tapewasm's own entry into the module, kept so `logLikViaAot` copies the
+    /// scratch buffer once rather than once per draw.
+    sampler: AotSampler,
 }
 
 #[wasm_bindgen]
@@ -186,6 +195,7 @@ impl StanModel {
             step: None,
             aot: None,
             last_run: RunCounters::default(),
+            log_lik_count: RefCell::new(None),
         })
     }
 
@@ -284,6 +294,43 @@ impl StanModel {
         let (lp_slot, grads_slot) = out.split_at_mut(1);
         lp_slot[0] = compiled.log_prob_grad(params, grads_slot);
         Ok(out)
+    }
+
+    /// The pointwise log-likelihood at `params`, one term per observation.
+    ///
+    /// A `~` statement whose variate is data is a likelihood term; a prior,
+    /// whose variate is a parameter, is not. One entry per element of a
+    /// vectorised variate, and one for a scalar or multivariate one, in the
+    /// order the statements run — which is what `az.loo` and `loo::loo` want a
+    /// column of. A likelihood written as `target += normal_lpdf(y | ...)`
+    /// arrives already summed and contributes nothing, so the array comes back
+    /// empty rather than wrong.
+    ///
+    /// This traces the model afresh, as `sampleFresh` does. `logLikViaAot` is
+    /// the same values out of a compiled module, which is the one to call per
+    /// draw.
+    #[wasm_bindgen(js_name = logLik)]
+    pub fn log_lik(&self, params: &[f64]) -> Result<Vec<f64>, JsError> {
+        let n = self.model.n_params();
+        if params.len() != n {
+            return Err(JsError::new(&format!(
+                "params length {} != n_params {n}",
+                params.len()
+            )));
+        }
+        self.model.log_lik(params).map_err(jserr)
+    }
+
+    /// How many terms `logLik` returns. Zero for a model whose likelihood is
+    /// written as a `target +=` sum.
+    #[wasm_bindgen(getter, js_name = logLikCount)]
+    pub fn log_lik_count(&self) -> Result<usize, JsError> {
+        if let Some(n) = *self.log_lik_count.borrow() {
+            return Ok(n);
+        }
+        let n = self.log_lik(&vec![0.1_f64; self.model.n_params()])?.len();
+        *self.log_lik_count.borrow_mut() = Some(n);
+        Ok(n)
     }
 
     /// Run NUTS sampling. Returns a flat row-major buffer of shape
@@ -543,7 +590,11 @@ impl StanModel {
     /// V8 and around 2,000 in SpiderMonkey and JavaScriptCore. `"auto"` takes
     /// the lower one. A page that has measured its engine — tapewasm's
     /// `calibrateReroll()` does it once — passes the number it got.
-    pub fn compile_to_wasm(&mut self, reroll: Option<String>) -> Result<Vec<u8>, JsError> {
+    pub fn compile_to_wasm(
+        &mut self,
+        reroll: Option<String>,
+        log_lik: Option<bool>,
+    ) -> Result<Vec<u8>, JsError> {
         let mode = match reroll.as_deref() {
             None | Some("auto") => stanwasm_codegen::Reroll::Auto,
             Some("always") => stanwasm_codegen::Reroll::Always,
@@ -559,7 +610,14 @@ impl StanModel {
             },
         };
         let dummy = vec![0.1_f64; self.model.n_params()];
-        let compiled = stanwasm_codegen::compile_with(&self.model, &dummy, mode).map_err(|e| {
+        let want_log_lik = log_lik.unwrap_or(false);
+        let compiled = stanwasm_codegen::compile_with_log_lik(
+            &self.model,
+            &dummy,
+            mode,
+            want_log_lik,
+        )
+        .map_err(|e| {
             // A graph that moves with the parameters would freeze at `dummy`.
             if matches!(&e, stanwasm_codegen::CodegenError::Eval(inner) if needs_fresh_trace(inner))
             {
@@ -571,9 +629,17 @@ impl StanModel {
         let mut scratch = vec![0.0_f64; compiled.scratch_len];
         let at = compiled.scratch_len - compiled.const_table.len();
         scratch[at..].copy_from_slice(&compiled.const_table);
+        let sampler = AotSampler::new(
+            compiled.n_params,
+            scratch.clone(),
+            compiled.layout_id,
+            Vec::new(),
+        )?;
         self.aot = Some(AotBuild {
             scratch_init: scratch,
             layout_id: compiled.layout_id,
+            n_log_lik: compiled.n_outputs,
+            sampler,
         });
         Ok(compiled.wasm)
     }
@@ -685,6 +751,38 @@ impl StanModel {
         }
         self.last_run = counters;
         Ok(out)
+    }
+
+    /// `logLik` through the bound AOT module: the forward pass alone, no
+    /// gradient and no re-trace.
+    ///
+    /// Needs `compileToWasm(reroll, true)` — the module reports the terms only
+    /// when it was asked to carry them, since the second forward pass costs
+    /// about 1.35x its bytes. Call it once per draw to build the `log_lik`
+    /// column ArviZ and loo read.
+    #[wasm_bindgen(js_name = logLikViaAot)]
+    pub fn log_lik_via_aot(&self, params: &[f64]) -> Result<Vec<f64>, JsError> {
+        let n = self.model.n_params();
+        if params.len() != n {
+            return Err(JsError::new(&format!(
+                "params length {} != n_params {n}",
+                params.len()
+            )));
+        }
+        let built = self.aot.as_ref().ok_or_else(|| {
+            JsError::new(
+                "call compileToWasm(reroll, true) before logLikViaAot(): the terms \
+                 are named when the module is emitted",
+            )
+        })?;
+        if built.n_log_lik == 0 {
+            return Err(JsError::new(
+                "the compiled module carries no log-likelihood terms: pass true as \
+                 compileToWasm's second argument, or check logLikCount — a `target +=` \
+                 likelihood has no terms to name",
+            ));
+        }
+        built.sampler.evaluate(params)
     }
 
     /// Leapfrog steps the last `sampleViaAot` took, warmup included — one
