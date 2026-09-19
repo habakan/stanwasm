@@ -32,9 +32,9 @@ stanwasm = { path = "crates/stanwasm", version = "0.8.0" }
 # 0.3.1 is unreleased upstream, so no tag names this tree. The version beside it
 # is what `cargo publish` rewrites to, once crates.io opens for both — it waits
 # on the same nuts-rs release.
-tapewasm-autodiff = { git = "https://github.com/habakan/tapewasm", rev = "07ed2559a943099aa29ee4624e699cb464507428", version = "0.3.1" }
-tapewasm-codegen = { git = "https://github.com/habakan/tapewasm", rev = "07ed2559a943099aa29ee4624e699cb464507428", version = "0.3.1" }
-tapewasm = { git = "https://github.com/habakan/tapewasm", rev = "07ed2559a943099aa29ee4624e699cb464507428", version = "0.3.1" }
+tapewasm-autodiff = { git = "https://github.com/habakan/tapewasm", rev = "0bc349901497392188f883bb165a5885647d5943", version = "0.3.1" }
+tapewasm-codegen = { git = "https://github.com/habakan/tapewasm", rev = "0bc349901497392188f883bb165a5885647d5943", version = "0.3.1" }
+tapewasm = { git = "https://github.com/habakan/tapewasm", rev = "0bc349901497392188f883bb165a5885647d5943", version = "0.3.1" }
 
 nuts-rs = { version = "0.18.1", default-features = false }
 wasm-bindgen = "0.2"
