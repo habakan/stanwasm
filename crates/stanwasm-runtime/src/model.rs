@@ -657,8 +657,31 @@ impl Model {
         leaves: &[u32],
         strict: bool,
     ) -> Result<u32, EvalError> {
+        Ok(self
+            .trace_forward_with_log_lik(tape, leaves, strict, false)?
+            .0)
+    }
+
+    /// [`Model::trace_forward`], and where the pointwise log-likelihood is.
+    ///
+    /// With `log_lik` set, every `~` statement whose variate is data — which is
+    /// what makes it a likelihood rather than a prior — leaves its terms behind,
+    /// one per observation, in the order the statements ran. A `target +=
+    /// normal_lpdf(y | ...)` is already summed when the evaluator sees it and
+    /// cannot be attributed, so it contributes none.
+    pub fn trace_forward_with_log_lik(
+        &self,
+        tape: &mut Tape,
+        leaves: &[u32],
+        strict: bool,
+        log_lik: bool,
+    ) -> Result<(u32, Vec<u32>), EvalError> {
+        let sink = Rc::new(RefCell::new(Vec::new()));
         let mut env = Env::nested(Rc::clone(&self.data_env));
         env.set_strict_no_param_branch(strict);
+        if log_lik {
+            env.set_log_lik_sink(Rc::clone(&sink));
+        }
 
         let mut leaf_idx = 0usize;
         let mut lp: Val = Val::Num(0.0);
@@ -692,6 +715,20 @@ impl Model {
             lp = v_add(tape, &lp, &r);
         }
 
-        lp.to_tape(tape)
+        let root = lp.to_tape(tape)?;
+        // `env` still holds its own handle on the sink, so take the contents.
+        let terms = std::mem::take(&mut *sink.borrow_mut());
+        Ok((root, terms))
+    }
+
+    /// The pointwise log-likelihood at `params`, by tracing the model afresh.
+    ///
+    /// The reference the emitted module's `evaluate` is checked against, and
+    /// the path for a model that has no recorded tape.
+    pub fn log_lik(&self, params: &[f64]) -> Result<Vec<f64>, EvalError> {
+        let mut tape = Tape::new();
+        let leaves: Vec<u32> = params.iter().map(|p| tape.new_var(*p)).collect();
+        let (_, terms) = self.trace_forward_with_log_lik(&mut tape, &leaves, false, true)?;
+        Ok(terms.iter().map(|k| tape.value(*k)).collect())
     }
 }

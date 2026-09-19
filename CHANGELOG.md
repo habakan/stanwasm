@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`logLik` and `logLikViaAot`** on `StanModel` — the pointwise
+  log-likelihood, one term per observation, which is the column `az.loo` and
+  loo's PSIS read and which no page here could produce before.
+
+  A `~` statement whose variate is data is a likelihood term; a prior, whose
+  variate is a parameter, is not. A vectorised variate gives one term per
+  element, a scalar or multivariate one gives one, and they come in the order
+  the statements run. A likelihood written as `target += normal_lpdf(y | ...)`
+  arrives already summed and cannot be attributed, so `logLikCount` is 0 and
+  the array comes back empty rather than wrong.
+
+  `logLik` traces the model afresh, as `sampleFresh` does, and works on any
+  model. `logLikViaAot` reads the same terms out of the compiled module —
+  `compileToWasm(reroll, true)` names them, which costs about 1.35x the
+  module's bytes for a second forward pass, and nothing per draw beyond that
+  pass. Both give the same numbers, which the smoke test asserts, along with
+  the terms summing to the density less its priors.
+
+  Underneath is tapewasm's `evaluate` (habakan/tapewasm#35): the terms are
+  already on the tape, so naming them adds no arithmetic.
+
 ## [0.8.0] — 2026-09-17
 
 ### Added

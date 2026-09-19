@@ -14,7 +14,9 @@ use stanwasm_runtime::Model;
 use tapewasm_autodiff::Tape;
 use thiserror::Error;
 
-pub use tapewasm_codegen::{compile_tape, tape_text, Compiled, Reroll, ABI_VERSION};
+pub use tapewasm_codegen::{
+    compile_tape, compile_tape_with_outputs, tape_text, Compiled, Reroll, ABI_VERSION,
+};
 
 #[derive(Debug, Error)]
 pub enum CodegenError {
@@ -38,6 +40,23 @@ pub fn compile_with(
     dummy_params: &[f64],
     reroll: Reroll,
 ) -> Result<Compiled, CodegenError> {
+    compile_with_log_lik(model, dummy_params, reroll, false)
+}
+
+/// [`compile_with`], and whether the module also reports the pointwise
+/// log-likelihood through `evaluate`.
+///
+/// The terms are the ones every data `~` statement left on the tape, so naming
+/// them adds no arithmetic — only a second forward pass through the module,
+/// about 1.35x its bytes. A model whose likelihood is written as `target +=
+/// normal_lpdf(y | ...)` has nothing to name: that sum reaches the tape already
+/// added up, and `Compiled::n_outputs` comes back zero.
+pub fn compile_with_log_lik(
+    model: &Model,
+    dummy_params: &[f64],
+    reroll: Reroll,
+    log_lik: bool,
+) -> Result<Compiled, CodegenError> {
     if dummy_params.len() != model.n_params() {
         return Err(CodegenError::Internal(format!(
             "dummy_params len {} != model n_params {}",
@@ -47,6 +66,12 @@ pub fn compile_with(
     }
     let mut tape = Tape::new();
     let leaves: Vec<u32> = dummy_params.iter().map(|p| tape.new_var(*p)).collect();
-    let root = model.trace_forward(&mut tape, &leaves, true)?;
-    Ok(compile_tape(&tape, dummy_params.len(), root, reroll)?)
+    let (root, terms) = model.trace_forward_with_log_lik(&mut tape, &leaves, true, log_lik)?;
+    Ok(compile_tape_with_outputs(
+        &tape,
+        dummy_params.len(),
+        root,
+        &terms,
+        reroll,
+    )?)
 }

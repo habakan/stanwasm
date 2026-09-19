@@ -5,7 +5,7 @@
 //! these add is the half in front of it: that tracing a model records the tape
 //! the evaluator would have walked.
 
-use stanwasm_codegen::compile;
+use stanwasm_codegen::{compile, compile_with, compile_with_log_lik, Reroll};
 use stanwasm_runtime::{Env, Model};
 use wasmi::{Caller, Engine, Func, Linker, Memory, MemoryType, Module, Store};
 
@@ -56,6 +56,28 @@ fn run_aot_log_prob_grad(
     scratch_len: usize,
     const_table: &[f64],
 ) -> (f64, Vec<f64>) {
+    run_export(
+        wasm,
+        "log_prob_grad",
+        n_params,
+        params,
+        n_params,
+        scratch_len,
+        const_table,
+    )
+}
+
+/// `log_prob_grad` or `evaluate`: same arguments, and the second one is where
+/// they differ — `n_params` gradients, or `out_len` values.
+fn run_export(
+    wasm: &[u8],
+    name: &str,
+    n_params: usize,
+    params: &[f64],
+    out_len: usize,
+    scratch_len: usize,
+    const_table: &[f64],
+) -> (f64, Vec<f64>) {
     // The emitter widens a re-rolled loop to `f64x2` where it can, which wasmi
     // parses only with the proposal enabled.
     let mut config = wasmi::Config::default();
@@ -66,7 +88,9 @@ fn run_aot_log_prob_grad(
 
     // Host-allocated memory shared with the AOT module: params, grads, then the
     // module's primal/adjoint scratch.
-    let pages = ((n_params * 2 + scratch_len) * 8).div_ceil(65536).max(1) as u32;
+    let pages = ((n_params + out_len + scratch_len) * 8)
+        .div_ceil(65536)
+        .max(1) as u32;
     let memory = Memory::new(&mut store, MemoryType::new(pages, None)).unwrap();
 
     let mut linker: Linker<HostState> = Linker::new(&engine);
@@ -78,13 +102,13 @@ fn run_aot_log_prob_grad(
         .expect("instantiate");
 
     let lpg = instance
-        .get_typed_func::<(i32, i32, i32, i32), f64>(&store, "log_prob_grad")
+        .get_typed_func::<(i32, i32, i32, i32), f64>(&store, name)
         .unwrap();
 
-    // Layout: params at offset 0, grads at offset n_params*8.
+    // Layout: params at offset 0, then the output buffer, then scratch.
     let params_ptr: i32 = 0;
     let grads_ptr: i32 = (n_params * 8) as i32;
-    let scratch_ptr: i32 = (n_params * 16) as i32;
+    let scratch_ptr: i32 = ((n_params + out_len) * 8) as i32;
     let bytes: Vec<u8> = params.iter().flat_map(|p| p.to_le_bytes()).collect();
     memory
         .write(&mut store, params_ptr as usize, &bytes)
@@ -103,7 +127,7 @@ fn run_aot_log_prob_grad(
         )
         .unwrap();
 
-    let mut grad_bytes = vec![0u8; n_params * 8];
+    let mut grad_bytes = vec![0u8; out_len * 8];
     memory
         .read(&store, grads_ptr as usize, &mut grad_bytes)
         .unwrap();
@@ -649,4 +673,158 @@ fn layout_id_is_exported_and_identifies_the_buffers() {
         Some(wasmparser::ExternalKind::Global),
         "the module exports no layout id global"
     );
+}
+
+// ---- the pointwise log-likelihood ----------------------------------------
+//
+// Every `~` statement whose variate is data leaves one term per observation on
+// the tape, and `compile_with_log_lik` names them so the module reports them
+// through `evaluate`. The oracle is the same model traced afresh.
+
+fn evaluates(model: &Model, params: &[f64], reroll: Reroll) -> Vec<f64> {
+    let dummy = vec![0.1; model.n_params()];
+    let compiled = compile_with_log_lik(model, &dummy, reroll, true).unwrap();
+    let want = model.log_lik(params).unwrap();
+    assert_eq!(compiled.n_outputs, want.len(), "{reroll:?}: term count");
+    let (_, got) = run_export(
+        &compiled.wasm,
+        "evaluate",
+        compiled.n_params,
+        params,
+        compiled.n_outputs,
+        compiled.scratch_len,
+        &compiled.const_table,
+    );
+    for (i, (g, w)) in got.iter().zip(&want).enumerate() {
+        assert!(close(*g, *w, 1e-12), "{reroll:?}: term[{i}] {g} vs {w}");
+    }
+    got
+}
+
+fn linreg_model(n: usize) -> (Model, Vec<f64>) {
+    let x: Vec<f64> = (0..n).map(|i| -2.0 + i as f64 * 0.1).collect();
+    let y: Vec<f64> = x.iter().map(|x| 1.3 + 0.7 * x + 0.05 * x * x).collect();
+    let mut data = Env::new();
+    data.set_scalar("N", n as f64);
+    data.set_vector("x", &x);
+    data.set_vector("y", &y);
+    let model = Model::parse_and_load(LINEAR_REGRESSION, data).unwrap();
+    (model, vec![0.5, 1.5, -0.2])
+}
+
+#[test]
+fn every_observation_gets_a_term() {
+    let (model, at) = linreg_model(40);
+    for reroll in [Reroll::Never, Reroll::Always, Reroll::Auto] {
+        let terms = evaluates(&model, &at, reroll);
+        assert_eq!(terms.len(), 40, "one term per observation");
+    }
+}
+
+/// The re-rolled shape is where the terms are one position of a block, which is
+/// the run the module writes with a loop rather than a store each.
+#[test]
+fn a_re_rolled_likelihood_reports_every_term() {
+    let (model, at) = linreg_model(2000);
+    let terms = evaluates(&model, &at, Reroll::Always);
+    assert_eq!(terms.len(), 2000);
+}
+
+/// A prior is a `~` statement too, and its variate is a parameter — so it is
+/// not a likelihood term. Three priors here, and none of them is reported.
+#[test]
+fn priors_are_not_likelihood_terms() {
+    let (model, at) = linreg_model(12);
+    assert_eq!(model.log_lik(&at).unwrap().len(), 12);
+}
+
+/// Written as a loop rather than vectorised, the same model has the same terms.
+#[test]
+fn a_looped_likelihood_gives_the_terms_the_vectorised_one_does() {
+    const LOOPED: &str = r#"
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+parameters {
+  real alpha;
+  real beta;
+  real<lower=0> sigma;
+}
+model {
+  alpha ~ normal(0, 10);
+  beta  ~ normal(0, 10);
+  sigma ~ exponential(1);
+  for (n in 1:N) {
+    y[n] ~ normal(alpha + beta * x[n], sigma);
+  }
+}
+"#;
+    let (vectorised, at) = linreg_model(20);
+    let x: Vec<f64> = (0..20).map(|i| -2.0 + i as f64 * 0.1).collect();
+    let y: Vec<f64> = x.iter().map(|x| 1.3 + 0.7 * x + 0.05 * x * x).collect();
+    let mut data = Env::new();
+    data.set_scalar("N", 20.0);
+    data.set_vector("x", &x);
+    data.set_vector("y", &y);
+    let looped = Model::parse_and_load(LOOPED, data).unwrap();
+
+    let a = vectorised.log_lik(&at).unwrap();
+    let b = evaluates(&looped, &at, Reroll::Auto);
+    assert_eq!(a.len(), b.len());
+    for (i, (p, q)) in a.iter().zip(&b).enumerate() {
+        assert!(close(*p, *q, 1e-12), "term[{i}] {p} vs {q}");
+    }
+}
+
+/// `target += normal_lpdf(y | ...)` arrives already summed, so there is nothing
+/// to attribute and the module says so rather than reporting a wrong shape.
+#[test]
+fn a_summed_likelihood_names_no_terms() {
+    const SUMMED: &str = r#"
+data {
+  int<lower=0> N;
+  vector[N] y;
+}
+parameters {
+  real mu;
+}
+model {
+  mu ~ normal(0, 10);
+  target += normal_lpdf(y | mu, 1.0);
+}
+"#;
+    let mut data = Env::new();
+    data.set_scalar("N", 4.0);
+    data.set_vector("y", &[0.1, -0.3, 1.2, 0.7]);
+    let model = Model::parse_and_load(SUMMED, data).unwrap();
+    assert!(model.log_lik(&[0.2]).unwrap().is_empty());
+    let compiled = compile_with_log_lik(&model, &[0.1], Reroll::Auto, true).unwrap();
+    assert_eq!(compiled.n_outputs, 0);
+}
+
+/// Naming the terms changes nothing about the density the module computes.
+#[test]
+fn naming_the_terms_leaves_the_gradient_alone() {
+    let (model, at) = linreg_model(40);
+    let dummy = vec![0.1; model.n_params()];
+    let plain = compile_with(&model, &dummy, Reroll::Auto).unwrap();
+    let with = compile_with_log_lik(&model, &dummy, Reroll::Auto, true).unwrap();
+    let (lp_a, g_a) = run_aot_log_prob_grad(
+        &plain.wasm,
+        plain.n_params,
+        &at,
+        plain.scratch_len,
+        &plain.const_table,
+    );
+    let (lp_b, g_b) = run_aot_log_prob_grad(
+        &with.wasm,
+        with.n_params,
+        &at,
+        with.scratch_len,
+        &with.const_table,
+    );
+    assert_eq!(lp_a, lp_b);
+    assert_eq!(g_a, g_b);
 }
