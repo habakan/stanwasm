@@ -4,7 +4,10 @@ message: >-
   If you use this software, please cite it as below.
 type: software
 authors:
-  - alias: habakan
+  - given-names: Kansuke
+    family-names: Habano
+    alias: habakan
+    orcid: 'https://orcid.org/0009-0009-3429-9227'
 abstract: >-
   Stan probabilistic models compiled and sampled entirely inside the
   browser. Pure Rust, single ~466 KB WebAssembly bundle, embedded
