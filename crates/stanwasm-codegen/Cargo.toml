@@ -20,4 +20,4 @@ thiserror.workspace = true
 # have yet, so it needs the encoder the emitter uses.
 wasm-encoder.workspace = true
 wasmparser = "0.258"
-wasmi = { version = "1.1", features = ["simd"] }
+wasmi = { version = "2.0", features = ["simd"] }
