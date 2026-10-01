@@ -718,7 +718,7 @@ dependencies = [
  "stanwasm-codegen",
  "stanwasm-parser",
  "stanwasm-runtime",
- "tapewasm-autodiff",
+ "tapewasm-autodiff 0.3.3",
  "wasmi",
 ]
 
@@ -727,8 +727,8 @@ name = "stanwasm-codegen"
 version = "0.8.0"
 dependencies = [
  "stanwasm-runtime",
- "tapewasm-autodiff",
- "tapewasm-codegen",
+ "tapewasm-autodiff 0.3.3",
+ "tapewasm-codegen 0.3.4",
  "thiserror",
  "wasm-encoder",
  "wasmi",
@@ -753,7 +753,7 @@ dependencies = [
  "serde_json",
  "stanwasm-ast",
  "stanwasm-parser",
- "tapewasm-autodiff",
+ "tapewasm-autodiff 0.3.3",
  "thiserror",
 ]
 
@@ -809,7 +809,7 @@ dependencies = [
  "getrandom",
  "nuts-rs",
  "rand",
- "tapewasm-codegen",
+ "tapewasm-codegen 0.3.3",
  "thiserror",
  "wasm-bindgen",
 ]
@@ -820,11 +820,26 @@ version = "0.3.3"
 source = "git+https://github.com/habakan/tapewasm?tag=v0.3.3#19242f48a5616a59249536192cb64b41f4193589"
 
 [[package]]
+name = "tapewasm-autodiff"
+version = "0.3.4"
+source = "git+https://github.com/habakan/tapewasm?tag=v0.3.4#1d23d1ccd1b2a403b4449e7124b3f292c8bd9692"
+
+[[package]]
 name = "tapewasm-codegen"
 version = "0.3.3"
 source = "git+https://github.com/habakan/tapewasm?tag=v0.3.3#19242f48a5616a59249536192cb64b41f4193589"
 dependencies = [
- "tapewasm-autodiff",
+ "tapewasm-autodiff 0.3.3",
+ "thiserror",
+ "wasm-encoder",
+]
+
+[[package]]
+name = "tapewasm-codegen"
+version = "0.3.4"
+source = "git+https://github.com/habakan/tapewasm?tag=v0.3.4#1d23d1ccd1b2a403b4449e7124b3f292c8bd9692"
+dependencies = [
+ "tapewasm-autodiff 0.3.4",
  "thiserror",
  "wasm-encoder",
 ]
